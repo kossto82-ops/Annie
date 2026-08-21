@@ -18,6 +18,8 @@ from collections.abc import Iterable
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.repositories.belief_repository import BeliefRepository
+from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.nervous_system.nervous_system import NervousSystem
 
@@ -42,10 +44,14 @@ class ExecutiveController:
     """Coordinates the cognitive lifecycle of one episode at a time."""
 
     def __init__(
-        self, nervous_system: NervousSystem, beliefs: BeliefRepository
+        self,
+        nervous_system: NervousSystem,
+        beliefs: BeliefRepository,
+        episodes: EpisodeRepository,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
+        self._episodes = episodes
 
     def run(
         self, episode: CognitiveEpisode, evidence: Iterable[Evidence] = ()
@@ -75,6 +81,7 @@ class ExecutiveController:
         episode.complete(decision)
         self._flush(episode)  # dispatch EpisodeCompleted
 
+        self._remember(episode, belief, decision)
         return episode
 
     # -- cognitive steps -----------------------------------------------------
@@ -115,6 +122,17 @@ class ExecutiveController:
                 "possible overfitting to recent events.)"
             )
         return conclusion
+
+    def _remember(self, episode: CognitiveEpisode, belief: Belief, decision: str) -> None:
+        self._episodes.record(
+            EpisodeRecord(
+                episode_id=episode.id,
+                trigger=episode.trigger,
+                decision=decision,
+                working_belief_id=belief.id,
+                outcome=episode.state,
+            )
+        )
 
     # -- event plumbing ------------------------------------------------------
 

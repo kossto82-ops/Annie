@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 8)
+Last updated: 2026-08-21 (Increment 9)
 
 ---
 
@@ -60,9 +60,11 @@ src/jarvis/
   jarvis.py                              Jarvis.think() entry point
   nervous_system/nervous_system.py       subscribe / publish / dispatch (sync)
   executive/executive_controller.py      orchestrates one episode's lifecycle
-  infrastructure/in_memory_belief_store.py   InMemoryBeliefStore (BeliefRepository impl)
+  infrastructure/in_memory_belief_store.py    InMemoryBeliefStore (BeliefRepository impl)
+  infrastructure/in_memory_episode_store.py   InMemoryEpisodeStore (EpisodeRepository impl)
   domain/
     repositories/belief_repository.py    BeliefRepository (Protocol) — persist/retrieve beliefs
+    repositories/episode_repository.py   EpisodeRepository (Protocol) — record/history of episodes
     services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
     aggregates/cognitive_episode.py      CognitiveEpisode (aggregate root) + InvalidStateTransition
     aggregates/hypothesis_set.py         HypothesisSet (competing hypotheses) + UnknownHypothesis
@@ -78,6 +80,7 @@ src/jarvis/
     value_objects/confidence.py          Confidence (immutable, validated [0,1])
     value_objects/evidence.py            Evidence (immutable, weighted, supports/contradicts)
     value_objects/temporal_stability.py  TemporalStability (immutable [0,1]; time axis, ≠ confidence)
+    value_objects/episode_record.py      EpisodeRecord (immutable memory of a completed episode)
 tests/                                   45 behaviour tests mirroring the above
 ```
 
@@ -172,6 +175,15 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - `CognitiveEpisode.explain()` surfaces it, so `Jarvis().think(...).explain().narrate()` makes an
   episode explain its own decision; an ungrounded belief says it has no evidence (Vision §37).
 - Gates: ruff clean · pyright strict 0 errors · pytest 123 passed.
+- Commit `37cc371` pushed to `origin/main`.
+
+### Increment 9 — episodic memory ✅ (2026-08-21)
+- `EpisodeRecord` value object (episode_id, trigger, decision, working_belief_id, outcome,
+  recorded_at) + `EpisodeRepository` protocol + `InMemoryEpisodeStore`. The executive records each
+  completed episode; `jarvis.episodes.history()` exposes them in order.
+- This is *memory of what happened*, distinct from beliefs (*epistemology*) — Vision §22. Groundwork
+  for later self-modeling over past cognition (Vision §6, §31).
+- Gates: ruff clean · pyright strict 0 errors · pytest 127 passed.
 
 ---
 
@@ -235,21 +247,23 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Episodic memory: Jarvis remembers its past episodes (Vision §12, §21).** Beliefs persist, but the
-*episodes themselves* — what was triggered, what was concluded, when — vanish after `think()`
-returns. Continuity (Vision §3) and later self-modeling (§6, §31: "what mistakes do I repeat?")
-need a record of past cognition to look back on.
-- An `EpisodeRecord` (trigger, resulting decision, working-belief id, timestamp, outcome) +
-  `EpisodeRepository` protocol + `InMemoryEpisodeStore`; the executive records each completed
-  episode.
-- `jarvis.episodes` exposes the history; a query like "recent episodes about X" becomes possible.
-- Keep it a record of *what happened* (memory), distinct from beliefs (epistemology) — Vision §22.
-- Behaviour tests: each `think()` appends one episode record; the record links to its working belief;
-  history preserves order.
+**Self-observation over episode history (Vision §6, §31).** Jarvis now records its episodes; the
+next step is the first glimmer of a model of *itself*: noticing measurable patterns in its own past
+cognition and recording them as evidence about Jarvis (not fake personality text — it must emerge
+from the history). The smallest honest start:
+- A `self_observation` service that scans `episodes.history()` for a measurable tendency — e.g.
+  "a large share of my recent conclusions were 'insufficient evidence'" (I habitually conclude
+  without enough evidence) or "I repeatedly revisit the same question" — and yields a `Belief`
+  *about Jarvis itself*, grounded in `Evidence` drawn from the episode records.
+- Reuse the existing epistemology: a self-observation is just evidence → a belief with derived
+  confidence, so "I tend to X" is itself provisional and revisable (Vision §6).
+- Behaviour tests: given a history dominated by ungrounded conclusions, the observation forms a
+  belief "I often conclude without sufficient evidence" with non-zero confidence; a healthy history
+  does not.
 
 *(Deferred, natural follow-ups: wiring `HypothesisSet` into episodes; a durable (DB-backed) store;
-system-level injection of the weighting policy via `Jarvis(...)`; self-modeling over episode history
-(§6); a `UnitInterval` base if a third [0,1] type appears.)*
+system-level injection of the weighting policy via `Jarvis(...)`; curiosity/autonomous episodes
+(§16); a `UnitInterval` base if a third [0,1] type appears.)*
 
 ---
 

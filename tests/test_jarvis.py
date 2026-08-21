@@ -11,6 +11,7 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
@@ -150,6 +151,24 @@ class TestContinuityAcrossEpisodes:
         one = jarvis.think("question A", evidence=[_ev(0.5)])
         two = jarvis.think("question B", evidence=[_ev(0.5)])
         assert one.working_belief is not two.working_belief
+
+    def test_each_think_is_remembered_as_an_episode(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("question A")
+        jarvis.think("question B")
+        history = jarvis.episodes.history()
+        assert [r.trigger for r in history] == ["question A", "question B"]
+        assert all(isinstance(r, EpisodeRecord) for r in history)
+
+    def test_the_record_links_to_the_episode_and_its_belief(self) -> None:
+        jarvis = Jarvis()
+        episode = jarvis.think("question A", evidence=[_ev(0.9)])
+        record = jarvis.episodes.history()[-1]
+        assert record.episode_id == episode.id
+        assert episode.working_belief is not None
+        assert record.working_belief_id == episode.working_belief.id
+        assert record.decision == episode.result
+        assert record.outcome == EpisodeState.COMPLETED
 
     def test_confidence_is_still_derived_not_asserted(self) -> None:
         # Memory is not truth (Vision §22): a remembered belief with only weak

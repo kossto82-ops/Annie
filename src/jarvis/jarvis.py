@@ -11,9 +11,11 @@ from collections.abc import Iterable
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.repositories.belief_repository import BeliefRepository
+from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.executive.executive_controller import ExecutiveController
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
+from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.nervous_system.nervous_system import NervousSystem
 
 
@@ -24,10 +26,14 @@ class Jarvis:
         self,
         nervous_system: NervousSystem | None = None,
         beliefs: BeliefRepository | None = None,
+        episodes: EpisodeRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
-        self._executive = ExecutiveController(self.nervous_system, self.beliefs)
+        self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
+        self._executive = ExecutiveController(
+            self.nervous_system, self.beliefs, self.episodes
+        )
 
     def think(
         self, trigger: str, evidence: Iterable[Evidence] = ()
