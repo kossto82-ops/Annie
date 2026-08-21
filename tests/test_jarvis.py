@@ -416,6 +416,28 @@ class TestCompanionModel:
         )
         assert "may be wrong" in jarvis.explain_companion(self._TRAIT)
 
+    def test_acknowledge_reports_when_the_companion_contradicts_a_held_belief(self) -> None:
+        jarvis = Jarvis()
+        jarvis.observe_companion(self._TRAIT, _ev(0.9, content="chose the simpler design"))
+        ack = jarvis.acknowledge_companion(
+            self._TRAIT, _ev(0.9, supports=False, content="asked for advanced mode")
+        )
+        assert "contradicted what I believed" in ack
+
+    def test_acknowledge_a_first_observation_is_just_noted(self) -> None:
+        # Nothing was held yet, so a contradicting first observation is not a
+        # contradiction of any belief (Vision §18).
+        jarvis = Jarvis()
+        ack = jarvis.acknowledge_companion(self._TRAIT, _ev(0.9, supports=False))
+        assert "contradicted" not in ack
+        assert self._TRAIT in ack
+
+    def test_acknowledge_a_consistent_observation_is_just_noted(self) -> None:
+        jarvis = Jarvis()
+        jarvis.observe_companion(self._TRAIT, _ev(0.9))
+        ack = jarvis.acknowledge_companion(self._TRAIT, _ev(0.9))
+        assert "contradicted" not in ack
+
 
 class TestCompanionModelInformsCognition:
     _TRAIT = "prefers simplicity"

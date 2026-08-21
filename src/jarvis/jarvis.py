@@ -16,6 +16,7 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
+from jarvis.domain.events.belief_events import ContradictionDetected
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
@@ -287,11 +288,32 @@ class Jarvis:
         them (Vision §5). Returns the (revisable) belief; its events flow through
         the nervous system.
         """
+        belief, _ = self._record_companion(trait, evidence)
+        return belief
+
+    def acknowledge_companion(self, trait: str, evidence: Evidence) -> str:
+        """Record an observation and acknowledge it in conversation (Vision §18).
+
+        When the observation contradicts a belief Jarvis actually held, it says
+        so plainly -- the person has contradicted its model, and it holds the
+        belief less firmly now. A first or consistent observation is just noted.
+        """
+        _, contradicted = self._record_companion(trait, evidence)
+        if contradicted:
+            return (
+                f'You have contradicted what I believed about "{trait}". '
+                "I may be wrong, so I am holding it less firmly now."
+            )
+        return f'Noted about "{trait}".'
+
+    def _record_companion(self, trait: str, evidence: Evidence) -> tuple[Belief, bool]:
         belief = self.companion.observe(trait, evidence)
-        for event in self.companion.pull_events():
+        events = self.companion.pull_events()
+        contradicted = any(isinstance(event, ContradictionDetected) for event in events)
+        for event in events:
             self.nervous_system.publish(event)
         self.nervous_system.dispatch()
-        return belief
+        return belief, contradicted
 
     def explain_companion(self, trait: str) -> str:
         """Explain *why* Jarvis believes ``trait`` about its companion (Vision §5, §8).

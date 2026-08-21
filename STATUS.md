@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 34)
+Last updated: 2026-08-21 (Increment 35)
 
 ---
 
@@ -465,6 +465,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   unchanged. Truthful: only a genuinely BRIEF (already-confident, no-new-evidence) episode gets the
   phrasing. No new mechanism — just surfacing Increment 33's routing in the answer.
 - Gates: ruff clean · pyright strict 0 errors · pytest 240 passed.
+- Commit `696e73a` pushed to `origin/main`.
+
+### Increment 35 — contradiction the companion can see ✅ (2026-08-21)
+- `jarvis.acknowledge_companion(trait, evidence)` records the observation and returns a conversational
+  acknowledgement: when it contradicts a belief Jarvis actually *held*, "You have contradicted what I
+  believed about … I may be wrong, so I am holding it less firmly now."; a first or consistent
+  observation is just "Noted." The signal is the real `ContradictionDetected` event (Vision §18),
+  which only fires when confidence was > 0 before — so a contradicting *first* observation is honestly
+  not called a contradiction.
+- Companion recording refactored to one path (`_record_companion` → belief + contradicted flag);
+  `observe_companion` (returns belief) and `acknowledge_companion` (returns the message) are two views.
+- Gates: ruff clean · pyright strict 0 errors · pytest 243 passed.
 
 ---
 
@@ -564,18 +576,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Contradiction as a first-class *cognitive event the companion can see* (Vision §18).** Contradiction
-is already detected inside a belief (`ContradictionDetected`, Increment 3) and weakens confidence, but
-Vision §18 wants it to be a first-class moment Jarvis can *report* — "this contradicts what I
-previously believed" — not just an internal event on the trace. The companion-model is where this
-matters most (the person contradicting Jarvis's model of them). Small honest step:
-- `jarvis.observe_companion(...)` (or a query) returns/flags when the new observation *contradicted* an
-  existing companion belief, so the caller learns a contradiction just occurred; and
-  `explain_companion` already narrates "I may be wrong" — tie the two together with an explicit
-  "you've contradicted what I believed" acknowledgement derived from the emitted `ContradictionDetected`.
-- Truthful: only fires when there was a held belief to contradict (confidence was > 0 before).
-- Behaviour tests: a contradicting companion observation is reported as a contradiction; a first or
-  consistent one is not; the acknowledgement traces to a real `ContradictionDetected` event.
+**Contradiction becomes curiosity (Vision §16, §18).** When the companion contradicts a held belief,
+Jarvis now *acknowledges* it (Increment 35), but the vision wants a contradiction to be a valuable
+unknown worth reducing (§16: "this uncertainty is worth reducing") — a contested belief is exactly the
+kind of thing curiosity should pull toward. The pieces exist (`companion.beliefs()`, `wonder`, the
+contradiction narration). Small honest step:
+- Extend `feel_curious()` (or add a companion-facing counterpart) so a *contested* companion belief —
+  one holding both supporting and contradicting evidence, at meaningful confidence — raises a curiosity
+  impulse to resolve it ("find out whether my companion really …"), alongside the self-model tendencies
+  it already weighs (Increment 22).
+- Truthful: only a genuinely contested belief (has contradicting evidence and is not near-certain either
+  way) qualifies; a one-sided or trivial one does not.
+- Behaviour tests: a contested companion belief raises curiosity naming the trait; a consistent one
+  does not; the impulse is a recommendation, not an action (Vision §28).
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15); excessive-complexity
 self-observation tendency; a real DB behind the JSON stores; persisting traces; semantic
