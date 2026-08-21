@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 11)
+Last updated: 2026-08-21 (Increment 12)
 
 ---
 
@@ -212,6 +212,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Feedback loop broken: `observe_evidence_habit` judges only COMPANION episodes, so self-triggered
   curiosity episodes never inflate the very tendency they answer.
 - Gates: ruff clean · pyright strict 0 errors · pytest 142 passed.
+- Commit `06127c2` pushed to `origin/main`.
+
+### Increment 12 — learning: a recognised tendency changes future behaviour ✅ (2026-08-21)
+- Vision §20 ("if it does not change future behaviour, it has not learned"): when the executive
+  produces an ungrounded conclusion, it consults its own self-model (`observe_evidence_habit` over
+  prior COMPANION episodes). If Jarvis confidently believes it under-evidences its conclusions
+  (≥ `LEARNED_HABIT_THRESHOLD` 0.5), the decision changes from a flat non-conclusion to an explicit
+  "I have learned … I am asking for evidence before concluding".
+- **Evidence-driven and reversible**, not a mode: it appears only while the self-belief is confident
+  and fades as grounded episodes accumulate (verified: 3 ungrounded → learns; +3 grounded → reverts).
+  Computed from history each decision, so the current episode never self-references.
+- Gates: ruff clean · pyright strict 0 errors · pytest 145 passed.
 
 ---
 
@@ -276,6 +288,11 @@ with belief + episode events dispatched through the NervousSystem at each step.
   episodes are excluded so curiosity cannot inflate the tendency it responds to (no self-reinforcing
   loop). Curiosity stops at a `CuriosityImpulse` (recommendation); `Jarvis.pursue` runs it as a
   deliberate step, not automatically — autonomy is earned (Vision §28). `CURIOSITY_THRESHOLD = 0.5`.
+- **D22** Learning is expressed as a *behaviour change derived from the self-model each decision*
+  (`LEARNED_HABIT_THRESHOLD = 0.5`), never a persisted flag/mode. It reverts automatically as the
+  self-belief's confidence decays, satisfying Vision §20 (changed future behaviour) while keeping the
+  change honest and evidence-driven. The self-model is read over PRIOR episodes only (the current one
+  is unrecorded at decision time), so no self-reference.
 - **D19** Source→weight factors live in one policy (`SourceWeightingPolicy`), not scattered constants,
   and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
   the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
@@ -285,22 +302,24 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Learning: close the loop so a curiosity episode changes future behaviour (Vision §20, §31).**
-Right now `pursue()` runs a self-triggered episode but nothing durable comes of it — and Vision §20
-is explicit: "if Jarvis repeatedly makes the same mistake but does not change future behaviour, it
-has not learned." The smallest honest step that makes a pursued curiosity *matter*:
-- A pursued curiosity episode that yields a `Belief` (or a lesson record) which the executive then
-  consults — e.g. after acknowledging the evidence habit, `think()` on a still-ungrounded question
-  phrases its decision as an explicit request for evidence ("I have learned I do this; I am asking
-  for evidence before concluding") rather than a flat non-conclusion.
-- Keep the change measurable and evidence-driven (not a hard-coded mode): the shift is triggered by
-  the presence of a confident self-belief, and it decays if the habit stops recurring.
-- Behaviour tests: given a confident evidence-habit belief, an ungrounded `think()` visibly changes
-  its output; once the habit belief is no longer confident, behaviour reverts.
+**A model of the companion (Vision §5).** Jarvis models *itself* (§6, done) but not yet its
+*companion* — and §5 is central to it being a companion, not an assistant: an evolving,
+hypothesis-driven model of the person (preferences, recurring goals, working patterns) that is
+never treated as absolute truth and that the companion can contradict. The pieces already exist
+(beliefs about a subject, evidence with provenance, contradiction handling); this increment gives
+them a home.
+- A `companion` model: a small collection of beliefs *about the companion* (e.g. "prefers
+  simplicity", "works late"), each grounded in evidence the companion supplies or Jarvis observes,
+  with confidence derived as usual.
+- A way to record an observation about the companion and retrieve what Jarvis currently believes
+  about them (with provenance via `narrate()`), keeping the Observation/Pattern/Hypothesis/Model
+  distinction (Vision §5) rather than collapsing to "facts".
+- Behaviour tests: repeated supporting observations strengthen a companion-belief; a contradicting
+  statement from the companion weakens it (never silently overwritten); confidence stays derived.
 
-*(Deferred, natural follow-ups: more self-observation tendencies (overconfidence, complexity);
-wiring `HypothesisSet` into episodes; a durable (DB-backed) store; persisting self-beliefs so they
-evolve across observations; system-level weighting-policy injection.)*
+*(Deferred, natural follow-ups: more self-observation tendencies; wiring `HypothesisSet` into
+episodes; a durable (DB-backed) store; persisting self-beliefs; system-level weighting-policy
+injection; a `UnitInterval` base if a third [0,1] type appears.)*
 
 ---
 

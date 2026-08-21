@@ -19,6 +19,7 @@ from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.services.self_observation import observe_evidence_habit
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.nervous_system.nervous_system import NervousSystem
@@ -30,6 +31,12 @@ GROUNDED_CONFIDENCE_THRESHOLD = 0.5
 # A grounded conclusion resting on evidence with little temporal spread may be
 # overfitting to a recent burst (Vision §11); below this stability it is flagged.
 LOW_STABILITY_THRESHOLD = 0.2
+
+# When Jarvis holds a self-belief this confident that it concludes without enough
+# evidence, it changes how it handles an ungrounded question (Vision §20 learning).
+# This is not a fixed mode: it appears only while the self-belief is confident and
+# fades as the habit stops recurring.
+LEARNED_HABIT_THRESHOLD = 0.5
 
 
 def working_statement(trigger: str) -> str:
@@ -102,6 +109,13 @@ class ExecutiveController:
     def _decide(self, trigger: str, belief: Belief) -> str:
         confidence = belief.confidence.value
         if confidence <= 0.0:
+            if self._recognises_evidence_habit():
+                # Behaviour changed by a learned tendency (Vision §20), not a guess.
+                return (
+                    "I have learned that I tend to conclude without sufficient "
+                    f"evidence, so rather than guess about: {trigger}, I am asking "
+                    f"for evidence before concluding (confidence {confidence:.2f})."
+                )
             return (
                 f"Insufficient evidence to conclude about: {trigger} "
                 f"(confidence {confidence:.2f})."
@@ -122,6 +136,18 @@ class ExecutiveController:
                 "possible overfitting to recent events.)"
             )
         return conclusion
+
+    def _recognises_evidence_habit(self) -> bool:
+        """Does Jarvis currently, confidently, believe it under-evidences its conclusions?
+
+        Derived from history each time, so it fades as the habit stops recurring.
+        The current episode is not yet recorded, so this reflects only past cognition.
+        """
+        self_belief = observe_evidence_habit(self._episodes.history())
+        return (
+            self_belief is not None
+            and self_belief.confidence.value >= LEARNED_HABIT_THRESHOLD
+        )
 
     def _remember(self, episode: CognitiveEpisode, belief: Belief, decision: str) -> None:
         self._episodes.record(

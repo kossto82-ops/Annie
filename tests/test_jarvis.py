@@ -241,3 +241,33 @@ class TestCuriosity:
         after = jarvis.observe_self()
         assert after is not None
         assert len(after.evidence) == len(before.evidence)  # curiosity episode excluded
+
+
+class TestLearning:
+    def test_a_fresh_jarvis_gives_a_plain_non_conclusion(self) -> None:
+        episode = Jarvis().think("some ungrounded question")
+        assert episode.result is not None
+        assert "Insufficient evidence" in episode.result
+        assert "asking for evidence" not in episode.result
+
+    def test_jarvis_changes_behaviour_once_it_recognises_the_habit(self) -> None:
+        # Vision §20: a recognised tendency must change future behaviour.
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"unfounded question about {topic}")  # establishes the habit
+        learned = jarvis.think("yet another unfounded question")
+        assert learned.result is not None
+        assert "I have learned" in learned.result
+        assert "asking for evidence" in learned.result
+
+    def test_the_learned_behaviour_reverts_when_the_habit_stops(self) -> None:
+        # Evidence-driven, not a permanent mode: it fades as Jarvis does better.
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"unfounded question about {topic}")  # habit forms
+        for topic in ("d", "e", "f"):
+            jarvis.think(f"grounded question about {topic}", evidence=[_ev(0.9), _ev(0.9)])
+        reverted = jarvis.think("a final unfounded question")
+        assert reverted.result is not None
+        assert "Insufficient evidence" in reverted.result
+        assert "asking for evidence" not in reverted.result
