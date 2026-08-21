@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 35)
+Last updated: 2026-08-21 (Increment 36)
 
 ---
 
@@ -477,6 +477,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Companion recording refactored to one path (`_record_companion` → belief + contradicted flag);
   `observe_companion` (returns belief) and `acknowledge_companion` (returns the message) are two views.
 - Gates: ruff clean · pyright strict 0 errors · pytest 243 passed.
+- Commit `4412328` pushed to `origin/main`.
+
+### Increment 36 — contradiction becomes curiosity ✅ (2026-08-21)
+- `feel_curious()` now, after weighing self-model tendencies, raises an impulse for a **contested**
+  companion belief — one holding both supporting *and* contradicting evidence (Vision §16, §18). The
+  tension itself is the signal, whatever the exact confidence, so a balanced (genuinely uncertain)
+  belief is the most worth resolving. Self-tendencies keep priority; the impulse is a recommendation,
+  not an action (Vision §28).
+- A consistent (one-sided) companion belief raises none. Verified: consistent → no curiosity; after a
+  contradiction → curiosity to "find out whether my companion really …".
+- Gates: ruff clean · pyright strict 0 errors · pytest 245 passed.
 
 ---
 
@@ -576,19 +587,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Contradiction becomes curiosity (Vision §16, §18).** When the companion contradicts a held belief,
-Jarvis now *acknowledges* it (Increment 35), but the vision wants a contradiction to be a valuable
-unknown worth reducing (§16: "this uncertainty is worth reducing") — a contested belief is exactly the
-kind of thing curiosity should pull toward. The pieces exist (`companion.beliefs()`, `wonder`, the
-contradiction narration). Small honest step:
-- Extend `feel_curious()` (or add a companion-facing counterpart) so a *contested* companion belief —
-  one holding both supporting and contradicting evidence, at meaningful confidence — raises a curiosity
-  impulse to resolve it ("find out whether my companion really …"), alongside the self-model tendencies
-  it already weighs (Increment 22).
-- Truthful: only a genuinely contested belief (has contradicting evidence and is not near-certain either
-  way) qualifies; a one-sided or trivial one does not.
-- Behaviour tests: a contested companion belief raises curiosity naming the trait; a consistent one
-  does not; the impulse is a recommendation, not an action (Vision §28).
+**A single `Jarvis.remember()` snapshot for the full state (developer ergonomics, Vision §21).** The
+codebase exposes many read surfaces — `episodes.history()`, `self_beliefs()`, `companion.beliefs()`,
+`belief_about_action`, `introspect()` — but no one call returns a compact, structured snapshot of
+"everything Jarvis currently holds" for logging, debugging, or a UI. Consolidation, not new capability:
+- A `jarvis.state_summary()` returning a small immutable structure (counts + the strongest items):
+  episode count, the confident self-tendencies, the companion traits with confidence, the learned
+  actions with their recommendation stance — assembled from existing read methods, nothing new.
+- Keep it grounded: every field traces to real state; a fresh Jarvis returns an all-empty summary.
+- Behaviour tests: a seasoned Jarvis's summary reflects its actual episodes/self-model/companion/actions;
+  a fresh one is empty; the structure is immutable.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15); excessive-complexity
 self-observation tendency; a real DB behind the JSON stores; persisting traces; semantic

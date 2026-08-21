@@ -338,6 +338,23 @@ class TestCuriosity:
     def test_a_recognised_weakness_raises_curiosity(self) -> None:
         assert self._make_habitually_ungrounded().feel_curious() is not None
 
+    def test_a_contested_companion_belief_raises_curiosity(self) -> None:
+        # Vision §16/§18: a contradiction is a valuable unknown to resolve.
+        jarvis = Jarvis()
+        trait = "prefers simplicity"
+        jarvis.observe_companion(trait, _ev(0.9))
+        jarvis.observe_companion(trait, _ev(0.9, supports=False))  # now contested
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert trait in impulse.trigger
+
+    def test_a_consistent_companion_belief_raises_no_curiosity(self) -> None:
+        jarvis = Jarvis()
+        trait = "prefers simplicity"
+        jarvis.observe_companion(trait, _ev(0.9))
+        jarvis.observe_companion(trait, _ev(0.9))  # only supporting -> not contested
+        assert jarvis.feel_curious() is None
+
     def test_overconfidence_can_raise_curiosity(self) -> None:
         # A confident weakness other than the evidence habit is also acted on.
         jarvis = Jarvis()

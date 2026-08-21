@@ -176,6 +176,20 @@ class Jarvis:
             impulse = wonder(belief)
             if impulse is not None:
                 return impulse
+
+        # A contested belief about the companion is a valuable unknown to reduce
+        # (Vision §16, §18): the tension itself warrants curiosity, whatever the
+        # exact confidence -- a balanced belief is the most worth resolving.
+        for belief in self.companion.beliefs():
+            explanation = belief.explain()
+            if explanation.supporting and explanation.contradicting:
+                return CuriosityImpulse(
+                    trigger=f"Find out whether my companion really: {belief.statement}",
+                    rationale=(
+                        f'my belief that my companion "{belief.statement}" is contested'
+                    ),
+                    prompted_by_belief_id=belief.id,
+                )
         return None
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
