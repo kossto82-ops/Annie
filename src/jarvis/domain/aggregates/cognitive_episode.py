@@ -22,6 +22,7 @@ from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 
 
 class InvalidStateTransition(RuntimeError):
@@ -58,6 +59,7 @@ class CognitiveEpisode:
     result: str | None = None
     origin: TriggerOrigin = TriggerOrigin.COMPANION
     _working_belief: Belief | None = field(default=None, repr=False)
+    _evidence_request: EvidenceRequest | None = field(default=None, repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
     )
@@ -117,6 +119,15 @@ class CognitiveEpisode:
         if self._working_belief is None:
             return None
         return self._working_belief.explain()
+
+    def attach_evidence_request(self, request: EvidenceRequest) -> None:
+        """Record what evidence this episode is missing (Vision §16, §37)."""
+        self._evidence_request = request
+
+    @property
+    def evidence_request(self) -> EvidenceRequest | None:
+        """The evidence this episode needs to conclude, or None if it was grounded."""
+        return self._evidence_request
 
     def observe(self, evidence: Evidence) -> None:
         """Route a piece of evidence to the episode's working belief.

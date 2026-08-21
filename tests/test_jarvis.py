@@ -73,6 +73,29 @@ class TestEpistemologyDrivesTheDecision:
         assert episode.result is not None
         assert "Tentative" in episode.result
 
+
+class TestEvidenceRequest:
+    def test_an_ungrounded_episode_asks_for_the_evidence_it_needs(self) -> None:
+        # Vision §16/§37: name the gap, do not guess.
+        question = "does my companion prefer simplicity?"
+        episode = Jarvis().think(question)
+        request = episode.evidence_request
+        assert request is not None
+        assert request.question == question
+        assert request.statement == episode.working_belief.statement  # type: ignore[union-attr]
+        assert request.confidence == Confidence.none()
+        assert question in request.needed
+
+    def test_a_tentative_episode_also_asks_for_more(self) -> None:
+        episode = Jarvis().think("is my companion busy?", evidence=[_ev(0.1)])
+        assert episode.evidence_request is not None
+
+    def test_a_grounded_episode_asks_for_nothing(self) -> None:
+        episode = Jarvis().think(
+            "does my companion prefer simplicity?", evidence=[_ev(0.9), _ev(0.9)]
+        )
+        assert episode.evidence_request is None
+
     def test_grounded_but_narrow_evidence_warns_of_overfitting(self) -> None:
         # High confidence from a single burst is flagged as possible overfitting.
         episode = Jarvis().think(

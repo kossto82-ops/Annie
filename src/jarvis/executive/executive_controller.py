@@ -24,6 +24,7 @@ from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.self_observation import observe_evidence_habit
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.nervous_system.nervous_system import NervousSystem
 
 # Below this evidence-derived confidence, a conclusion is not asserted as grounded
@@ -88,6 +89,7 @@ class ExecutiveController:
 
         episode.begin_deciding()
         decision = self._decide(episode.trigger, belief)
+        self._maybe_request_evidence(episode, belief)
         self._flush(episode)
 
         episode.complete(decision)
@@ -160,6 +162,19 @@ class ExecutiveController:
                 "possible overfitting to recent events.)"
             )
         return conclusion
+
+    def _maybe_request_evidence(self, episode: CognitiveEpisode, belief: Belief) -> None:
+        """When a conclusion is not grounded, name the evidence it needs (Vision §37)."""
+        if belief.confidence.value >= GROUNDED_CONFIDENCE_THRESHOLD:
+            return
+        episode.attach_evidence_request(
+            EvidenceRequest(
+                question=episode.trigger,
+                statement=belief.statement,
+                confidence=belief.confidence,
+                needed=f"observations bearing on whether: {episode.trigger}",
+            )
+        )
 
     def _recognises_evidence_habit(self) -> bool:
         """Does Jarvis currently, confidently, believe it under-evidences its conclusions?

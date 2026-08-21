@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 17)
+Last updated: 2026-08-21 (Increment 18)
 
 ---
 
@@ -89,6 +89,7 @@ src/jarvis/
     value_objects/evidence.py            Evidence (immutable, weighted, supports/contradicts)
     value_objects/temporal_stability.py  TemporalStability (immutable [0,1]; time axis, ≠ confidence)
     value_objects/episode_record.py      EpisodeRecord (immutable memory of a completed episode)
+    value_objects/evidence_request.py    EvidenceRequest (what an ungrounded episode is missing)
 tests/                                   45 behaviour tests mirroring the above
 ```
 
@@ -286,6 +287,15 @@ with belief + episode events dispatched through the NervousSystem at each step.
   BeliefStrengthened / ContradictionDetected / BeliefWeakened → EpisodeCompleted — internal decision
   provenance (Vision §26), not exposed chain-of-thought.
 - Gates: ruff clean · pyright strict 0 errors · pytest 172 passed.
+- Commit `bd8320e` pushed to `origin/main`.
+
+### Increment 18 — ask, don't guess: structured evidence requests ✅ (2026-08-21)
+- `EvidenceRequest` value object (question, statement, confidence, needed). When the executive
+  reaches a conclusion below `GROUNDED_CONFIDENCE_THRESHOLD` (ungrounded or tentative), it attaches
+  one to the episode; a grounded conclusion attaches none.
+- `episode.evidence_request` exposes the gap as structured, actionable data (Vision §16, §37) —
+  not just prose in the decision string. Derived from the real gap, and absent once grounded.
+- Gates: ruff clean · pyright strict 0 errors · pytest 175 passed.
 
 ---
 
@@ -379,21 +389,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Ask, don't guess: an ungrounded episode requests the evidence it needs (Vision §16, §37).** Jarvis
-already says "insufficient evidence" and, once it has learned the habit, "I am asking for evidence" —
-but it never says *what* evidence would resolve the question. Vision §16 frames curiosity as naming a
-valuable unknown; §37 wants uncertainty made explicit and actionable. The smallest honest step:
-- When `think()` reaches an ungrounded or tentative conclusion, produce a structured
-  `EvidenceRequest` (the working statement + what kind of observation would raise confidence), exposed
-  on the episode (e.g. `episode.evidence_request`), not just embedded in the decision string.
-- Keep it honest: the request is derived from the actual gap (no/low evidence), and disappears once
-  the belief is grounded.
-- Behaviour tests: an ungrounded `think()` yields an `EvidenceRequest` naming the statement; a
-  grounded one yields none; the request references the question being asked.
+**Wire `HypothesisSet` into episodes: reason with competing explanations (Vision §17).** The
+epistemology has two shapes — a single working belief (used by `think()`) and competing hypotheses
+(`HypothesisSet`, built in Increment 3 but never reached by cognition). Vision §17 wants Jarvis to
+hold several explanations for an observation and let evidence shift them, instead of collapsing to
+one. The smallest honest step:
+- A cognition entry point (e.g. `jarvis.consider(observation, hypotheses=[...])`) that runs an
+  episode which routes evidence to a `HypothesisSet` and concludes with the leading hypothesis — or,
+  honestly, "no leader yet" when the top two tie (no premature collapse).
+- Reuse the episode lifecycle, events, trace and (later) memory; the decision names the leading
+  explanation and its confidence, or requests evidence when undecided.
+- Behaviour tests: competing explanations re-rank as evidence arrives; a tie yields no leader and an
+  evidence request; the winning explanation is reported with its derived confidence.
 
 *(Deferred, natural follow-ups: a real DB behind the JSON stores; persisting traces; semantic
-trigger↔trait matching; recurring-goals/working-patterns facets; wiring `HypothesisSet` into episodes;
-system-level weighting-policy injection + persistence; a `UnitInterval` base.)*
+trigger↔trait matching; recurring-goals/working-patterns facets; system-level weighting-policy
+injection + persistence; a `UnitInterval` base.)*
 
 ---
 
