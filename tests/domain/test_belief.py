@@ -207,5 +207,34 @@ class TestExplainability:
         explanation = belief.explain()
         assert explanation.statement == "the user prefers simplicity"
         assert explanation.confidence == belief.confidence
+        assert explanation.stability == belief.stability
         assert explanation.supporting == (supporting,)
         assert explanation.contradicting == (contradicting,)
+
+
+class TestNarration:
+    def test_ungrounded_belief_admits_it_has_no_evidence(self) -> None:
+        narration = Belief(statement="the sky is green").explain().narrate()
+        assert "no evidence" in narration
+
+    def test_grounded_belief_states_confidence_and_reasons(self) -> None:
+        belief = Belief(statement="the user prefers simplicity")
+        belief.add_evidence(
+            Evidence(
+                content="chose the simpler design",
+                source=EvidenceSource.USER_STATEMENT,
+                weight=Confidence(0.9),
+            )
+        )
+        narration = belief.explain().narrate()
+        assert "the user prefers simplicity" in narration
+        assert "chose the simpler design" in narration
+        assert "user statement" in narration  # source is named
+
+    def test_contested_belief_names_the_contradiction(self) -> None:
+        belief = Belief(statement="the user prefers dark mode")
+        belief.add_evidence(_ev(0.8, content="enabled dark mode"))
+        belief.add_evidence(_ev(0.8, supports=False, content="switched back to light"))
+        narration = belief.explain().narrate()
+        assert "contradicts" in narration
+        assert "may be wrong" in narration

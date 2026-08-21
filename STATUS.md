@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 7)
+Last updated: 2026-08-21 (Increment 8)
 
 ---
 
@@ -162,6 +162,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
   injectable `weighting_policy` (default keeps `USER_STATEMENT` behaviour unchanged). Same raw weight,
   different source → different confidence.
 - Gates: ruff clean · pyright strict 0 errors · pytest 118 passed.
+- Commit `35c7790` pushed to `origin/main`.
+
+### Increment 8 — "why do you believe this?" narration ✅ (2026-08-21)
+- `BeliefExplanation` now carries `stability` and a `narrate()` that renders the structured
+  provenance into a plain-language self-explanation (Vision §26, §40): statement, confidence label
+  + value, stability phrasing, the strongest supporting evidence *with its source*, any
+  contradictions ("I may be wrong"), and an honest uncertainty note.
+- `CognitiveEpisode.explain()` surfaces it, so `Jarvis().think(...).explain().narrate()` makes an
+  episode explain its own decision; an ungrounded belief says it has no evidence (Vision §37).
+- Gates: ruff clean · pyright strict 0 errors · pytest 123 passed.
 
 ---
 
@@ -225,21 +235,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**"Why do you believe this?" — a genuine explanation surface (Vision §26, §40).** The provenance is
-already captured (`belief.explain()` returns supporting/contradicting evidence; confidence, stability
-and source weighting all derive from it). The next step turns that into the thing the vision holds up
-as *the* deliverable: Jarvis being able to say, in words, why it holds a belief, how strongly, how
-stable it is, and what would change its mind.
-- A `BeliefExplanation.narrate()` (or a small explainer service) that renders the structured
-  provenance into a human-readable account: statement, confidence, stability, the strongest
-  supporting evidence (with source), any contradictions, and an honest uncertainty note.
-- Surface it on the episode result so `think()` can explain its own decision on request.
-- Behaviour tests: a grounded belief narrates its supporting evidence and confidence; a contested
-  belief names the contradiction; an ungrounded belief says it lacks evidence.
+**Episodic memory: Jarvis remembers its past episodes (Vision §12, §21).** Beliefs persist, but the
+*episodes themselves* — what was triggered, what was concluded, when — vanish after `think()`
+returns. Continuity (Vision §3) and later self-modeling (§6, §31: "what mistakes do I repeat?")
+need a record of past cognition to look back on.
+- An `EpisodeRecord` (trigger, resulting decision, working-belief id, timestamp, outcome) +
+  `EpisodeRepository` protocol + `InMemoryEpisodeStore`; the executive records each completed
+  episode.
+- `jarvis.episodes` exposes the history; a query like "recent episodes about X" becomes possible.
+- Keep it a record of *what happened* (memory), distinct from beliefs (epistemology) — Vision §22.
+- Behaviour tests: each `think()` appends one episode record; the record links to its working belief;
+  history preserves order.
 
-*(Deferred, natural follow-ups: episodic memory of past episodes; wiring `HypothesisSet` into
-episodes; a durable (DB-backed) `BeliefRepository`; system-level injection of the weighting policy
-via `Jarvis(...)`; a `UnitInterval` base if a third [0,1] type appears.)*
+*(Deferred, natural follow-ups: wiring `HypothesisSet` into episodes; a durable (DB-backed) store;
+system-level injection of the weighting policy via `Jarvis(...)`; self-modeling over episode history
+(§6); a `UnitInterval` base if a third [0,1] type appears.)*
 
 ---
 

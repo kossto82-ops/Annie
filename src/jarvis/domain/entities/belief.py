@@ -19,9 +19,10 @@ The ``+ 1`` is a neutral prior. Its consequences match the vision exactly:
                             reaches it (evidence alone never yields certainty)
 * Contradicting evidence -> confidence falls (Vision §18)
 
-Temporal stability (Vision §10) -- how *stable* a belief has been over time, as
-distinct from how confident it is now -- is intentionally not modelled yet;
-``Evidence.observed_at`` is retained so it can be computed in a later increment.
+Confidence is one axis; temporal stability (Vision §10) -- how *steadily* a belief
+has been supported over time -- is a separate one, derived in ``derive_stability``.
+``BeliefExplanation.narrate`` turns both, plus the evidence, into a plain-language
+"why do you believe this?" account (Vision §26, §40).
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.events.belief_events import (
     BeliefStrengthened,
     BeliefWeakened,
@@ -83,18 +85,75 @@ def derive_stability(evidence: tuple[Evidence, ...]) -> TemporalStability:
     return TemporalStability(span / (span + reference))
 
 
+def _readable_source(source: EvidenceSource) -> str:
+    return source.value.replace("_", " ")
+
+
 @dataclass(frozen=True, slots=True)
 class BeliefExplanation:
     """The reconstructed provenance of a belief (Vision §8, §26).
 
     Answers "Why do you believe this?" by exposing the statement, the current
-    confidence, and the evidence for and against it.
+    confidence and stability, and the evidence for and against it. ``narrate``
+    renders that structure into the plain-language self-explanation the vision
+    holds up as the goal (Vision §40).
     """
 
     statement: str
     confidence: Confidence
+    stability: TemporalStability
     supporting: tuple[Evidence, ...]
     contradicting: tuple[Evidence, ...]
+
+    def narrate(self) -> str:
+        """Render a human-readable account of why the belief is held."""
+        if not self.supporting and not self.contradicting:
+            return (
+                f'I don\'t hold a view on "{self.statement}" yet — I have no '
+                "evidence. I would need observations before concluding."
+            )
+
+        confidence = self.confidence.value
+        confidence_label = (
+            "high" if confidence >= 0.8 else "moderate" if confidence >= 0.5 else "low"
+        )
+        stability = self.stability.value
+        stability_label = (
+            "consistently over a long time"
+            if stability >= 0.7
+            else "over some time"
+            if stability >= 0.3
+            else "within a narrow time window"
+            if stability > 0.0
+            else "with no track record yet"
+        )
+
+        parts = [
+            f'I hold "{self.statement}" with {confidence_label} confidence '
+            f"({confidence:.2f}), {stability_label}."
+        ]
+        if self.supporting:
+            strongest = sorted(
+                self.supporting, key=lambda e: e.weight.value, reverse=True
+            )[:3]
+            reasons = "; ".join(
+                f"{e.content} ({_readable_source(e.source)})" for e in strongest
+            )
+            parts.append(f"I believe this because: {reasons}.")
+        if self.contradicting:
+            against = "; ".join(
+                f"{e.content} ({_readable_source(e.source)})"
+                for e in self.contradicting[:3]
+            )
+            parts.append(f"But some evidence contradicts it: {against}. I may be wrong.")
+
+        if confidence < 0.5:
+            parts.append("I am not certain — more evidence would help.")
+        elif stability < 0.3:
+            parts.append("This rests on a short span of evidence, so I hold it tentatively.")
+        else:
+            parts.append("I am fairly confident, though I remain open to revision.")
+        return " ".join(parts)
 
 
 def _new_id() -> str:
@@ -183,6 +242,7 @@ class Belief:
         return BeliefExplanation(
             statement=self.statement,
             confidence=self.confidence,
+            stability=self.stability,
             supporting=tuple(e for e in self._evidence if e.supports),
             contradicting=tuple(e for e in self._evidence if e.contradicts),
         )

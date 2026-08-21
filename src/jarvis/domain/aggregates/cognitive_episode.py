@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from jarvis.domain.entities.belief import Belief
+from jarvis.domain.entities.belief import Belief, BeliefExplanation
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
@@ -109,6 +109,12 @@ class CognitiveEpisode:
     @property
     def working_belief(self) -> Belief | None:
         return self._working_belief
+
+    def explain(self) -> BeliefExplanation | None:
+        """Explain the episode's conclusion, or None if it formed no belief."""
+        if self._working_belief is None:
+            return None
+        return self._working_belief.explain()
 
     def observe(self, evidence: Evidence) -> None:
         """Route a piece of evidence to the episode's working belief."""

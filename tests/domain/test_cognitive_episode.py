@@ -129,6 +129,18 @@ class TestWorkingBelief:
         assert episode.working_belief is not None
         assert episode.working_belief.confidence.value > 0.0
 
+    def test_explain_is_none_before_a_belief_is_formed(self) -> None:
+        assert CognitiveEpisode(trigger="t").explain() is None
+
+    def test_explain_narrates_the_conclusion_once_grounded(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.form_working_belief("a conclusion")
+        episode.observe(_ev())
+        explanation = episode.explain()
+        assert explanation is not None
+        assert "a conclusion" in explanation.narrate()
+
     def test_cannot_form_a_belief_after_completion(self) -> None:
         episode = CognitiveEpisode(trigger="t")
         episode.begin_reasoning()
