@@ -413,8 +413,43 @@ class TestLearning:
         for topic in ("a", "b", "c"):
             jarvis.think(f"unfounded question about {topic}")  # habit forms
         for topic in ("d", "e", "f"):
-            jarvis.think(f"grounded question about {topic}", evidence=[_ev(0.9), _ev(0.9)])
+            jarvis.think(
+                f"grounded question about {topic}",
+                evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH + timedelta(days=60))],
+            )
         reverted = jarvis.think("a final unfounded question")
         assert reverted.result is not None
         assert "Insufficient evidence" in reverted.result
         assert "asking for evidence" not in reverted.result
+
+
+class TestOverconfidenceLearning:
+    def _thin(self) -> list[Evidence]:
+        return [_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)]
+
+    def _spread(self) -> list[Evidence]:
+        return [_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH + timedelta(days=60))]
+
+    def test_without_self_knowledge_the_caution_is_generic(self) -> None:
+        result = Jarvis().think("q0", evidence=self._thin()).result
+        assert result is not None
+        assert "overfitting to recent events" in result
+
+    def test_recognised_overconfidence_reframes_the_caution(self) -> None:
+        # Vision §20: self-knowledge changes how a grounded-but-thin conclusion is held.
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"q {topic}", evidence=self._thin())  # builds overconfidence
+        learned = jarvis.think("q final", evidence=self._thin())
+        assert learned.result is not None
+        assert "I have learned I tend to be overconfident" in learned.result
+
+    def test_the_tempering_reverts_when_jarvis_does_better(self) -> None:
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"q {topic}", evidence=self._thin())  # overconfidence forms
+        for topic in ("d", "e", "f"):
+            jarvis.think(f"q {topic}", evidence=self._spread())  # well-spread grounded
+        reverted = jarvis.think("q final", evidence=self._thin())
+        assert reverted.result is not None
+        assert "overfitting to recent events" in reverted.result

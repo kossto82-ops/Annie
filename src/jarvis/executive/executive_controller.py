@@ -21,7 +21,10 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
-from jarvis.domain.services.self_observation import observe_evidence_habit
+from jarvis.domain.services.self_observation import (
+    observe_evidence_habit,
+    observe_overconfidence,
+)
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
@@ -157,10 +160,17 @@ class ExecutiveController:
             f"stability {stability:.2f}), grounded in {len(belief.evidence)} piece(s) of evidence."
         )
         if stability < LOW_STABILITY_THRESHOLD:
-            conclusion += (
-                " (Caution: this rests on a narrow time window — "
-                "possible overfitting to recent events.)"
-            )
+            if self._recognises_overconfidence():
+                # Tempered by learned self-knowledge (Vision §20), not a generic warning.
+                conclusion += (
+                    " (I have learned I tend to be overconfident on thin evidence, "
+                    "so I am holding this more tentatively.)"
+                )
+            else:
+                conclusion += (
+                    " (Caution: this rests on a narrow time window — "
+                    "possible overfitting to recent events.)"
+                )
         return conclusion
 
     def _maybe_request_evidence(self, episode: CognitiveEpisode, belief: Belief) -> None:
@@ -174,6 +184,18 @@ class ExecutiveController:
                 confidence=belief.confidence,
                 needed=f"observations bearing on whether: {episode.trigger}",
             )
+        )
+
+    def _recognises_overconfidence(self) -> bool:
+        """Does Jarvis currently, confidently, believe it over-trusts thin evidence?
+
+        Derived from prior episodes each time (Vision §20), so it fades as grounded
+        conclusions become better spread over time.
+        """
+        self_belief = observe_overconfidence(self._episodes.history())
+        return (
+            self_belief is not None
+            and self_belief.confidence.value >= LEARNED_HABIT_THRESHOLD
         )
 
     def _recognises_evidence_habit(self) -> bool:

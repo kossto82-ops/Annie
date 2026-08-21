@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 22)
+Last updated: 2026-08-21 (Increment 23)
 
 ---
 
@@ -336,6 +336,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Verified: an ungrounded-habit Jarvis is curious about under-evidencing; a grounded-but-thin Jarvis
   is curious about overconfidence; a genuinely healthy (grounded + time-spread) Jarvis feels none.
 - Gates: ruff clean · pyright strict 0 errors · pytest 198 passed.
+- Commit `1ff8706` pushed to `origin/main`.
+
+### Increment 23 — temper overconfident conclusions from the self-model ✅ (2026-08-21)
+- Symmetric with Increment 12: when the executive reaches a grounded-but-low-stability conclusion, it
+  consults `observe_overconfidence` over prior COMPANION episodes. If Jarvis confidently believes it
+  over-trusts thin evidence (≥ `LEARNED_HABIT_THRESHOLD`), the generic overfitting caution is reframed
+  as learned self-correction ("I have learned I tend to be overconfident … holding this more
+  tentatively"); otherwise the plain caution stands.
+- Evidence-driven and reversible (D22): appears only while the overconfidence self-belief is confident,
+  fades as grounded conclusions become better spread. Read over prior episodes only (no self-reference).
+- Gates: ruff clean · pyright strict 0 errors · pytest 201 passed.
 
 ---
 
@@ -435,23 +446,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Temper overconfident conclusions from the self-model (Vision §20, §11).** Increment 12 made the
-evidence-habit self-belief change how `think()` phrases an *ungrounded* decision. The symmetric,
-still-missing half: when Jarvis confidently believes it is **overconfident** (Increment 21) and the
-current conclusion is grounded but on temporally thin evidence, the decision should be tempered by
-that self-knowledge — not just the generic per-episode overfitting caution (Increment 6), but an
-explicit "I know I tend to over-trust thin evidence, so I am holding this more tentatively". The
-smallest honest step:
-- The executive, at a grounded-but-low-stability conclusion, consults `observe_overconfidence` over
-  prior episodes; if confident, it strengthens/reframes the caution as learned self-correction.
-- Evidence-driven and reversible (like D22): it appears only while the overconfidence self-belief is
-  confident, and fades as Jarvis's grounded conclusions become better spread over time.
-- Behaviour tests: once overconfidence is recognised, a grounded-but-thin `think()` visibly reframes
-  its caution; a Jarvis without that self-belief keeps the plain overfitting caution; it reverts.
+**Generalise `EpisodeRecord` so deliberations are first-class episodes (D26, Vision §17, §21).** The
+sharpest remaining structural gap: `jarvis.consider` (competing hypotheses, Increment 19) runs
+*outside* the episode machinery — no episodic-memory record, no per-episode trace — because
+`EpisodeRecord` is belief-centric (`working_belief_id`, `conclusion_confidence`). Deliberations are
+a real act of cognition and should be remembered like any other. The smallest honest step:
+- Make `EpisodeRecord` accommodate a deliberation outcome: e.g. an optional/second shape capturing
+  the observation, the leading explanation (or "undecided"), and its confidence — without breaking the
+  belief-shaped record (keep both, or introduce a small shared `Conclusion` the record holds).
+- Route `consider` through the episode lifecycle (CREATED→…→COMPLETED) and record it, correlating its
+  hypothesis events to the episode so `trace_of` works for deliberations too.
+- Behaviour tests: a `consider` call appends an episode record whose outcome names the leader (or
+  undecided) with its confidence; `trace_of` returns the deliberation's ordered events; history keeps order.
 
-*(Deferred, natural follow-ups: more tendencies (recency bias, complexity); generalise `EpisodeRecord`
-so deliberations are first-class episodes (D26); a real DB behind the JSON stores; persisting traces;
-semantic trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
+*(Deferred, natural follow-ups: more self-observation tendencies (recency bias, complexity); a real DB
+behind the JSON stores; persisting traces; semantic trigger↔trait matching; recurring-goals/working-
+patterns facets; system-level weighting-policy injection + persistence.)*
 
 ---
 
