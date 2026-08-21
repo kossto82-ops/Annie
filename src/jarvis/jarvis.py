@@ -18,12 +18,14 @@ from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
 )
 from jarvis.domain.value_objects.action import Action
+from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
@@ -196,6 +198,16 @@ class Jarvis:
     def belief_about_action(self, description: str) -> Belief | None:
         """What Jarvis believes about how actions of this kind turn out."""
         return self.actions.get_by_statement(self._action_statement(description))
+
+    def recommend_action(self, action: Action) -> ActionRecommendation:
+        """Recommend a stance toward ``action`` from experience (Vision §28).
+
+        Suggests only a confidently-learned, reversible action; asks first when
+        unproven or irreversible; withholds one the record contradicts. It only
+        recommends -- it performs nothing (autonomy is earned).
+        """
+        belief = self.belief_about_action(action.description)
+        return recommend_stance(belief, reversible=action.reversible)
 
     @staticmethod
     def _action_statement(description: str) -> str:

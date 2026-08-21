@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from jarvis import Jarvis
+from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.value_objects.confidence import Confidence
@@ -68,3 +69,37 @@ class TestLearningFromOutcomes:
         action = jarvis.act("water the plants", expected="they perk up")
         jarvis.record_outcome(action, actual="they perked up", met_expectation=True)
         assert any(isinstance(e, ActionOutcomeRecorded) for e in seen)
+
+
+class TestGradedAutonomy:
+    def test_an_unproven_action_is_asked_first(self) -> None:
+        jarvis = Jarvis()
+        action = jarvis.act("restart the server", expected="it comes back up")
+        assert jarvis.recommend_action(action).stance is ActionStance.ASK_FIRST
+
+    def test_a_well_learned_reversible_action_is_suggested(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(3):
+            a = jarvis.act("tidy the notes", expected="notes are tidy", reversible=True)
+            jarvis.record_outcome(a, actual="notes are tidy", met_expectation=True)
+        pending = jarvis.act("tidy the notes", expected="notes are tidy", reversible=True)
+        assert jarvis.recommend_action(pending).stance is ActionStance.SUGGEST
+
+    def test_the_same_learning_but_irreversible_is_asked_first(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(3):
+            a = jarvis.act("delete the file", expected="space is freed", reversible=True)
+            jarvis.record_outcome(a, actual="space is freed", met_expectation=True)
+        pending = jarvis.act("delete the file", expected="space is freed", reversible=False)
+        assert jarvis.recommend_action(pending).stance is ActionStance.ASK_FIRST
+
+    def test_a_contradicted_action_is_withheld(self) -> None:
+        jarvis = Jarvis()
+        outcomes = [True, False, False]
+        for met in outcomes:
+            a = jarvis.act("deploy on friday", expected="quiet weekend")
+            jarvis.record_outcome(
+                a, actual="quiet" if met else "an incident", met_expectation=met
+            )
+        pending = jarvis.act("deploy on friday", expected="quiet weekend")
+        assert jarvis.recommend_action(pending).stance is ActionStance.WITHHOLD

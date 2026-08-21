@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 25)
+Last updated: 2026-08-21 (Increment 26)
 
 ---
 
@@ -71,6 +71,7 @@ src/jarvis/
     services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
     services/self_observation.py         observe_evidence_habit + observe_overconfidence (Vision §6/§31)
     services/curiosity.py                wonder — a self-belief → CuriosityImpulse (Vision §16)
+    services/action_advisor.py           recommend — a learned belief → ActionRecommendation (Vision §28)
     value_objects/curiosity_impulse.py   CuriosityImpulse (a self-triggered investigation, recommended)
     aggregates/cognitive_episode.py      CognitiveEpisode (aggregate root) + InvalidStateTransition
     aggregates/hypothesis_set.py         HypothesisSet (competing hypotheses) + UnknownHypothesis
@@ -81,6 +82,7 @@ src/jarvis/
     enums/episode_kind.py                EpisodeKind (CONCLUSION | DELIBERATION)
     enums/evidence_source.py             EvidenceSource (Vision §8 origins)
     enums/trigger_origin.py              TriggerOrigin (COMPANION | CURIOSITY — who started the episode)
+    enums/action_stance.py               ActionStance (SUGGEST | ASK_FIRST | WITHHOLD — Vision §28)
     events/domain_event.py               DomainEvent -> CognitiveEvent (immutable)
     events/episode_events.py             EpisodeStarted, EpisodeCompleted
     events/evidence_events.py            EvidenceAdded (shared by belief + hypothesis)
@@ -370,6 +372,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
   repeated matches build confidence and mismatches erode it (Vision §20). `belief_about_action(desc)`
   retrieves it with full provenance; an `ActionOutcomeRecorded` event is emitted.
 - Gates: ruff clean · pyright strict 0 errors · pytest 211 passed.
+- Commit `67e291c` pushed to `origin/main`.
+
+### Increment 26 — graded autonomy: recommend a stance, never act ✅ (2026-08-21)
+- `ActionStance` enum (SUGGEST | ASK_FIRST | WITHHOLD) + `ActionRecommendation` VO + `action_advisor`
+  service. `jarvis.recommend_action(action)` derives a stance from the *learned* belief about that
+  action kind (its track record) and reversibility: a confidently-learned reversible action →
+  SUGGEST; the same learning but irreversible, or an unproven one → ASK_FIRST; one the record
+  contradicts → WITHHOLD. It recommends only — performs nothing (Vision §28: autonomy is earned).
+- Improves as Jarvis learns (Increment 25); reuses the epistemology (confidence + contradiction).
+- Gates: ruff clean · pyright strict 0 errors · pytest 220 passed.
 
 ---
 
@@ -469,22 +481,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Actions inform decisions to act; graded autonomy (Vision §28).** Jarvis can now act and learn from
-outcomes (Increment 25), but nothing yet *uses* that learning to decide whether an action is wise, and
-Vision §28 is explicit: autonomy is earned, and Jarvis must distinguish observation / suggestion /
-preparation / permission-required action / autonomous action. The smallest honest step:
-- A `recommend_action(description, expected, reversible)` that consults `belief_about_action(description)`
-  and returns a graded recommendation: SUGGEST when the belief is confident and the action reversible;
-  ASK_FIRST when it is irreversible or the belief is weak/contested; WITHHOLD when the belief actively
-  contradicts success. Never performs anything — it recommends a *stance*.
-- Reuse the epistemology: the recommendation is derived from the action-outcome belief's confidence and
-  the reversibility flag, so it improves as Jarvis learns which actions tend to work.
-- Behaviour tests: a well-learned reversible action is SUGGESTed; an irreversible or unproven one is
-  ASK_FIRST; an action whose belief is contradicted is WITHHELD.
+**Persist action-outcome learning across restarts (Vision §21, §27).** Jarvis now learns which actions
+work (Increment 25) and recommends stances from that (Increment 26) — but the `actions` store defaults
+to in-memory, so a restart forgets every lesson learned about acting. This is the same gap Increment 15
+closed for beliefs/episodes, now for action learning. It reuses the existing `JsonBeliefStore`:
+- Make `Jarvis(actions_store=JsonBeliefStore(...))` round-trip: action-outcome beliefs persist with
+  their evidence, confidence re-derived on load (Vision §22).
+- Behaviour tests: an action learned to work before a restart still yields the same
+  `belief_about_action` confidence and the same `recommend_action` stance after it.
+- Trivial infra reuse — no domain change; just verify the action store participates in continuity.
 
 *(Deferred, natural follow-ups: more self-observation tendencies (recency bias, complexity); a real DB
-behind the JSON stores; persisting traces + action beliefs; semantic trigger↔trait matching;
-recurring-goals/working-patterns facets; system-level weighting-policy injection + persistence.)*
+behind the JSON stores; persisting traces; semantic trigger↔trait matching; recurring-goals/working-
+patterns facets; system-level weighting-policy injection + persistence.)*
 
 ---
 
