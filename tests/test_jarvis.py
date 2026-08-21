@@ -1,0 +1,130 @@
+"""End-to-end tests for the cognitive vertical slice, now grounded in evidence."""
+
+from __future__ import annotations
+
+from jarvis import Jarvis
+from jarvis.domain.enums.episode_state import EpisodeState
+from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.events.domain_event import CognitiveEvent
+from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
+from jarvis.domain.events.evidence_events import EvidenceAdded
+from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.evidence import Evidence
+
+
+def _ev(weight: float, *, supports: bool = True, content: str = "observation") -> Evidence:
+    return Evidence(
+        content=content,
+        source=EvidenceSource.USER_STATEMENT,
+        weight=Confidence(weight),
+        supports=supports,
+    )
+
+
+class TestThink:
+    def test_returns_a_completed_episode(self) -> None:
+        episode = Jarvis().think("I need to understand a problem.")
+        assert episode.state == EpisodeState.COMPLETED
+        assert episode.result is not None
+        assert "I need to understand a problem." in episode.result
+
+    def test_each_think_is_an_independent_episode(self) -> None:
+        jarvis = Jarvis()
+        assert jarvis.think("a").id != jarvis.think("b").id
+
+
+class TestEpistemologyDrivesTheDecision:
+    def test_no_evidence_yields_an_honest_non_conclusion(self) -> None:
+        # Vision §37: with no evidence, Jarvis says so rather than fabricating.
+        episode = Jarvis().think("does my companion prefer simplicity?")
+        assert episode.result is not None
+        assert "Insufficient evidence" in episode.result
+        assert episode.working_belief is not None
+        assert episode.working_belief.confidence == Confidence.none()
+
+    def test_strong_evidence_yields_a_grounded_conclusion(self) -> None:
+        episode = Jarvis().think(
+            "does my companion prefer simplicity?",
+            evidence=[_ev(0.9), _ev(0.8), _ev(0.9)],
+        )
+        assert episode.result is not None
+        assert "Concluded" in episode.result
+        assert episode.working_belief is not None
+        assert episode.working_belief.confidence.value >= 0.5
+
+    def test_weak_evidence_yields_a_tentative_conclusion(self) -> None:
+        episode = Jarvis().think("is my companion in a hurry?", evidence=[_ev(0.1)])
+        assert episode.result is not None
+        assert "Tentative" in episode.result
+
+
+class TestEventFlow:
+    def test_emits_started_then_completed_when_ungrounded(self) -> None:
+        jarvis = Jarvis()
+        events: list[CognitiveEvent] = []
+        jarvis.nervous_system.subscribe(CognitiveEvent, events.append)  # type: ignore[arg-type]
+        episode = jarvis.think("hello")
+        assert [type(e) for e in events] == [EpisodeStarted, EpisodeCompleted]
+        assert all(e.episode_id == episode.id for e in events)
+
+    def test_belief_events_flow_when_evidence_is_provided(self) -> None:
+        jarvis = Jarvis()
+        events: list[CognitiveEvent] = []
+        jarvis.nervous_system.subscribe(CognitiveEvent, events.append)  # type: ignore[arg-type]
+        jarvis.think("does my companion prefer simplicity?", evidence=[_ev(0.9)])
+        kinds = [type(e) for e in events]
+        assert kinds[0] is EpisodeStarted
+        assert EvidenceAdded in kinds
+        assert kinds[-1] is EpisodeCompleted
+
+    def test_grounded_episode_can_explain_its_conclusion(self) -> None:
+        episode = Jarvis().think(
+            "does my companion prefer simplicity?",
+            evidence=[_ev(0.9, content="chose the simpler design")],
+        )
+        assert episode.working_belief is not None
+        explanation = episode.working_belief.explain()
+        assert explanation.supporting  # provenance is reconstructable (Vision §8)
+
+
+class TestContinuityAcrossEpisodes:
+    def test_a_belief_persists_and_evolves_across_episodes(self) -> None:
+        # The essence of Jarvis: it does not start from zero each time (Vision §3).
+        jarvis = Jarvis()
+        question = "does my companion prefer simplicity?"
+
+        first = jarvis.think(question, evidence=[_ev(0.5)])
+        assert first.working_belief is not None
+        confidence_after_first = first.working_belief.confidence  # immutable snapshot
+
+        second = jarvis.think(question, evidence=[_ev(0.5)])
+
+        assert second.working_belief is first.working_belief  # same belief retrieved
+        assert second.working_belief is not None
+        assert second.working_belief.confidence.is_stronger_than(
+            confidence_after_first
+        )  # accumulated evidence across episodes raised confidence
+
+    def test_evidence_accumulates_in_the_remembered_belief(self) -> None:
+        jarvis = Jarvis()
+        question = "is my companion busy this week?"
+        jarvis.think(question, evidence=[_ev(0.4)])
+        second = jarvis.think(question, evidence=[_ev(0.4)])
+        assert second.working_belief is not None
+        assert len(second.working_belief.evidence) == 2
+
+    def test_different_triggers_form_independent_beliefs(self) -> None:
+        jarvis = Jarvis()
+        one = jarvis.think("question A", evidence=[_ev(0.5)])
+        two = jarvis.think("question B", evidence=[_ev(0.5)])
+        assert one.working_belief is not two.working_belief
+
+    def test_confidence_is_still_derived_not_asserted(self) -> None:
+        # Memory is not truth (Vision §22): a remembered belief with only weak
+        # evidence stays weak; storage never inflates confidence.
+        jarvis = Jarvis()
+        question = "does my companion dislike meetings?"
+        jarvis.think(question, evidence=[_ev(0.1)])
+        second = jarvis.think(question)  # revisited with no new evidence
+        assert second.result is not None
+        assert "Tentative" in second.result
