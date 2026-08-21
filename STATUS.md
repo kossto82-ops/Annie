@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 31)
+Last updated: 2026-08-21 (Increment 32)
 
 ---
 
@@ -434,6 +434,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
   (Vision §5, §8, §26) — or a plain "I don't hold a view on that yet" for an unknown trait (Vision §37).
   Pure read-model over `companion.belief_about(...).explain().narrate()`; no new state.
 - Gates: ruff clean · pyright strict 0 errors · pytest 235 passed.
+- Commit `08a6fcf` pushed to `origin/main`.
+
+### Increment 32 — documented public surface + runnable example ✅ (2026-08-21)
+- README gained a **Vocabulary** section grouping Jarvis's public API by cognitive role
+  (construct / perceive & reason / act & learn / self-model / companion / memory & provenance),
+  every line copied from the real signatures (global Rule 24), nothing aspirational.
+- `examples/main_loop.py` runs the whole loop end to end (reason → model companion → deliberate →
+  act & learn → introspect); verified it executes (exit 0) and type-checks. Consolidation only —
+  no behaviour change.
+- Gates: ruff clean · pyright strict 0 errors · pytest 235 passed.
 
 ---
 
@@ -533,20 +543,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A documented public surface: one place that says what Jarvis can do (developer ergonomics).** The
-API has grown to ~20 public methods on `Jarvis` across think/consider/act/self-model/companion/
-introspect — powerful, but there is no single map of the vocabulary, and the README predates most of
-it. This is a consolidation increment (like Increment 20), not new capability:
-- A concise "Vocabulary" section in `README.md` grouping the public methods by cognitive role
-  (perceive/reason, act, self-model, companion, memory/continuity, explain) with one line each — all
-  verified against the actual signatures, nothing aspirational (global Rule 24: copy from source).
-- Optionally a tiny `examples/` runnable script exercising the main loop end to end (think → observe
-  companion → act → record outcome → introspect), so the README's claims are executable.
-- No behaviour change; the guard is that the documented surface matches the code exactly.
+**Attention: not all triggers deserve the same depth (Vision §14, §15).** Every `think()` runs the
+full lifecycle regardless of how much the question matters or how much is already known — but Vision
+§14 makes attention a limited resource and §15 asks Jarvis to reason about cost vs. value. A first
+honest, measurable step (no fake "energy" — a real routing decision):
+- Before committing to full reasoning, the executive assesses the trigger against what it already
+  knows: if it already holds a confident, relevant belief (companion model or a remembered working
+  belief), it can answer briefly from that; a novel or high-uncertainty trigger warrants the full
+  lifecycle. Expose the chosen depth on the episode (e.g. `attention: BRIEF | FULL`).
+- Derive the choice from real signals (existing confident belief? prior episodes on this trigger?),
+  not a hard-coded rule — so it improves as memory grows.
+- Behaviour tests: a trigger Jarvis already confidently understands gets BRIEF handling; a novel or
+  contested one gets FULL; the decision is visible on the episode.
 
-*(Deferred, natural follow-ups: excessive-complexity self-observation tendency; a real DB behind the
-JSON stores; persisting traces; semantic trigger↔trait matching; recurring-goals/working-patterns
-facets; system-level weighting-policy injection + persistence.)*
+*(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15); excessive-complexity
+self-observation tendency; a real DB behind the JSON stores; persisting traces; semantic
+trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
 
 ---
 

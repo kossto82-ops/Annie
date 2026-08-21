@@ -61,6 +61,43 @@ trigger (+ evidence)
   `ContradictionDetected`, `HypothesisCreated`, ...).
 - **Infrastructure:** `InMemoryBeliefStore`.
 
+## Vocabulary
+
+Everything Jarvis can do, by cognitive role. All in-memory by default; wire durable JSON stores per
+store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
+
+**Construct**
+- `Jarvis()` — ephemeral (in-memory).
+- `Jarvis.persistent(directory)` — all memory (beliefs, episodes, companion, actions) on disk under one dir.
+
+**Perceive & reason**
+- `think(trigger, evidence=())` — run a cognitive episode toward one grounded conclusion; returns the episode.
+- `consider(observation, options)` — weigh competing explanations (`{statement: [evidence, ...]}`); returns a `Deliberation`.
+
+**Act & learn**
+- `act(description, expected, *, confidence=None, reversible=True)` — declare an intention (no side effect).
+- `record_outcome(action, actual, met_expectation)` — learn from expected-vs-actual; returns the action-outcome belief.
+- `belief_about_action(description)` — what Jarvis has learned about that kind of action.
+- `recommend_action(action)` — a graded stance (SUGGEST / ASK_FIRST / WITHHOLD); recommends, never acts.
+
+**Model of itself**
+- `observe_self()`, `observe_overconfidence()`, `observe_prediction_accuracy()` — one self-tendency each, or None.
+- `self_beliefs()` — every self-tendency it has enough history to judge.
+- `feel_curious()` — an impulse to reduce the most confident weakness, or None.
+- `pursue(impulse)` — run the self-triggered corrective episode.
+- `introspect()` — a plain-language account of who it is, from real state.
+
+**Model of its companion**
+- `observe_companion(trait, evidence)` — evolve a belief about the companion.
+- `explain_companion(trait)` — why it believes that (evidence, confidence, "I may be wrong"), or "no view yet".
+- `companion.belief_about(trait)` / `companion.beliefs()` / `companion.summarise()`.
+
+**Memory & provenance**
+- `episodes.history()` — past episodes (conclusions and deliberations).
+- `trace_of(episode)` / `trace(correlation_id)` — the ordered event trace of one act of cognition.
+
+A runnable end-to-end tour lives in [`examples/main_loop.py`](examples/main_loop.py).
+
 ## Development
 
 Requires Python 3.13+.
