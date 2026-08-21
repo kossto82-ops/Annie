@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from jarvis import Jarvis
+from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -25,6 +26,7 @@ def _boot(tmp_path: Path) -> Jarvis:
         beliefs=JsonBeliefStore(tmp_path / "beliefs.json"),
         episodes=JsonEpisodeStore(tmp_path / "episodes.json"),
         companion_store=JsonBeliefStore(tmp_path / "companion.json"),
+        actions_store=JsonBeliefStore(tmp_path / "actions.json"),
     )
 
 
@@ -63,6 +65,24 @@ class TestContinuityAcrossRestart:
         self_belief = second_run.observe_self()
         assert self_belief is not None
         assert self_belief.confidence.value > 0.0
+
+    def test_action_learning_survives_a_restart(self, tmp_path: Path) -> None:
+        # What Jarvis learned about acting must outlive the process (Vision §21, §27).
+        first_run = _boot(tmp_path)
+        for _ in range(3):
+            action = first_run.act("tidy the notes", expected="tidy", reversible=True)
+            first_run.record_outcome(action, actual="tidy", met_expectation=True)
+        belief = first_run.belief_about_action("tidy the notes")
+        assert belief is not None
+        confidence_before = belief.confidence
+
+        second_run = _boot(tmp_path)
+        reloaded = second_run.belief_about_action("tidy the notes")
+        assert reloaded is not None
+        assert reloaded.confidence == confidence_before
+        # And the recommendation it drives is unchanged after the restart.
+        pending = second_run.act("tidy the notes", expected="tidy", reversible=True)
+        assert second_run.recommend_action(pending).stance is ActionStance.SUGGEST
 
     def test_companion_model_survives_a_restart_and_still_informs(self, tmp_path: Path) -> None:
         # Jarvis must not forget the person it is meant to know (Vision §5).

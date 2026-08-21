@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 26)
+Last updated: 2026-08-21 (Increment 27)
 
 ---
 
@@ -382,6 +382,15 @@ with belief + episode events dispatched through the NervousSystem at each step.
   contradicts → WITHHOLD. It recommends only — performs nothing (Vision §28: autonomy is earned).
 - Improves as Jarvis learns (Increment 25); reuses the epistemology (confidence + contradiction).
 - Gates: ruff clean · pyright strict 0 errors · pytest 220 passed.
+- Commit `2fd8ef4` pushed to `origin/main`.
+
+### Increment 27 — persist action-outcome learning across restarts ✅ (2026-08-21)
+- `Jarvis(actions_store=JsonBeliefStore(...))` now round-trips: action-outcome beliefs persist with
+  their evidence, confidence re-derived on load (Vision §21, §22, §27). No domain or infra change —
+  pure reuse of the existing `JsonBeliefStore` behind the `BeliefRepository` protocol.
+- Verified across two processes: an action learned to work before a restart keeps the same
+  `belief_about_action` confidence and the same `recommend_action` stance (SUGGEST) after it.
+- Gates: ruff clean · pyright strict 0 errors · pytest 221 passed.
 
 ---
 
@@ -481,15 +490,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Persist action-outcome learning across restarts (Vision §21, §27).** Jarvis now learns which actions
-work (Increment 25) and recommends stances from that (Increment 26) — but the `actions` store defaults
-to in-memory, so a restart forgets every lesson learned about acting. This is the same gap Increment 15
-closed for beliefs/episodes, now for action learning. It reuses the existing `JsonBeliefStore`:
-- Make `Jarvis(actions_store=JsonBeliefStore(...))` round-trip: action-outcome beliefs persist with
-  their evidence, confidence re-derived on load (Vision §22).
-- Behaviour tests: an action learned to work before a restart still yields the same
-  `belief_about_action` confidence and the same `recommend_action` stance after it.
-- Trivial infra reuse — no domain change; just verify the action store participates in continuity.
+**One durable home: `Jarvis.persistent(directory)` (Vision §3, §21 — ergonomics).** Continuity now
+works, but wiring it means passing four separate `Json*Store(path)` objects, and it's easy to forget
+one (as the earlier increments each did in turn). A long-term companion should be *durable by default*
+with one call. The smallest honest step:
+- A `Jarvis.persistent(directory)` classmethod (or factory) that wires all four stores —
+  beliefs / episodes / companion / actions — to files under one directory, so a single call gives full
+  cross-restart continuity.
+- No new persistence mechanism — pure composition over the existing JSON stores; the in-memory default
+  constructor stays for tests and ephemeral use.
+- Behaviour tests: two `Jarvis.persistent(same_dir)` instances share beliefs, episodes, companion model
+  and action learning; a fresh directory starts empty.
 
 *(Deferred, natural follow-ups: more self-observation tendencies (recency bias, complexity); a real DB
 behind the JSON stores; persisting traces; semantic trigger↔trait matching; recurring-goals/working-
@@ -507,7 +518,8 @@ patterns facets; system-level weighting-policy injection + persistence.)*
 - Stability is span-based only (no count/recency weighting yet); `TemporalStability` is derived for
   beliefs but not yet for hypotheses.
 - Weighting policy is applied per-belief (default) but not yet injectable at the `Jarvis(...)` level.
-- Persistence is process-lifetime only (`InMemoryBeliefStore`); no durable/DB store yet.
+- Default stores are in-memory; durable JSON stores are opt-in per store (`Jarvis(beliefs=, episodes=,
+  companion_store=, actions_store=)`). No real DB yet; traces are not persisted.
 - Belief retrieval keys on the exact trigger string (D17), not semantic meaning of statements.
 - Source-based weighting policy (Vision §11: explicit confirmation weighs more) not implemented —
   the caller assigns weight; `EvidenceSource` is recorded for when policy arrives.
