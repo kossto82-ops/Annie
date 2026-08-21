@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 27)
+Last updated: 2026-08-21 (Increment 28)
 
 ---
 
@@ -37,7 +37,8 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.enums.evidence_source import EvidenceSource
 
-j = Jarvis()
+j = Jarvis()                       # ephemeral (in-memory)
+# j = Jarvis.persistent("~/jarvis")  # durable: all memory on disk under one dir
 
 # No evidence -> honest non-conclusion (Vision §37), not a fabricated answer:
 j.think("Does my companion prefer simplicity?").result
@@ -391,6 +392,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Verified across two processes: an action learned to work before a restart keeps the same
   `belief_about_action` confidence and the same `recommend_action` stance (SUGGEST) after it.
 - Gates: ruff clean · pyright strict 0 errors · pytest 221 passed.
+- Commit `495f620` pushed to `origin/main`.
+
+### Increment 28 — one durable home: Jarvis.persistent(directory) ✅ (2026-08-21)
+- `Jarvis.persistent(directory)` classmethod wires all four stores — beliefs, episodes, companion
+  model, action learning — to JSON files under one directory in a single call, so a long-term
+  companion is durable by default (Vision §3, §21). Pure composition over the existing JSON stores;
+  the in-memory default constructor stays for tests and ephemeral use.
+- Verified across two processes: everything (episodes, companion, action learning) survives a restart
+  from one `Jarvis.persistent(dir)` call; a fresh directory starts empty.
+- Gates: ruff clean · pyright strict 0 errors · pytest 223 passed.
 
 ---
 
@@ -490,21 +501,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**One durable home: `Jarvis.persistent(directory)` (Vision §3, §21 — ergonomics).** Continuity now
-works, but wiring it means passing four separate `Json*Store(path)` objects, and it's easy to forget
-one (as the earlier increments each did in turn). A long-term companion should be *durable by default*
-with one call. The smallest honest step:
-- A `Jarvis.persistent(directory)` classmethod (or factory) that wires all four stores —
-  beliefs / episodes / companion / actions — to files under one directory, so a single call gives full
-  cross-restart continuity.
-- No new persistence mechanism — pure composition over the existing JSON stores; the in-memory default
-  constructor stays for tests and ephemeral use.
-- Behaviour tests: two `Jarvis.persistent(same_dir)` instances share beliefs, episodes, companion model
-  and action learning; a fresh directory starts empty.
+**A third self-observation tendency: recency over-weighting (Vision §6, §36).** The self-model catches
+two biases (under-evidencing, overconfidence). Vision §6 explicitly names *"I tend to overweight recent
+events"* and §36 makes time first-class. Now that episodes carry `recorded_at` and stability already
+encodes temporal spread, a recency bias is measurable: does Jarvis's confidence lean on a burst of
+recent, clustered evidence rather than a steady record? The smallest honest step:
+- `observe_recency_bias(history)` → a belief about Jarvis, from grounded companion episodes whose
+  supporting evidence is tightly clustered in time relative to the episode (e.g. very low stability
+  *and* recent) — supporting the bias; well-spread ones contradicting it.
+- Surface it via `self_beliefs()` (curiosity and, if wanted, decision-tempering already iterate the
+  whole self-model, so it plugs in for free — Increments 22/23).
+- Behaviour tests: a history dominated by recent-burst grounded conclusions forms the recency-bias
+  self-belief; a steady, well-spread history does not.
 
-*(Deferred, natural follow-ups: more self-observation tendencies (recency bias, complexity); a real DB
-behind the JSON stores; persisting traces; semantic trigger↔trait matching; recurring-goals/working-
-patterns facets; system-level weighting-policy injection + persistence.)*
+*(Deferred, natural follow-ups: excessive-complexity tendency; a real DB behind the JSON stores;
+persisting traces; semantic trigger↔trait matching; recurring-goals/working-patterns facets;
+system-level weighting-policy injection + persistence.)*
 
 ---
 

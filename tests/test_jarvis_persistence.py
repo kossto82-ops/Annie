@@ -99,3 +99,23 @@ class TestContinuityAcrossRestart:
         episode = second_run.think(f"will they be happy if they {trait}?")
         assert episode.working_belief is not None
         assert episode.working_belief.confidence.value > 0.0
+
+
+class TestPersistentFactory:
+    def test_persistent_wires_every_store_under_one_directory(self, tmp_path: Path) -> None:
+        # One call gives full cross-restart continuity (Vision §3, §21).
+        first = Jarvis.persistent(tmp_path)
+        first.think("does my companion prefer simplicity?", evidence=[_ev(0.9)])
+        first.observe_companion("prefers simplicity", _ev(0.9))
+        action = first.act("tidy the notes", expected="tidy", reversible=True)
+        first.record_outcome(action, actual="tidy", met_expectation=True)
+
+        second = Jarvis.persistent(tmp_path)
+        assert second.episodes.history()  # episodes survived
+        assert second.companion.belief_about("prefers simplicity") is not None
+        assert second.belief_about_action("tidy the notes") is not None
+
+    def test_a_fresh_directory_starts_empty(self, tmp_path: Path) -> None:
+        jarvis = Jarvis.persistent(tmp_path / "fresh")
+        assert jarvis.episodes.history() == ()
+        assert jarvis.companion.beliefs() == ()

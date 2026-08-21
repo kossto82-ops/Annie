@@ -8,6 +8,7 @@ subscribe to cognitive events *before* thinking begins.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
@@ -33,6 +34,8 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.executive.executive_controller import ExecutiveController
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
+from jarvis.infrastructure.json_belief_store import JsonBeliefStore
+from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace
 
@@ -57,6 +60,23 @@ class Jarvis:
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
             self.nervous_system, self.beliefs, self.episodes, self.companion
+        )
+
+    @classmethod
+    def persistent(cls, directory: str | Path) -> Jarvis:
+        """A Jarvis whose whole memory lives on disk under one directory.
+
+        Wires all four stores -- beliefs, episodes, companion model and action
+        learning -- to files under ``directory``, so a single call gives full
+        continuity across restarts (Vision §3, §21). Nothing new is persisted;
+        this is composition over the existing JSON stores.
+        """
+        base = Path(directory)
+        return cls(
+            beliefs=JsonBeliefStore(base / "beliefs.json"),
+            episodes=JsonEpisodeStore(base / "episodes.json"),
+            companion_store=JsonBeliefStore(base / "companion.json"),
+            actions_store=JsonBeliefStore(base / "actions.json"),
         )
 
     def think(
