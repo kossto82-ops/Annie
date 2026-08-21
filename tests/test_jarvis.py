@@ -281,13 +281,30 @@ class TestCuriosity:
         return jarvis
 
     def test_a_healthy_jarvis_feels_no_curiosity(self) -> None:
+        # Grounded AND time-spread conclusions -> no evidence habit, no overconfidence.
         jarvis = Jarvis()
         for topic in ("a", "b", "c"):
-            jarvis.think(f"question about {topic}", evidence=[_ev(0.9), _ev(0.9)])
+            jarvis.think(
+                f"question about {topic}",
+                evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH + timedelta(days=60))],
+            )
         assert jarvis.feel_curious() is None
 
     def test_a_recognised_weakness_raises_curiosity(self) -> None:
         assert self._make_habitually_ungrounded().feel_curious() is not None
+
+    def test_overconfidence_can_raise_curiosity(self) -> None:
+        # A confident weakness other than the evidence habit is also acted on.
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c", "d"):
+            # Grounded but same-instant evidence -> overconfident, not ungrounded.
+            jarvis.think(
+                f"question about {topic}",
+                evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)],
+            )
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert "overconfident" in impulse.rationale
 
     def test_pursuing_curiosity_runs_a_self_triggered_episode(self) -> None:
         # The first episode Jarvis initiates on its own (Vision §16, §31).

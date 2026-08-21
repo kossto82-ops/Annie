@@ -88,15 +88,20 @@ class Jarvis:
         return tuple(belief for belief in candidates if belief is not None)
 
     def feel_curious(self) -> CuriosityImpulse | None:
-        """Decide whether a known self-tendency is worth investigating (Vision §16).
+        """Decide whether any known self-tendency is worth investigating (Vision §16).
 
-        Returns a recommendation to pursue -- not an action taken -- or None if
-        there is nothing confident enough to warrant it.
+        Considers Jarvis's whole self-model and raises an impulse for the most
+        confident weakness worth acting on -- a recommendation, not an action, or
+        None if nothing is confident enough (Vision §28).
         """
-        self_belief = self.observe_self()
-        if self_belief is None:
-            return None
-        return wonder(self_belief)
+        by_confidence = sorted(
+            self.self_beliefs(), key=lambda belief: belief.confidence.value, reverse=True
+        )
+        for belief in by_confidence:
+            impulse = wonder(belief)
+            if impulse is not None:
+                return impulse
+        return None
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).
