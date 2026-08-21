@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 29)
+Last updated: 2026-08-21 (Increment 30)
 
 ---
 
@@ -415,6 +415,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   via `jarvis.observe_prediction_accuracy()` and folded into `self_beliefs()`, so curiosity weighs it
   for free (Increment 22).
 - Gates: ruff clean · pyright strict 0 errors · pytest 228 passed.
+- Commit `02734d5` pushed to `origin/main`.
+
+### Increment 30 — introspection: Jarvis narrates itself from real state ✅ (2026-08-21)
+- `jarvis.introspect()` returns a plain-language self-account assembled purely from existing state:
+  its recognised self-tendencies (`self_beliefs()` narrated, strongest first), what it believes about
+  its companion (`companion.summarise()`), and an honest note on how little it may still know
+  (episode count). Personality **emerges from state, not a prompt** (Vision §29, §30, §40).
+- Grounded: a fresh Jarvis says "I have not yet noticed any consistent tendencies" and "0 past
+  episode(s)"; a seasoned one surfaces its strongest tendency + companion beliefs; nothing is asserted
+  that isn't in the state. Pure read-model — no new state, no domain change.
+- Gates: ruff clean · pyright strict 0 errors · pytest 232 passed.
 
 ---
 
@@ -514,18 +525,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A first-run experience: `Jarvis` narrates who it is and what it knows (Vision §29, §30, §40).** The
-system now has a rich inner state — beliefs, a self-model, a companion model, action learning — but no
-single way to *ask it about itself*, which is what a companion relationship needs (Vision §30) and how
-personality should surface (Vision §29: emerges from stable state, not a prompt). The smallest honest
-step, pure read-model over what exists:
-- A `jarvis.introspect()` (or `about_self()`) that returns a plain-language account assembled from the
-  real state: its self-tendencies (`self_beliefs()`, narrated), what it currently believes about its
-  companion (`companion.summarise()`), and a one-line honesty note about how much it still doesn't know
-  (episode count, unproven actions). No new state — it reads and narrates.
-- Keep it grounded (Vision §29): every line traces to actual beliefs/evidence, never invented traits.
-- Behaviour tests: a fresh Jarvis introspects to "I have little history yet"; a seasoned one surfaces
-  its strongest self-tendencies and companion beliefs; nothing is asserted that isn't in the state.
+**"Why do you believe *that* about me?" — companion-belief provenance on demand (Vision §5, §8, §26).**
+Introspection (Increment 30) narrates the *whole* self+companion picture, but the vision's signature
+move is Jarvis answering, for one specific claim, *why* — with the evidence, and honest about being
+possibly wrong (Vision §5). The companion model already holds the beliefs and provenance; this exposes
+a focused query. The smallest honest step:
+- `jarvis.explain_companion(trait)` → the `BeliefExplanation` (or its narration) for that trait, or a
+  clear "I don't hold a view on that yet" when unknown — reusing `belief.explain()` / `narrate()`.
+- Optionally include what would change its mind (an evidence request), tying §5 (contradictable model)
+  to §37 (explicit uncertainty).
+- Behaviour tests: a held companion belief explains its supporting/contradicting evidence and
+  confidence; an unknown trait returns the honest "no view yet"; a contested one says "I may be wrong".
 
 *(Deferred, natural follow-ups: excessive-complexity tendency; a real DB behind the JSON stores;
 persisting traces; semantic trigger↔trait matching; recurring-goals/working-patterns facets;

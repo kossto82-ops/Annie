@@ -123,6 +123,44 @@ class Jarvis:
         )
         return tuple(belief for belief in candidates if belief is not None)
 
+    def introspect(self) -> str:
+        """A plain-language account of who Jarvis is, assembled from real state.
+
+        Personality emerges from the actual state, not a prompt (Vision §29): the
+        self-tendencies it has noticed (narrated), what it believes about its
+        companion, and an honest note about how little it may still know
+        (Vision §30, §40). Every line traces to a real belief -- nothing invented.
+        """
+        lines = ["This is what I currently understand about myself and my companion."]
+
+        tendencies = [
+            belief for belief in self.self_beliefs() if belief.confidence.value > 0.0
+        ]
+        if tendencies:
+            lines.append("About myself:")
+            for belief in sorted(
+                tendencies, key=lambda b: b.confidence.value, reverse=True
+            ):
+                lines.append("  - " + belief.explain().narrate())
+        else:
+            lines.append(
+                "About myself: I have not yet noticed any consistent tendencies."
+            )
+
+        companion = self.companion.summarise()
+        if companion:
+            lines.append("About my companion:")
+            lines.extend("  - " + line for line in companion)
+        else:
+            lines.append("About my companion: I do not yet know much about them.")
+
+        episodes = len(self.episodes.history())
+        lines.append(
+            f"This rests on {episodes} past episode(s); everything here is "
+            "provisional and open to revision."
+        )
+        return "\n".join(lines)
+
     def feel_curious(self) -> CuriosityImpulse | None:
         """Decide whether any known self-tendency is worth investigating (Vision §16).
 
