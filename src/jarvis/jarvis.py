@@ -292,3 +292,15 @@ class Jarvis:
             self.nervous_system.publish(event)
         self.nervous_system.dispatch()
         return belief
+
+    def explain_companion(self, trait: str) -> str:
+        """Explain *why* Jarvis believes ``trait`` about its companion (Vision §5, §8).
+
+        Returns the belief's provenance narrated -- the evidence for and against
+        it, its confidence, and, when contested, an honest "I may be wrong". If no
+        such belief is held yet, says so plainly (Vision §37).
+        """
+        belief = self.companion.belief_about(trait)
+        if belief is None:
+            return f'I don\'t hold a view on "{trait}" about my companion yet.'
+        return belief.explain().narrate()

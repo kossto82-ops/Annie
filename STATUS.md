@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 30)
+Last updated: 2026-08-21 (Increment 31)
 
 ---
 
@@ -426,6 +426,14 @@ with belief + episode events dispatched through the NervousSystem at each step.
   episode(s)"; a seasoned one surfaces its strongest tendency + companion beliefs; nothing is asserted
   that isn't in the state. Pure read-model — no new state, no domain change.
 - Gates: ruff clean · pyright strict 0 errors · pytest 232 passed.
+- Commit `0bfc817` pushed to `origin/main`.
+
+### Increment 31 — "why do you believe that about me?" ✅ (2026-08-21)
+- `jarvis.explain_companion(trait)` returns the narrated provenance of one companion belief —
+  supporting/contradicting evidence, confidence, and an honest "I may be wrong" when contested
+  (Vision §5, §8, §26) — or a plain "I don't hold a view on that yet" for an unknown trait (Vision §37).
+  Pure read-model over `companion.belief_about(...).explain().narrate()`; no new state.
+- Gates: ruff clean · pyright strict 0 errors · pytest 235 passed.
 
 ---
 
@@ -525,21 +533,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**"Why do you believe *that* about me?" — companion-belief provenance on demand (Vision §5, §8, §26).**
-Introspection (Increment 30) narrates the *whole* self+companion picture, but the vision's signature
-move is Jarvis answering, for one specific claim, *why* — with the evidence, and honest about being
-possibly wrong (Vision §5). The companion model already holds the beliefs and provenance; this exposes
-a focused query. The smallest honest step:
-- `jarvis.explain_companion(trait)` → the `BeliefExplanation` (or its narration) for that trait, or a
-  clear "I don't hold a view on that yet" when unknown — reusing `belief.explain()` / `narrate()`.
-- Optionally include what would change its mind (an evidence request), tying §5 (contradictable model)
-  to §37 (explicit uncertainty).
-- Behaviour tests: a held companion belief explains its supporting/contradicting evidence and
-  confidence; an unknown trait returns the honest "no view yet"; a contested one says "I may be wrong".
+**A documented public surface: one place that says what Jarvis can do (developer ergonomics).** The
+API has grown to ~20 public methods on `Jarvis` across think/consider/act/self-model/companion/
+introspect — powerful, but there is no single map of the vocabulary, and the README predates most of
+it. This is a consolidation increment (like Increment 20), not new capability:
+- A concise "Vocabulary" section in `README.md` grouping the public methods by cognitive role
+  (perceive/reason, act, self-model, companion, memory/continuity, explain) with one line each — all
+  verified against the actual signatures, nothing aspirational (global Rule 24: copy from source).
+- Optionally a tiny `examples/` runnable script exercising the main loop end to end (think → observe
+  companion → act → record outcome → introspect), so the README's claims are executable.
+- No behaviour change; the guard is that the documented surface matches the code exactly.
 
-*(Deferred, natural follow-ups: excessive-complexity tendency; a real DB behind the JSON stores;
-persisting traces; semantic trigger↔trait matching; recurring-goals/working-patterns facets;
-system-level weighting-policy injection + persistence.)*
+*(Deferred, natural follow-ups: excessive-complexity self-observation tendency; a real DB behind the
+JSON stores; persisting traces; semantic trigger↔trait matching; recurring-goals/working-patterns
+facets; system-level weighting-policy injection + persistence.)*
 
 ---
 

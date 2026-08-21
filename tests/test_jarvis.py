@@ -351,6 +351,26 @@ class TestCompanionModel:
         jarvis.think("some unrelated question")
         assert [b.statement for b in jarvis.companion.beliefs()] == [self._TRAIT]
 
+    def test_explain_companion_gives_provenance_for_a_held_belief(self) -> None:
+        jarvis = Jarvis()
+        jarvis.observe_companion(
+            self._TRAIT, _ev(0.9, content="chose the simpler design")
+        )
+        explanation = jarvis.explain_companion(self._TRAIT)
+        assert self._TRAIT in explanation
+        assert "chose the simpler design" in explanation
+
+    def test_explain_companion_is_honest_about_an_unknown_trait(self) -> None:
+        assert "don't hold a view" in Jarvis().explain_companion("likes jazz")
+
+    def test_explain_companion_admits_it_may_be_wrong_when_contested(self) -> None:
+        jarvis = Jarvis()
+        jarvis.observe_companion(self._TRAIT, _ev(0.9, content="chose the simpler design"))
+        jarvis.observe_companion(
+            self._TRAIT, _ev(0.9, supports=False, content="asked for advanced mode")
+        )
+        assert "may be wrong" in jarvis.explain_companion(self._TRAIT)
+
 
 class TestCompanionModelInformsCognition:
     _TRAIT = "prefers simplicity"
