@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from jarvis import Jarvis
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -11,14 +13,25 @@ from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 
+_EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 
-def _ev(weight: float, *, supports: bool = True, content: str = "observation") -> Evidence:
-    return Evidence(
-        content=content,
-        source=EvidenceSource.USER_STATEMENT,
-        weight=Confidence(weight),
-        supports=supports,
-    )
+
+def _ev(
+    weight: float,
+    *,
+    supports: bool = True,
+    content: str = "observation",
+    at: datetime | None = None,
+) -> Evidence:
+    kwargs: dict[str, object] = {
+        "content": content,
+        "source": EvidenceSource.USER_STATEMENT,
+        "weight": Confidence(weight),
+        "supports": supports,
+    }
+    if at is not None:
+        kwargs["observed_at"] = at
+    return Evidence(**kwargs)  # type: ignore[arg-type]
 
 
 class TestThink:
@@ -56,6 +69,25 @@ class TestEpistemologyDrivesTheDecision:
         episode = Jarvis().think("is my companion in a hurry?", evidence=[_ev(0.1)])
         assert episode.result is not None
         assert "Tentative" in episode.result
+
+    def test_grounded_but_narrow_evidence_warns_of_overfitting(self) -> None:
+        # High confidence from a single burst is flagged as possible overfitting.
+        episode = Jarvis().think(
+            "does my companion prefer simplicity?",
+            evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)],
+        )
+        assert episode.result is not None
+        assert "Concluded" in episode.result
+        assert "overfitting" in episode.result
+
+    def test_grounded_and_time_spread_evidence_does_not_warn(self) -> None:
+        episode = Jarvis().think(
+            "does my companion prefer simplicity?",
+            evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH + timedelta(days=90))],
+        )
+        assert episode.result is not None
+        assert "Concluded" in episode.result
+        assert "overfitting" not in episode.result
 
 
 class TestEventFlow:

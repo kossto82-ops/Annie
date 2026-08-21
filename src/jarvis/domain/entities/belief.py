@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from jarvis.domain.events.belief_events import (
     BeliefStrengthened,
@@ -39,8 +39,13 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 _PRIOR = 1.0
+
+# A month of sustained support reads as solidly stable; the exact scale is tunable
+# (D18). Stability is span / (span + reference), so span == reference -> 0.5.
+STABILITY_REFERENCE = timedelta(days=30)
 
 
 def derive_confidence(evidence: tuple[Evidence, ...]) -> Confidence:
@@ -48,6 +53,22 @@ def derive_confidence(evidence: tuple[Evidence, ...]) -> Confidence:
     supporting = sum(e.weight.value for e in evidence if e.supports)
     contradicting = sum(e.weight.value for e in evidence if e.contradicts)
     return Confidence(supporting / (supporting + contradicting + _PRIOR))
+
+
+def derive_stability(evidence: tuple[Evidence, ...]) -> TemporalStability:
+    """Compute how spread out over time a belief's *supporting* evidence is.
+
+    A single supporting observation (or several at the same instant) has no
+    temporal spread and is not stable. Support accumulated over a long period is
+    stable. This is distinct from confidence: it depends on *when* evidence
+    arrived, not how much of it there is (Vision §10, §11).
+    """
+    times = sorted(e.observed_at for e in evidence if e.supports)
+    if len(times) < 2:
+        return TemporalStability.none()
+    span = (times[-1] - times[0]).total_seconds()
+    reference = STABILITY_REFERENCE.total_seconds()
+    return TemporalStability(span / (span + reference))
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +121,15 @@ class Belief:
     def confidence(self) -> Confidence:
         """The belief's strength, always derived from its current evidence."""
         return derive_confidence(tuple(self._evidence))
+
+    @property
+    def stability(self) -> TemporalStability:
+        """How steadily over time the belief has been supported (Vision §10).
+
+        A separate axis from ``confidence``: high confidence with low stability
+        signals a recent burst that may be overfitting (Vision §11).
+        """
+        return derive_stability(tuple(self._evidence))
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:

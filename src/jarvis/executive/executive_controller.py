@@ -25,6 +25,10 @@ from jarvis.nervous_system.nervous_system import NervousSystem
 # (D14). A defensible midpoint of [0, 1]; revisited when reflection/attention need it.
 GROUNDED_CONFIDENCE_THRESHOLD = 0.5
 
+# A grounded conclusion resting on evidence with little temporal spread may be
+# overfitting to a recent burst (Vision §11); below this stability it is flagged.
+LOW_STABILITY_THRESHOLD = 0.2
+
 
 def working_statement(trigger: str) -> str:
     """The statement of the belief an episode reasons toward for ``trigger``.
@@ -100,10 +104,17 @@ class ExecutiveController:
                 f"Tentative, low-confidence view about: {trigger} "
                 f"(confidence {confidence:.2f}); more evidence needed."
             )
-        return (
-            f"Concluded about: {trigger} (confidence {confidence:.2f}), "
-            f"grounded in {len(belief.evidence)} piece(s) of evidence."
+        stability = belief.stability.value
+        conclusion = (
+            f"Concluded about: {trigger} (confidence {confidence:.2f}, "
+            f"stability {stability:.2f}), grounded in {len(belief.evidence)} piece(s) of evidence."
         )
+        if stability < LOW_STABILITY_THRESHOLD:
+            conclusion += (
+                " (Caution: this rests on a narrow time window — "
+                "possible overfitting to recent events.)"
+            )
+        return conclusion
 
     # -- event plumbing ------------------------------------------------------
 

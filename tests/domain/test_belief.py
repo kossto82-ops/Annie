@@ -6,6 +6,8 @@ arithmetic of the estimator.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from jarvis.domain.entities.belief import Belief
@@ -19,14 +21,25 @@ from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 
+_EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 
-def _ev(weight: float, *, supports: bool = True, content: str = "observation") -> Evidence:
-    return Evidence(
-        content=content,
-        source=EvidenceSource.DIRECT_OBSERVATION,
-        weight=Confidence(weight),
-        supports=supports,
-    )
+
+def _ev(
+    weight: float,
+    *,
+    supports: bool = True,
+    content: str = "observation",
+    at: datetime | None = None,
+) -> Evidence:
+    kwargs: dict[str, object] = {
+        "content": content,
+        "source": EvidenceSource.DIRECT_OBSERVATION,
+        "weight": Confidence(weight),
+        "supports": supports,
+    }
+    if at is not None:
+        kwargs["observed_at"] = at
+    return Evidence(**kwargs)  # type: ignore[arg-type]
 
 
 class TestFormation:
@@ -72,6 +85,51 @@ class TestEvidenceDrivenConfidence:
         recomputed = belief.confidence
         # Reading twice yields the same derived value; nothing is cached wrongly.
         assert belief.confidence == recomputed
+
+
+class TestTemporalStability:
+    def test_a_single_observation_is_not_stable(self) -> None:
+        belief = Belief(statement="x")
+        belief.add_evidence(_ev(0.9))
+        assert belief.stability.value == 0.0
+
+    def test_simultaneous_evidence_is_not_stable(self) -> None:
+        belief = Belief(statement="x")
+        belief.add_evidence(_ev(0.9, at=_EPOCH))
+        belief.add_evidence(_ev(0.9, at=_EPOCH))
+        assert belief.stability.value == 0.0
+
+    def test_support_spread_over_time_is_more_stable(self) -> None:
+        narrow = Belief(statement="x")
+        narrow.add_evidence(_ev(0.5, at=_EPOCH))
+        narrow.add_evidence(_ev(0.5, at=_EPOCH + timedelta(hours=1)))
+
+        wide = Belief(statement="y")
+        wide.add_evidence(_ev(0.5, at=_EPOCH))
+        wide.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=90)))
+
+        assert wide.stability.is_more_stable_than(narrow.stability)
+
+    def test_stability_is_independent_of_confidence(self) -> None:
+        # Same evidence weights and count -> equal confidence; different time
+        # spans -> different stability. The two axes do not collapse (Vision §10).
+        burst = Belief(statement="x")
+        burst.add_evidence(_ev(0.6, at=_EPOCH))
+        burst.add_evidence(_ev(0.6, at=_EPOCH))
+
+        sustained = Belief(statement="y")
+        sustained.add_evidence(_ev(0.6, at=_EPOCH))
+        sustained.add_evidence(_ev(0.6, at=_EPOCH + timedelta(days=60)))
+
+        assert burst.confidence == sustained.confidence
+        assert sustained.stability.is_more_stable_than(burst.stability)
+
+    def test_contradicting_evidence_does_not_count_toward_stability(self) -> None:
+        belief = Belief(statement="x")
+        belief.add_evidence(_ev(0.9, at=_EPOCH))
+        belief.add_evidence(_ev(0.9, supports=False, at=_EPOCH + timedelta(days=90)))
+        # Only one *supporting* observation -> no temporal spread of support.
+        assert belief.stability.value == 0.0
 
 
 class TestEvents:

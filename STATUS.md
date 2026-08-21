@@ -8,9 +8,18 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 5)
+Last updated: 2026-08-21 (Increment 6)
 
 ---
+
+## Git / commits
+
+- Remote is the source of truth: `github.com/kossto82-ops/Annie` (branch `main`). Every increment
+  ends with a commit **pushed** to that remote (local-only commits are not "done").
+- Identity for this repo (local config only): `ksst <kossto82@gmail.com>`.
+- Convention: **one commit per increment**, message in English, ending with the
+  `Co-Authored-By: Claude Opus 4.8` trailer. The foundation (increments 1–5) is a single commit
+  (`484fd49`); increments 6+ are one commit each.
 
 ## How to run
 
@@ -67,6 +76,7 @@ src/jarvis/
     events/hypothesis_events.py          HypothesisCreated
     value_objects/confidence.py          Confidence (immutable, validated [0,1])
     value_objects/evidence.py            Evidence (immutable, weighted, supports/contradicts)
+    value_objects/temporal_stability.py  TemporalStability (immutable [0,1]; time axis, ≠ confidence)
 tests/                                   45 behaviour tests mirroring the above
 ```
 
@@ -129,6 +139,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
   still always derived, never stored as an assertion. `Jarvis(beliefs=...)` is injectable;
   `jarvis.beliefs` is exposed.
 - Gates: ruff clean · pyright strict 0 errors · pytest 93 passed.
+- Commit `484fd49` (foundation, increments 1–5) pushed to `origin/main`.
+
+### Increment 6 — temporal dimension: confidence vs. stability ✅ (2026-08-21)
+- `TemporalStability` value object (distinct from `Confidence` — the two are different axes,
+  Vision §10) + `derive_stability(evidence)` + `belief.stability`. Stability = supporting-evidence
+  time-span / (span + `STABILITY_REFERENCE` of 30 days); < 2 supporting or simultaneous → 0.
+- The executive now flags **overfitting** (Vision §11): a grounded conclusion whose stability is
+  below `LOW_STABILITY_THRESHOLD` (0.2) carries a caution ("narrow time window — possible
+  overfitting"). Same confidence + different time spread → different behaviour.
+- Gates: ruff clean · pyright strict 0 errors · pytest 110 passed.
 
 ---
 
@@ -179,25 +199,28 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - **D17** Belief statement for an episode is `working_statement(trigger)` = deterministic function of
   the trigger, so the same trigger retrieves the same belief across episodes. (Trigger-string identity
   is a deliberate simplification; semantic matching of statements is a later concern.)
+- **D18** `TemporalStability` is a **separate** value object from `Confidence` (Vision §10 — different
+  axes must not collapse), even though both are [0,1] magnitudes. A shared `UnitInterval` base is a
+  candidate only on the third such type (rule of three). Stability scale `STABILITY_REFERENCE = 30d`
+  and `LOW_STABILITY_THRESHOLD = 0.2` are tunable; stability is span-based (count-weighting deferred).
 
 ---
 
 ## Next increment (recommended, not yet started)
 
-**Temporal dimension of beliefs (Vision §10, §36): confidence vs. stability.** Now that beliefs
-persist and accumulate evidence over time, the sharpest vision gap is that Jarvis cannot yet
-distinguish "how confident am I now?" from "how *stable* has this belief been over time?" — a
-belief from one recent burst of evidence should behave differently from one steady for a long
-while. `Evidence.observed_at` is already recorded, so the data is there.
-- A `TemporalStability` derivation over a belief's evidence timestamps (e.g. span of support +
-  recency distribution), exposed alongside (not merged into) `confidence` — they are two axes.
-- Feeds Vision §11 overfitting protection: a single recent burst yields high confidence but low
-  stability, so the executive can treat it more cautiously than a long-stable belief.
-- Behaviour tests: two beliefs with equal confidence but different evidence time-spans report
-  different stability; stability never collapses into confidence.
+**Source-based evidence weighting + explicit-confirmation strength (Vision §11).** Today the caller
+assigns each `Evidence.weight` by hand and `EvidenceSource` is recorded but unused. The vision wants
+the *source* to shape how much a piece of evidence counts: explicit confirmation from the companion
+should weigh strongly; a single isolated observation weakly; repeated behaviour more than a one-off.
+- A small domain policy mapping `EvidenceSource` (+ supports/contradicts) to an effective weight,
+  applied when evidence enters a belief — without losing the raw weight (provenance stays intact).
+- Enacts §11 directly: `USER_STATEMENT` (explicit confirmation) > `REPEATED_BEHAVIOR` > a lone
+  `DIRECT_OBSERVATION`. Keep it a named, testable policy object, not scattered constants.
+- Behaviour tests: identical raw weight but different source yields different effective contribution;
+  explicit confirmation outweighs an isolated observation; the policy is injectable.
 
-*(Deferred, natural follow-ups: episodic memory of past episodes; source-based evidence weighting
-(§11); wiring `HypothesisSet` into episodes; a durable (DB-backed) `BeliefRepository`.)*
+*(Deferred, natural follow-ups: episodic memory of past episodes; wiring `HypothesisSet` into
+episodes; a durable (DB-backed) `BeliefRepository`; a `UnitInterval` base if a third [0,1] type appears.)*
 
 ---
 
@@ -206,8 +229,10 @@ while. `Evidence.observed_at` is already recorded, so the data is there.
 - `reflection` in the executive is still a placeholder (no genuine review of reasoning); the
   decision policy is a simple confidence threshold (D14).
 - `HypothesisSet` exists but is **not yet wired into episodes** (episodes use a single belief).
-- Temporal stability (Vision §10) not modelled — confidence has no time axis yet (next increment);
-  `Evidence.observed_at` is recorded and ready.
+- Stability is span-based only (no count/recency weighting yet); `TemporalStability` is derived for
+  beliefs but not yet for hypotheses.
+- Source-based evidence weighting (Vision §11) not implemented — caller sets `weight`; `EvidenceSource`
+  is recorded but does not yet influence contribution (next increment).
 - Persistence is process-lifetime only (`InMemoryBeliefStore`); no durable/DB store yet.
 - Belief retrieval keys on the exact trigger string (D17), not semantic meaning of statements.
 - Source-based weighting policy (Vision §11: explicit confirmation weighs more) not implemented —
