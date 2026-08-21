@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 32)
+Last updated: 2026-08-21 (Increment 33)
 
 ---
 
@@ -84,6 +84,7 @@ src/jarvis/
     enums/evidence_source.py             EvidenceSource (Vision §8 origins)
     enums/trigger_origin.py              TriggerOrigin (COMPANION | CURIOSITY — who started the episode)
     enums/action_stance.py               ActionStance (SUGGEST | ASK_FIRST | WITHHOLD — Vision §28)
+    enums/attention.py                   Attention (FULL | BRIEF — depth routing, Vision §14)
     events/domain_event.py               DomainEvent -> CognitiveEvent (immutable)
     events/episode_events.py             EpisodeStarted, EpisodeCompleted
     events/evidence_events.py            EvidenceAdded (shared by belief + hypothesis)
@@ -444,6 +445,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   act & learn → introspect); verified it executes (exit 0) and type-checks. Consolidation only —
   no behaviour change.
 - Gates: ruff clean · pyright strict 0 errors · pytest 235 passed.
+- Commit `cc5db3d` pushed to `origin/main`.
+
+### Increment 33 — attention: not every trigger deserves full reasoning ✅ (2026-08-21)
+- `Attention` enum (FULL | BRIEF) on `CognitiveEpisode`. Before the deep work, the executive assesses
+  the trigger against what it already knows (`_assess_attention`): a working belief already confident
+  (≥ grounded threshold) *and* no new evidence → **BRIEF** (answer from it, skip companion seeding /
+  evidence integration / reflection); otherwise **FULL** (Vision §14). A real routing decision from
+  real signals — not a simulated "energy".
+- Side benefit: BRIEF avoids re-seeding a known trigger, so repeated identical questions no longer
+  accrete spurious evidence. `episode.attention` exposes the choice. Existing behaviour unchanged
+  (novel/evidence-bearing triggers still FULL).
+- Gates: ruff clean · pyright strict 0 errors · pytest 238 passed.
 
 ---
 
@@ -543,18 +556,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Attention: not all triggers deserve the same depth (Vision §14, §15).** Every `think()` runs the
-full lifecycle regardless of how much the question matters or how much is already known — but Vision
-§14 makes attention a limited resource and §15 asks Jarvis to reason about cost vs. value. A first
-honest, measurable step (no fake "energy" — a real routing decision):
-- Before committing to full reasoning, the executive assesses the trigger against what it already
-  knows: if it already holds a confident, relevant belief (companion model or a remembered working
-  belief), it can answer briefly from that; a novel or high-uncertainty trigger warrants the full
-  lifecycle. Expose the chosen depth on the episode (e.g. `attention: BRIEF | FULL`).
-- Derive the choice from real signals (existing confident belief? prior episodes on this trigger?),
-  not a hard-coded rule — so it improves as memory grows.
-- Behaviour tests: a trigger Jarvis already confidently understands gets BRIEF handling; a novel or
-  contested one gets FULL; the decision is visible on the episode.
+**A brief answer should read as brief (Vision §14, §40 — surface the routing).** Increment 33 routes
+attention and skips work, but a BRIEF episode's `result` string still reads identically to a FULL one,
+so the companion can't tell Jarvis answered from memory rather than fresh reasoning. Small, honest
+surfacing step:
+- When an episode is handled BRIEF, its decision phrasing reflects that ("From what I already
+  understand: …"), derived from `episode.attention` — not a new mechanism, just making the existing
+  routing visible in the answer.
+- Keep it truthful: only a genuinely BRIEF (already-confident, no-new-evidence) episode gets the
+  phrasing; FULL episodes are unchanged.
+- Behaviour tests: a repeated known question's result says it drew on existing understanding; a novel
+  or evidence-bearing one does not; the underlying confidence/decision is otherwise unchanged.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15); excessive-complexity
 self-observation tendency; a real DB behind the JSON stores; persisting traces; semantic

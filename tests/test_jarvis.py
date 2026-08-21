@@ -49,6 +49,36 @@ class TestThink:
         assert jarvis.think("a").id != jarvis.think("b").id
 
 
+class TestAttention:
+    _Q = "does my companion prefer simplicity?"
+
+    def test_a_novel_question_gets_full_attention(self) -> None:
+        from jarvis.domain.enums.attention import Attention
+
+        assert Jarvis().think("a brand new question").attention is Attention.FULL
+
+    def test_a_confidently_known_question_gets_brief_attention(self) -> None:
+        # Vision §14: already known + nothing new -> answer briefly, no re-processing.
+        from jarvis.domain.enums.attention import Attention
+
+        jarvis = Jarvis()
+        jarvis.think(self._Q, evidence=[_ev(0.9), _ev(0.9)])  # ground it (FULL)
+        repeat = jarvis.think(self._Q)  # no new evidence
+        assert repeat.attention is Attention.BRIEF
+        assert repeat.working_belief is not None
+        assert len(repeat.working_belief.evidence) == 2  # nothing spuriously added
+
+    def test_new_evidence_forces_full_attention_even_when_known(self) -> None:
+        from jarvis.domain.enums.attention import Attention
+
+        jarvis = Jarvis()
+        jarvis.think(self._Q, evidence=[_ev(0.9), _ev(0.9)])
+        episode = jarvis.think(self._Q, evidence=[_ev(0.9)])
+        assert episode.attention is Attention.FULL
+        assert episode.working_belief is not None
+        assert len(episode.working_belief.evidence) == 3
+
+
 class TestEpistemologyDrivesTheDecision:
     def test_no_evidence_yields_an_honest_non_conclusion(self) -> None:
         # Vision §37: with no evidence, Jarvis says so rather than fabricating.

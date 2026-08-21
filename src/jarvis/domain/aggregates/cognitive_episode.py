@@ -17,6 +17,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from jarvis.domain.entities.belief import Belief, BeliefExplanation
+from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
@@ -58,6 +59,7 @@ class CognitiveEpisode:
     state: EpisodeState = EpisodeState.CREATED
     result: str | None = None
     origin: TriggerOrigin = TriggerOrigin.COMPANION
+    attention: Attention = Attention.FULL
     _working_belief: Belief | None = field(default=None, repr=False)
     _evidence_request: EvidenceRequest | None = field(default=None, repr=False)
     _pending_events: list[CognitiveEvent] = field(
@@ -128,6 +130,10 @@ class CognitiveEpisode:
     def evidence_request(self) -> EvidenceRequest | None:
         """The evidence this episode needs to conclude, or None if it was grounded."""
         return self._evidence_request
+
+    def attend(self, attention: Attention) -> None:
+        """Record how much reasoning this episode was given (Vision §14)."""
+        self.attention = attention
 
     def observe(self, evidence: Evidence) -> None:
         """Route a piece of evidence to the episode's working belief.

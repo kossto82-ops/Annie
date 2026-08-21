@@ -19,6 +19,7 @@ from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.events.domain_event import CognitiveEvent
@@ -59,6 +60,18 @@ def working_statement(trigger: str) -> str:
     return f"Working conclusion about: {trigger}"
 
 
+def _assess_attention(belief: Belief, *, given_new_evidence: bool) -> Attention:
+    """Decide how much reasoning a trigger warrants (Vision §14).
+
+    A belief already held confidently, with no new evidence to integrate, is
+    answered briefly; anything else gets full reasoning.
+    """
+    already_known = belief.confidence.value >= GROUNDED_CONFIDENCE_THRESHOLD
+    if already_known and not given_new_evidence:
+        return Attention.BRIEF
+    return Attention.FULL
+
+
 class ExecutiveController:
     """Coordinates the cognitive lifecycle of one episode at a time."""
 
@@ -81,19 +94,25 @@ class ExecutiveController:
 
         A belief already held about this trigger is retrieved and evolved, giving
         continuity across episodes (Vision §3); otherwise a fresh one is formed.
+        Attention (Vision §14) routes the depth: a confidently-known trigger with
+        no new evidence is answered briefly, skipping the deeper integration.
         """
+        pieces = list(evidence)
         self._flush(episode)  # dispatch EpisodeStarted recorded at construction
 
         episode.begin_reasoning()
         belief = self._resolve_working_belief(episode)
-        self._seed_from_companion(episode)
-        for piece in evidence:
-            episode.observe(piece)
+        episode.attend(_assess_attention(belief, given_new_evidence=bool(pieces)))
+        if episode.attention is Attention.FULL:
+            self._seed_from_companion(episode)
+            for piece in pieces:
+                episode.observe(piece)
         self._beliefs.save(belief)
         self._flush(episode)  # dispatch evidence/belief events
 
         episode.begin_reflecting()
-        self._reflect(belief)
+        if episode.attention is Attention.FULL:
+            self._reflect(belief)
         self._flush(episode)
 
         episode.begin_deciding()
