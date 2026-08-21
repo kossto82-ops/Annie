@@ -53,12 +53,16 @@ class Jarvis:
         episodes: EpisodeRepository | None = None,
         companion_store: BeliefRepository | None = None,
         actions_store: BeliefRepository | None = None,
+        reversibility_store: BeliefRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
         self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
         self.companion = CompanionModel(companion_store or InMemoryBeliefStore())
         self.actions: BeliefRepository = actions_store or InMemoryBeliefStore()
+        self._reversibility: BeliefRepository = (
+            reversibility_store or InMemoryBeliefStore()
+        )
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -80,6 +84,7 @@ class Jarvis:
             episodes=JsonEpisodeStore(base / "episodes.json"),
             companion_store=JsonBeliefStore(base / "companion.json"),
             actions_store=JsonBeliefStore(base / "actions.json"),
+            reversibility_store=JsonBeliefStore(base / "reversibility.json"),
         )
 
     def think(
@@ -291,6 +296,7 @@ class Jarvis:
             )
         )
         self.actions.save(belief)
+        self._remember_reversibility(action)
         for event in belief.pull_events():
             self.nervous_system.publish(event)
         self.nervous_system.publish(
@@ -306,6 +312,45 @@ class Jarvis:
     def belief_about_action(self, description: str) -> Belief | None:
         """What Jarvis believes about how actions of this kind turn out."""
         return self.actions.get_by_statement(self._action_statement(description))
+
+    def recommend_action_by_description(self, description: str) -> ActionRecommendation:
+        """Recommend a stance for a *remembered* kind of action (Vision §28).
+
+        Unlike :meth:`recommend_action`, this needs no live `Action`: it reads
+        both the learned outcome belief and the learned reversibility belief, so
+        the stance survives a restart. Reversibility unknown is treated
+        conservatively (not reversible → ask first).
+        """
+        outcome = self.belief_about_action(description)
+        reversible = self._believed_reversible(description)
+        return recommend_stance(outcome, reversible=reversible)
+
+    def _remember_reversibility(self, action: Action) -> None:
+        statement = self._reversibility_statement(action.description)
+        belief = self._reversibility.get_by_statement(statement) or Belief(
+            statement=statement
+        )
+        manner = "reversibly" if action.reversible else "irreversibly"
+        belief.add_evidence(
+            Evidence(
+                content=f"acted '{action.description}' ({manner})",
+                source=EvidenceSource.ACTION_OUTCOME,
+                weight=Confidence(1.0),
+                supports=action.reversible,
+            )
+        )
+        belief.pull_events()  # bookkeeping belief -- its events are not dispatched
+        self._reversibility.save(belief)
+
+    def _believed_reversible(self, description: str) -> bool:
+        belief = self._reversibility.get_by_statement(
+            self._reversibility_statement(description)
+        )
+        return belief is not None and belief.confidence.value >= 0.5
+
+    @staticmethod
+    def _reversibility_statement(description: str) -> str:
+        return f"The action '{description}' is reversible"
 
     def recommend_action(self, action: Action) -> ActionRecommendation:
         """Recommend a stance toward ``action`` from experience (Vision §28).

@@ -27,6 +27,7 @@ def _boot(tmp_path: Path) -> Jarvis:
         episodes=JsonEpisodeStore(tmp_path / "episodes.json"),
         companion_store=JsonBeliefStore(tmp_path / "companion.json"),
         actions_store=JsonBeliefStore(tmp_path / "actions.json"),
+        reversibility_store=JsonBeliefStore(tmp_path / "reversibility.json"),
     )
 
 
@@ -83,6 +84,17 @@ class TestContinuityAcrossRestart:
         # And the recommendation it drives is unchanged after the restart.
         pending = second_run.act("tidy the notes", expected="tidy", reversible=True)
         assert second_run.recommend_action(pending).stance is ActionStance.SUGGEST
+
+    def test_a_remembered_stance_survives_a_restart(self, tmp_path: Path) -> None:
+        # Reversibility persists too, so a stance is derivable without a live action.
+        first_run = _boot(tmp_path)
+        for _ in range(3):
+            action = first_run.act("tidy the notes", expected="tidy", reversible=True)
+            first_run.record_outcome(action, actual="tidy", met_expectation=True)
+
+        second_run = _boot(tmp_path)
+        stance = second_run.recommend_action_by_description("tidy the notes").stance
+        assert stance is ActionStance.SUGGEST
 
     def test_companion_model_survives_a_restart_and_still_informs(self, tmp_path: Path) -> None:
         # Jarvis must not forget the person it is meant to know (Vision §5).

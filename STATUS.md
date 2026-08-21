@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 37)
+Last updated: 2026-08-21 (Increment 38)
 
 ---
 
@@ -500,6 +500,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   reversibility, which is not persisted on the action-outcome belief, so it isn't derivable from the
   store; the summary reports the action beliefs' `(statement, confidence)` instead (D28).
 - Gates: ruff clean · pyright strict 0 errors · pytest 249 passed.
+- Commit `4ed92da` pushed to `origin/main`.
+
+### Increment 38 — persist action reversibility; remembered stance ✅ (2026-08-21)
+- Reversibility is now modelled as a **belief** ("The action 'X' is reversible") in its own store
+  (`reversibility_store`, wired into `Jarvis.persistent` as `reversibility.json`), recorded on each
+  `record_outcome`. So it persists like everything else and stays revisable (Vision §22).
+- `jarvis.recommend_action_by_description(description)` derives a stance for a *remembered* action kind
+  with **no live `Action`** — reading the learned outcome belief + reversibility belief — so a stance
+  survives a restart (unblocks D28). Reversibility unknown → conservative (not reversible → ask first).
+  Verified across two processes: a learned reversible action → SUGGEST after restart; unknown → ASK_FIRST.
+- Gates: ruff clean · pyright strict 0 errors · pytest 252 passed.
 
 ---
 
@@ -602,17 +613,14 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Persist action reversibility so stance survives (Vision §27, §28; unblocks D28).** Action-outcome
-learning persists (Increment 27) and drives `recommend_action` (Increment 26), but a stored belief
-can't yield a stance after a restart because an action's `reversible` flag lives only on the transient
-`Action`. D28 flagged this. Small honest step:
-- Record reversibility alongside the outcome — e.g. the action-outcome belief's store also keeps, per
-  action kind, whether it is reversible (a second tiny keyed store, or fold it into the belief's
-  evidence content and parse — prefer a small typed store to parsing).
-- `recommend_action` and `state_summary` can then report a stance for a *remembered* action kind, not
-  only one held live this session.
-- Behaviour tests: an action learned + its reversibility recorded before a restart yields the same
-  stance after; `state_summary` can include the stance for remembered actions.
+**Include remembered stance in `state_summary` (finishes the D28 story).** Increment 38 made a stance
+derivable for a remembered action (`recommend_action_by_description`); the state snapshot can now carry
+it. Small consolidation:
+- Add a `learned_actions: tuple[(description, confidence, stance)]` field to `StateSummary`, filling
+  `stance` from `recommend_action_by_description` for each action-outcome belief (map its statement
+  back to the description, or key the summary off the reversibility/outcome pair).
+- Keep it grounded: every field traces to real state; a fresh Jarvis stays all-empty.
+- Behaviour tests: a learned reversible action shows SUGGEST in the summary; an unproven one ASK_FIRST.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15); excessive-complexity
 self-observation tendency; a real DB behind the JSON stores; persisting traces; semantic

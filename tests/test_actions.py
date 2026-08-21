@@ -105,6 +105,23 @@ class TestGradedAutonomy:
         assert jarvis.recommend_action(pending).stance is ActionStance.WITHHOLD
 
 
+class TestRememberedStance:
+    def test_an_unknown_action_asks_first(self) -> None:
+        assert (
+            Jarvis().recommend_action_by_description("restart the server").stance
+            is ActionStance.ASK_FIRST
+        )
+
+    def test_a_learned_reversible_action_is_suggested_without_a_live_action(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(3):
+            action = jarvis.act("tidy the notes", expected="tidy", reversible=True)
+            jarvis.record_outcome(action, actual="tidy", met_expectation=True)
+        # No live Action passed -- recommend from what was remembered.
+        stance = jarvis.recommend_action_by_description("tidy the notes").stance
+        assert stance is ActionStance.SUGGEST
+
+
 class TestPredictionAccuracySelfObservation:
     def test_repeatedly_wrong_predictions_become_a_self_belief(self) -> None:
         # Vision §31: Jarvis notices its own poor predictive reliability.
