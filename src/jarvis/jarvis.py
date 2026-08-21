@@ -18,7 +18,10 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.curiosity import wonder
-from jarvis.domain.services.self_observation import observe_evidence_habit
+from jarvis.domain.services.self_observation import (
+    observe_evidence_habit,
+    observe_overconfidence,
+)
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
@@ -70,6 +73,19 @@ class Jarvis:
         other belief -- it is not a fixed personality trait.
         """
         return observe_evidence_habit(self.episodes.history())
+
+    def observe_overconfidence(self) -> Belief | None:
+        """A belief about whether Jarvis concludes confidently on thin evidence
+        (Vision §6, §11), or None if there is too little grounded history.
+        """
+        return observe_overconfidence(self.episodes.history())
+
+    def self_beliefs(self) -> tuple[Belief, ...]:
+        """Every self-tendency Jarvis currently holds about its own cognition
+        (Vision §6): the ones it has enough history to judge.
+        """
+        candidates = (self.observe_self(), self.observe_overconfidence())
+        return tuple(belief for belief in candidates if belief is not None)
 
     def feel_curious(self) -> CuriosityImpulse | None:
         """Decide whether a known self-tendency is worth investigating (Vision §16).

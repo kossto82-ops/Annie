@@ -33,7 +33,12 @@ _MINIMUM_HISTORY = 3
 
 _OBSERVATION_WEIGHT = Confidence(1.0)
 
+# A grounded conclusion resting on this little temporal spread is overconfident
+# (mirrors the executive's LOW_STABILITY_THRESHOLD).
+_LOW_STABILITY = 0.2
+
 INSUFFICIENT_EVIDENCE_HABIT = "I tend to conclude without sufficient evidence"
+OVERCONFIDENCE_HABIT = "I tend to be overconfident on thin evidence"
 
 
 def observe_evidence_habit(history: Sequence[EpisodeRecord]) -> Belief | None:
@@ -61,6 +66,43 @@ def observe_evidence_habit(history: Sequence[EpisodeRecord]) -> Belief | None:
                 source=EvidenceSource.SYSTEM_OBSERVATION,
                 weight=_OBSERVATION_WEIGHT,
                 supports=ungrounded,
+                observed_at=record.recorded_at,
+            )
+        )
+    return belief
+
+
+def observe_overconfidence(history: Sequence[EpisodeRecord]) -> Belief | None:
+    """Form a belief about whether Jarvis is overconfident on thin evidence.
+
+    Only *grounded* conclusions are candidates -- an ungrounded one is not
+    confident at all. Among them, a conclusion reached on temporally narrow
+    (low-stability) evidence supports the belief; one resting on well-spread
+    evidence contradicts it (Vision §6, §11). Returns None with too little
+    grounded history to judge.
+    """
+    grounded = [
+        r
+        for r in history
+        if r.origin is TriggerOrigin.COMPANION
+        and r.conclusion_confidence.value >= _GROUNDED_CONFIDENCE
+    ]
+    if len(grounded) < _MINIMUM_HISTORY:
+        return None
+
+    belief = Belief(statement=OVERCONFIDENCE_HABIT)
+    for record in grounded:
+        overconfident = record.conclusion_stability.value < _LOW_STABILITY
+        belief.add_evidence(
+            Evidence(
+                content=(
+                    f"episode about '{record.trigger}' concluded grounded "
+                    f"(confidence {record.conclusion_confidence.value:.2f}) on "
+                    f"stability {record.conclusion_stability.value:.2f}"
+                ),
+                source=EvidenceSource.SYSTEM_OBSERVATION,
+                weight=_OBSERVATION_WEIGHT,
+                supports=overconfident,
                 observed_at=record.recorded_at,
             )
         )

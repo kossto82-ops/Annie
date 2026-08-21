@@ -11,6 +11,7 @@ from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 
@@ -64,6 +65,7 @@ class TestEpisodeStore:
             working_belief_id="b",
             outcome=EpisodeState.COMPLETED,
             conclusion_confidence=Confidence(0.42),
+            conclusion_stability=TemporalStability(0.33),
             origin=TriggerOrigin.COMPANION,
         )
 

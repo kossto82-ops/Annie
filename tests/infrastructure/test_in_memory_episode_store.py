@@ -6,6 +6,7 @@ from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 
 
@@ -17,6 +18,7 @@ def _record(trigger: str) -> EpisodeRecord:
         working_belief_id="b-" + trigger,
         outcome=EpisodeState.COMPLETED,
         conclusion_confidence=Confidence(0.5),
+        conclusion_stability=TemporalStability(0.5),
         origin=TriggerOrigin.COMPANION,
     )
 

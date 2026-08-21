@@ -225,10 +225,52 @@ class TestSelfObservation:
     def test_well_grounded_thinking_does_not_incriminate_jarvis(self) -> None:
         jarvis = Jarvis()
         for topic in ("a", "b", "c"):
-            jarvis.think(f"question about {topic}", evidence=[_ev(0.9), _ev(0.9)])
+            jarvis.think(
+                f"question about {topic}",
+                evidence=[
+                    _ev(0.9, at=_EPOCH),
+                    _ev(0.9, at=_EPOCH + timedelta(days=60)),
+                ],
+            )
         self_belief = jarvis.observe_self()
         assert self_belief is not None
         assert self_belief.confidence == Confidence.none()
+
+
+class TestOverconfidenceSelfObservation:
+    def test_grounded_but_narrow_conclusions_form_an_overconfidence_belief(self) -> None:
+        # Vision §6/§11: notice concluding confidently on temporally thin evidence.
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            # Both pieces at the same instant -> grounded but zero stability.
+            jarvis.think(
+                f"question about {topic}",
+                evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)],
+            )
+        belief = jarvis.observe_overconfidence()
+        assert belief is not None
+        assert belief.confidence.value > 0.0
+
+    def test_stable_grounded_conclusions_do_not(self) -> None:
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(
+                f"question about {topic}",
+                evidence=[
+                    _ev(0.9, at=_EPOCH),
+                    _ev(0.9, at=_EPOCH + timedelta(days=60)),
+                ],
+            )
+        belief = jarvis.observe_overconfidence()
+        assert belief is not None
+        assert belief.confidence == Confidence.none()
+
+    def test_self_beliefs_aggregates_the_tendencies_it_can_judge(self) -> None:
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"an unfounded question about {topic}")  # evidence habit only
+        statements = [b.statement for b in jarvis.self_beliefs()]
+        assert any("sufficient evidence" in s for s in statements)
 
 
 class TestCuriosity:

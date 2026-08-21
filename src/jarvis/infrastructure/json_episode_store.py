@@ -16,6 +16,7 @@ from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 
 def _serialise_record(record: EpisodeRecord) -> dict[str, Any]:
@@ -26,6 +27,7 @@ def _serialise_record(record: EpisodeRecord) -> dict[str, Any]:
         "working_belief_id": record.working_belief_id,
         "outcome": record.outcome.value,
         "conclusion_confidence": record.conclusion_confidence.value,
+        "conclusion_stability": record.conclusion_stability.value,
         "origin": record.origin.value,
         "recorded_at": record.recorded_at.isoformat(),
         "record_id": record.record_id,
@@ -40,6 +42,7 @@ def _deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
         working_belief_id=data["working_belief_id"],
         outcome=EpisodeState(data["outcome"]),
         conclusion_confidence=Confidence(data["conclusion_confidence"]),
+        conclusion_stability=TemporalStability(data["conclusion_stability"]),
         origin=TriggerOrigin(data["origin"]),
         recorded_at=datetime.fromisoformat(data["recorded_at"]),
         record_id=data["record_id"],

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 20)
+Last updated: 2026-08-21 (Increment 21)
 
 ---
 
@@ -69,7 +69,7 @@ src/jarvis/
     repositories/belief_repository.py    BeliefRepository (Protocol) — get/save/all_beliefs
     repositories/episode_repository.py   EpisodeRepository (Protocol) — record/history of episodes
     services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
-    services/self_observation.py         observe_evidence_habit — a belief about Jarvis (Vision §6/§31)
+    services/self_observation.py         observe_evidence_habit + observe_overconfidence (Vision §6/§31)
     services/curiosity.py                wonder — a self-belief → CuriosityImpulse (Vision §16)
     value_objects/curiosity_impulse.py   CuriosityImpulse (a self-triggered investigation, recommended)
     aggregates/cognitive_episode.py      CognitiveEpisode (aggregate root) + InvalidStateTransition
@@ -316,6 +316,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Pure consolidation — no behaviour change: all 181 prior tests stayed green unchanged; 10 new tests
   pin the shared validation and type distinctness. Fulfils the rule-of-three deferral in D12/D18.
 - Gates: ruff clean · pyright strict 0 errors · pytest 191 passed.
+- Commit `9f59ac4` pushed to `origin/main`.
+
+### Increment 21 — second self-observation: overconfidence ✅ (2026-08-21)
+- `EpisodeRecord` gained `conclusion_stability` (the working belief's stability at completion; JSON
+  store updated). `observe_overconfidence(history)` forms a belief about Jarvis — "I tend to be
+  overconfident on thin evidence" — from *grounded* companion episodes: those concluded on
+  temporally narrow (low-stability) evidence support it, well-spread ones contradict it (Vision §6, §11).
+- `jarvis.observe_overconfidence()` surfaces it; `jarvis.self_beliefs()` aggregates every self-tendency
+  Jarvis has enough history to judge (evidence habit + overconfidence). Reuses the ordinary
+  epistemology, so self-beliefs stay provisional (D20).
+- Gates: ruff clean · pyright strict 0 errors · pytest 197 passed.
 
 ---
 
@@ -415,23 +426,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A second self-observation tendency: overconfidence (Vision §6, §31).** Self-observation currently
-detects exactly one tendency ("I conclude without sufficient evidence"). The vision lists several
-(overconfidence, recency bias, excessive complexity). The next honest, high-value one — and now
-directly measurable thanks to the temporal-stability axis (Increment 6) and episode records — is
-**overconfidence**: reaching grounded conclusions that rest on narrow, unstable evidence.
-- Record stability alongside `conclusion_confidence` on `EpisodeRecord` (or derive it), so a
-  self-observation can spot episodes that concluded "grounded" yet with low stability.
-- `observe_overconfidence(history)` → a belief about Jarvis ("I tend to be overconfident on thin
-  evidence"), grounded like the evidence-habit belief; surfaced via `observe_self()` alongside it.
-- Keep it symmetric with Increment 10/11/12: it can raise curiosity and, once confident, temper how
-  `think()` phrases a grounded-but-unstable conclusion.
-- Behaviour tests: a history of grounded-but-low-stability conclusions forms the overconfidence
-  self-belief; a history of well-spread grounded conclusions does not.
+**Curiosity spans the whole self-model (Vision §16, §31).** `feel_curious()` still only looks at the
+evidence-habit self-belief; now that `self_beliefs()` returns several tendencies (evidence habit +
+overconfidence), curiosity should consider all of them and raise an impulse for whichever confident
+weakness most warrants attention. The smallest honest step:
+- `feel_curious()` iterates `self_beliefs()`, applies `wonder` to each, and returns an impulse for the
+  most confident tendency above the curiosity threshold (or None). Keep it a recommendation (Vision §28).
+- Optionally, the executive can temper a grounded-but-unstable `think()` decision when Jarvis
+  confidently believes it is overconfident (symmetric with the evidence-habit learning in Increment 12).
+- Behaviour tests: a Jarvis that is confidently overconfident (but fine on evidence) raises a curiosity
+  impulse citing overconfidence; a healthy self-model raises none; the most confident tendency wins.
 
-*(Deferred, natural follow-ups: generalise `EpisodeRecord` so deliberations are first-class episodes
-(D26); a real DB behind the JSON stores; persisting traces; semantic trigger↔trait matching;
-recurring-goals/working-patterns facets; system-level weighting-policy injection + persistence.)*
+*(Deferred, natural follow-ups: more tendencies (recency bias, complexity); generalise `EpisodeRecord`
+so deliberations are first-class episodes (D26); a real DB behind the JSON stores; persisting traces;
+semantic trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
 
 ---
 

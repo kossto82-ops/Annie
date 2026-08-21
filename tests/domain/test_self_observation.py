@@ -6,16 +6,20 @@ from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.self_observation import (
     INSUFFICIENT_EVIDENCE_HABIT,
+    OVERCONFIDENCE_HABIT,
     observe_evidence_habit,
+    observe_overconfidence,
 )
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 
 def _record(
     confidence: float,
     trigger: str = "q",
     origin: TriggerOrigin = TriggerOrigin.COMPANION,
+    stability: float = 0.5,
 ) -> EpisodeRecord:
     return EpisodeRecord(
         episode_id="e",
@@ -24,6 +28,7 @@ def _record(
         working_belief_id="b",
         outcome=EpisodeState.COMPLETED,
         conclusion_confidence=Confidence(confidence),
+        conclusion_stability=TemporalStability(stability),
         origin=origin,
     )
 
@@ -60,3 +65,22 @@ class TestObserveEvidenceHabit:
         ]
         # Only 2 companion episodes -> below the minimum -> no self-belief.
         assert observe_evidence_habit(history) is None
+
+
+class TestObserveOverconfidence:
+    def test_too_few_grounded_conclusions_yields_nothing(self) -> None:
+        # Ungrounded episodes are not candidates for overconfidence.
+        assert observe_overconfidence([_record(0.0), _record(0.0), _record(0.0)]) is None
+
+    def test_grounded_conclusions_on_thin_evidence_form_the_self_belief(self) -> None:
+        history = [_record(0.7, stability=0.0) for _ in range(3)]
+        belief = observe_overconfidence(history)
+        assert belief is not None
+        assert belief.statement == OVERCONFIDENCE_HABIT
+        assert belief.confidence.value > 0.0
+
+    def test_grounded_conclusions_on_stable_evidence_do_not(self) -> None:
+        history = [_record(0.7, stability=0.8) for _ in range(3)]
+        belief = observe_overconfidence(history)
+        assert belief is not None
+        assert belief.confidence == Confidence.none()

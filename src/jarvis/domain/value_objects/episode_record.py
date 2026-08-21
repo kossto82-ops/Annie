@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 
 def _now() -> datetime:
@@ -26,9 +27,11 @@ def _now() -> datetime:
 class EpisodeRecord:
     """A snapshot of a completed episode, kept in episodic memory.
 
-    ``conclusion_confidence`` is the working belief's confidence *at the time the
-    episode completed* -- a structured signal (not the decision text) so later
-    self-observation can measure Jarvis's own tendencies (Vision §6, §31).
+    ``conclusion_confidence`` and ``conclusion_stability`` are the working belief's
+    confidence and temporal stability *at the time the episode completed* --
+    structured signals (not the decision text) so later self-observation can
+    measure Jarvis's own tendencies, e.g. overconfidence on thin evidence
+    (Vision §6, §31).
     """
 
     episode_id: str
@@ -37,6 +40,7 @@ class EpisodeRecord:
     working_belief_id: str
     outcome: EpisodeState
     conclusion_confidence: Confidence
+    conclusion_stability: TemporalStability
     origin: TriggerOrigin
     recorded_at: datetime = field(default_factory=_now)
     record_id: str = field(default_factory=lambda: str(uuid.uuid4()))
