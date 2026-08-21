@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 28)
+Last updated: 2026-08-21 (Increment 29)
 
 ---
 
@@ -70,7 +70,7 @@ src/jarvis/
     repositories/belief_repository.py    BeliefRepository (Protocol) — get/save/all_beliefs
     repositories/episode_repository.py   EpisodeRepository (Protocol) — record/history of episodes
     services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
-    services/self_observation.py         observe_evidence_habit + observe_overconfidence (Vision §6/§31)
+    services/self_observation.py         observe_evidence_habit / overconfidence / prediction_accuracy (§6/§31)
     services/curiosity.py                wonder — a self-belief → CuriosityImpulse (Vision §16)
     services/action_advisor.py           recommend — a learned belief → ActionRecommendation (Vision §28)
     value_objects/curiosity_impulse.py   CuriosityImpulse (a self-triggered investigation, recommended)
@@ -402,6 +402,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Verified across two processes: everything (episodes, companion, action learning) survives a restart
   from one `Jarvis.persistent(dir)` call; a fresh directory starts empty.
 - Gates: ruff clean · pyright strict 0 errors · pytest 223 passed.
+- Commit `cb94f7a` pushed to `origin/main`.
+
+### Increment 29 — third self-observation: prediction accuracy ✅ (2026-08-21)
+- Refined the plan: **recency over-weighting was dropped** — Jarvis's confidence derivation is
+  time-order-independent (only stability uses time), so there is no recency mechanism to detect;
+  measuring it would be fake (D27). Instead added a genuinely distinct, measurable tendency from a
+  different source: **predictive reliability** (Vision §31 "poor predictions").
+- `observe_prediction_accuracy(action_beliefs)` reads the *action-outcome* beliefs (Increment 25):
+  a kind whose predictions failed (confidence < grounded, contradicted) supports the belief "my
+  predictions about my actions tend to be wrong"; a reliably-predicted kind contradicts it. Surfaced
+  via `jarvis.observe_prediction_accuracy()` and folded into `self_beliefs()`, so curiosity weighs it
+  for free (Increment 22).
+- Gates: ruff clean · pyright strict 0 errors · pytest 228 passed.
 
 ---
 
@@ -501,18 +514,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A third self-observation tendency: recency over-weighting (Vision §6, §36).** The self-model catches
-two biases (under-evidencing, overconfidence). Vision §6 explicitly names *"I tend to overweight recent
-events"* and §36 makes time first-class. Now that episodes carry `recorded_at` and stability already
-encodes temporal spread, a recency bias is measurable: does Jarvis's confidence lean on a burst of
-recent, clustered evidence rather than a steady record? The smallest honest step:
-- `observe_recency_bias(history)` → a belief about Jarvis, from grounded companion episodes whose
-  supporting evidence is tightly clustered in time relative to the episode (e.g. very low stability
-  *and* recent) — supporting the bias; well-spread ones contradicting it.
-- Surface it via `self_beliefs()` (curiosity and, if wanted, decision-tempering already iterate the
-  whole self-model, so it plugs in for free — Increments 22/23).
-- Behaviour tests: a history dominated by recent-burst grounded conclusions forms the recency-bias
-  self-belief; a steady, well-spread history does not.
+**A first-run experience: `Jarvis` narrates who it is and what it knows (Vision §29, §30, §40).** The
+system now has a rich inner state — beliefs, a self-model, a companion model, action learning — but no
+single way to *ask it about itself*, which is what a companion relationship needs (Vision §30) and how
+personality should surface (Vision §29: emerges from stable state, not a prompt). The smallest honest
+step, pure read-model over what exists:
+- A `jarvis.introspect()` (or `about_self()`) that returns a plain-language account assembled from the
+  real state: its self-tendencies (`self_beliefs()`, narrated), what it currently believes about its
+  companion (`companion.summarise()`), and a one-line honesty note about how much it still doesn't know
+  (episode count, unproven actions). No new state — it reads and narrates.
+- Keep it grounded (Vision §29): every line traces to actual beliefs/evidence, never invented traits.
+- Behaviour tests: a fresh Jarvis introspects to "I have little history yet"; a seasoned one surfaces
+  its strongest self-tendencies and companion beliefs; nothing is asserted that isn't in the state.
 
 *(Deferred, natural follow-ups: excessive-complexity tendency; a real DB behind the JSON stores;
 persisting traces; semantic trigger↔trait matching; recurring-goals/working-patterns facets;

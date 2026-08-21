@@ -103,3 +103,28 @@ class TestGradedAutonomy:
             )
         pending = jarvis.act("deploy on friday", expected="quiet weekend")
         assert jarvis.recommend_action(pending).stance is ActionStance.WITHHOLD
+
+
+class TestPredictionAccuracySelfObservation:
+    def test_repeatedly_wrong_predictions_become_a_self_belief(self) -> None:
+        # Vision §31: Jarvis notices its own poor predictive reliability.
+        jarvis = Jarvis()
+        for kind in ("a", "b", "c"):
+            for _ in range(3):
+                action = jarvis.act(f"action {kind}", expected="it works")
+                jarvis.record_outcome(action, actual="it failed", met_expectation=False)
+        belief = jarvis.observe_prediction_accuracy()
+        assert belief is not None
+        assert belief.confidence.value > 0.0
+        statements = [b.statement for b in jarvis.self_beliefs()]
+        assert belief.statement in statements
+
+    def test_reliable_predictions_do_not_incriminate_jarvis(self) -> None:
+        jarvis = Jarvis()
+        for kind in ("a", "b", "c"):
+            for _ in range(3):
+                action = jarvis.act(f"action {kind}", expected="it works")
+                jarvis.record_outcome(action, actual="it worked", met_expectation=True)
+        belief = jarvis.observe_prediction_accuracy()
+        assert belief is not None
+        assert belief.confidence.value == 0.0

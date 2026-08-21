@@ -40,6 +40,7 @@ _LOW_STABILITY = 0.2
 
 INSUFFICIENT_EVIDENCE_HABIT = "I tend to conclude without sufficient evidence"
 OVERCONFIDENCE_HABIT = "I tend to be overconfident on thin evidence"
+POOR_PREDICTION_HABIT = "My predictions about my actions tend to be wrong"
 
 
 def observe_evidence_habit(history: Sequence[EpisodeRecord]) -> Belief | None:
@@ -111,6 +112,46 @@ def observe_overconfidence(history: Sequence[EpisodeRecord]) -> Belief | None:
                 weight=_OBSERVATION_WEIGHT,
                 supports=overconfident,
                 observed_at=record.recorded_at,
+            )
+        )
+    return belief
+
+
+def observe_prediction_accuracy(action_beliefs: Sequence[Belief]) -> Belief | None:
+    """Form a belief about whether Jarvis mispredicts its actions' outcomes.
+
+    Reads the *action-outcome* beliefs (one per action kind, Increment 25). A kind
+    whose predictions clearly failed (confidence below grounded, with contradicting
+    outcomes) supports the belief; a kind whose predictions held contradicts it.
+    Thin, undecided kinds are skipped. Returns None with too few judged kinds.
+    This measures predictive reliability (Vision §31 "poor predictions"), a
+    distinct tendency from the episode-based ones.
+    """
+    judged: list[tuple[Belief, bool]] = []
+    for action_belief in action_beliefs:
+        confidence = action_belief.confidence.value
+        if confidence >= _GROUNDED_CONFIDENCE:
+            judged.append((action_belief, False))  # predictions held
+        elif action_belief.explain().contradicting:
+            judged.append((action_belief, True))  # predictions failed
+        # else: too thin to judge -> skip
+
+    if len(judged) < _MINIMUM_HISTORY:
+        return None
+
+    belief = Belief(statement=POOR_PREDICTION_HABIT)
+    for action_belief, mispredicted in judged:
+        belief.add_evidence(
+            Evidence(
+                content=(
+                    f"{action_belief.statement} -> predictions "
+                    f"{'failed' if mispredicted else 'held'} "
+                    f"(confidence {action_belief.confidence.value:.2f})"
+                ),
+                source=EvidenceSource.SYSTEM_OBSERVATION,
+                weight=_OBSERVATION_WEIGHT,
+                supports=mispredicted,
+                observed_at=action_belief.formed_at,
             )
         )
     return belief

@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.self_observation import (
     INSUFFICIENT_EVIDENCE_HABIT,
     OVERCONFIDENCE_HABIT,
+    POOR_PREDICTION_HABIT,
     observe_evidence_habit,
     observe_overconfidence,
+    observe_prediction_accuracy,
 )
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 
@@ -87,3 +92,35 @@ class TestObserveOverconfidence:
         belief = observe_overconfidence(history)
         assert belief is not None
         assert belief.confidence == Confidence.none()
+
+
+def _action_belief(*, met: bool, count: int) -> Belief:
+    belief = Belief(statement="My predictions about the action 'x' hold")
+    for _ in range(count):
+        belief.add_evidence(
+            Evidence(
+                content="outcome",
+                source=EvidenceSource.ACTION_OUTCOME,
+                weight=Confidence(1.0),
+                supports=met,
+            )
+        )
+    return belief
+
+
+class TestObservePredictionAccuracy:
+    def test_too_few_judged_kinds_yields_nothing(self) -> None:
+        assert observe_prediction_accuracy([_action_belief(met=True, count=2)]) is None
+
+    def test_mostly_failed_predictions_form_the_self_belief(self) -> None:
+        beliefs = [_action_belief(met=False, count=3) for _ in range(3)]
+        result = observe_prediction_accuracy(beliefs)
+        assert result is not None
+        assert result.statement == POOR_PREDICTION_HABIT
+        assert result.confidence.value > 0.0
+
+    def test_reliable_predictions_do_not(self) -> None:
+        beliefs = [_action_belief(met=True, count=3) for _ in range(3)]
+        result = observe_prediction_accuracy(beliefs)
+        assert result is not None
+        assert result.confidence == Confidence.none()

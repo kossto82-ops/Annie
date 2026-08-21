@@ -24,6 +24,7 @@ from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
+    observe_prediction_accuracy,
 )
 from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
@@ -105,11 +106,21 @@ class Jarvis:
         """
         return observe_overconfidence(self.episodes.history())
 
+    def observe_prediction_accuracy(self) -> Belief | None:
+        """A belief about whether Jarvis mispredicts its actions' outcomes
+        (Vision §31), or None if it has judged too few kinds of action.
+        """
+        return observe_prediction_accuracy(self.actions.all_beliefs())
+
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition
         (Vision §6): the ones it has enough history to judge.
         """
-        candidates = (self.observe_self(), self.observe_overconfidence())
+        candidates = (
+            self.observe_self(),
+            self.observe_overconfidence(),
+            self.observe_prediction_accuracy(),
+        )
         return tuple(belief for belief in candidates if belief is not None)
 
     def feel_curious(self) -> CuriosityImpulse | None:
