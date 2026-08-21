@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 36)
+Last updated: 2026-08-21 (Increment 37)
 
 ---
 
@@ -98,6 +98,7 @@ src/jarvis/
     value_objects/evidence_request.py    EvidenceRequest (what an ungrounded episode is missing)
     value_objects/deliberation.py        Deliberation (outcome of weighing competing explanations)
     value_objects/action.py              Action (a declared intention + expected outcome, Vision §27)
+    value_objects/state_summary.py       StateSummary (compact immutable snapshot of all Jarvis holds)
 tests/                                   45 behaviour tests mirroring the above
 ```
 
@@ -488,6 +489,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - A consistent (one-sided) companion belief raises none. Verified: consistent → no curiosity; after a
   contradiction → curiosity to "find out whether my companion really …".
 - Gates: ruff clean · pyright strict 0 errors · pytest 245 passed.
+- Commit `94c87ae` pushed to `origin/main`.
+
+### Increment 37 — a single state snapshot ✅ (2026-08-21)
+- `StateSummary` value object + `jarvis.state_summary()`: one immutable snapshot assembled from the
+  existing read surfaces — episode count, confident self-tendencies, companion traits, action-outcome
+  beliefs — each as `(statement, confidence)` (confidence always derived, Vision §22). Fresh Jarvis →
+  all empty. Consolidation only; no new state.
+- Refined the plan: action *stance* was dropped from the summary — a stance needs an `Action`'s
+  reversibility, which is not persisted on the action-outcome belief, so it isn't derivable from the
+  store; the summary reports the action beliefs' `(statement, confidence)` instead (D28).
+- Gates: ruff clean · pyright strict 0 errors · pytest 249 passed.
 
 ---
 
@@ -572,6 +584,9 @@ with belief + episode events dispatched through the NervousSystem at each step.
   to" (Vision §26); inside an episode that process is the episode. Outside an episode a belief still
   correlates to its own id. The `EpisodeTrace` is a read-only observer (subscriber); it never drives
   cognition. This is internal provenance, not user-facing chain-of-thought.
+- **D28** `state_summary()` reports action beliefs as `(statement, confidence)`, not a recommendation
+  stance — stance requires an `Action`'s `reversible` flag, which is not persisted on the belief, so it
+  cannot be derived from the store alone. Reversibility persistence would be a separate increment.
 - **D26** Hypothesis deliberation (`consider`) is a **distinct cognition shape** from a single-belief
   episode; it is NOT forced through the belief-centric `CognitiveEpisode`/`EpisodeRecord`. `consider`
   dispatches its hypothesis events (so subscribers/trace observe them) and returns a `Deliberation`.
@@ -587,16 +602,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A single `Jarvis.remember()` snapshot for the full state (developer ergonomics, Vision §21).** The
-codebase exposes many read surfaces — `episodes.history()`, `self_beliefs()`, `companion.beliefs()`,
-`belief_about_action`, `introspect()` — but no one call returns a compact, structured snapshot of
-"everything Jarvis currently holds" for logging, debugging, or a UI. Consolidation, not new capability:
-- A `jarvis.state_summary()` returning a small immutable structure (counts + the strongest items):
-  episode count, the confident self-tendencies, the companion traits with confidence, the learned
-  actions with their recommendation stance — assembled from existing read methods, nothing new.
-- Keep it grounded: every field traces to real state; a fresh Jarvis returns an all-empty summary.
-- Behaviour tests: a seasoned Jarvis's summary reflects its actual episodes/self-model/companion/actions;
-  a fresh one is empty; the structure is immutable.
+**Persist action reversibility so stance survives (Vision §27, §28; unblocks D28).** Action-outcome
+learning persists (Increment 27) and drives `recommend_action` (Increment 26), but a stored belief
+can't yield a stance after a restart because an action's `reversible` flag lives only on the transient
+`Action`. D28 flagged this. Small honest step:
+- Record reversibility alongside the outcome — e.g. the action-outcome belief's store also keeps, per
+  action kind, whether it is reversible (a second tiny keyed store, or fold it into the belief's
+  evidence content and parse — prefer a small typed store to parsing).
+- `recommend_action` and `state_summary` can then report a stance for a *remembered* action kind, not
+  only one held live this session.
+- Behaviour tests: an action learned + its reversibility recorded before a restart yields the same
+  stance after; `state_summary` can include the stance for remembered actions.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15); excessive-complexity
 self-observation tendency; a real DB behind the JSON stores; persisting traces; semantic

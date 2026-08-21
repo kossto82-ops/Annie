@@ -33,6 +33,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.state_summary import StateSummary
 from jarvis.executive.executive_controller import ExecutiveController
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
@@ -161,6 +162,29 @@ class Jarvis:
             "provisional and open to revision."
         )
         return "\n".join(lines)
+
+    def state_summary(self) -> StateSummary:
+        """A compact, immutable snapshot of everything Jarvis currently holds.
+
+        Assembled from the existing read surfaces (episodes, self-model, companion
+        model, action learning); every field traces to real state (Vision §21).
+        """
+        return StateSummary(
+            episode_count=len(self.episodes.history()),
+            self_tendencies=tuple(
+                (belief.statement, belief.confidence.value)
+                for belief in self.self_beliefs()
+                if belief.confidence.value > 0.0
+            ),
+            companion_traits=tuple(
+                (belief.statement, belief.confidence.value)
+                for belief in self.companion.beliefs()
+            ),
+            action_beliefs=tuple(
+                (belief.statement, belief.confidence.value)
+                for belief in self.actions.all_beliefs()
+            ),
+        )
 
     def feel_curious(self) -> CuriosityImpulse | None:
         """Decide whether any known self-tendency is worth investigating (Vision §16).
