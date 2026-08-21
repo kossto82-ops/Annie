@@ -243,6 +243,32 @@ class TestCuriosity:
         assert len(after.evidence) == len(before.evidence)  # curiosity episode excluded
 
 
+class TestCompanionModel:
+    _TRAIT = "prefers simplicity"
+
+    def test_jarvis_builds_a_model_of_its_companion(self) -> None:
+        jarvis = Jarvis()
+        jarvis.observe_companion(self._TRAIT, _ev(0.9, content="chose the simpler design"))
+        belief = jarvis.companion.belief_about(self._TRAIT)
+        assert belief is not None
+        assert belief.confidence.value > 0.0
+        assert self._TRAIT in belief.explain().narrate()
+
+    def test_companion_observations_flow_through_the_nervous_system(self) -> None:
+        jarvis = Jarvis()
+        events: list[CognitiveEvent] = []
+        jarvis.nervous_system.subscribe(CognitiveEvent, events.append)  # type: ignore[arg-type]
+        jarvis.observe_companion(self._TRAIT, _ev(0.9))
+        assert any(isinstance(e, EvidenceAdded) for e in events)
+
+    def test_the_model_is_separate_from_working_conclusions(self) -> None:
+        # A belief about the companion is not the same as a think() conclusion.
+        jarvis = Jarvis()
+        jarvis.observe_companion(self._TRAIT, _ev(0.9))
+        jarvis.think("some unrelated question")
+        assert [b.statement for b in jarvis.companion.beliefs()] == [self._TRAIT]
+
+
 class TestLearning:
     def test_a_fresh_jarvis_gives_a_plain_non_conclusion(self) -> None:
         episode = Jarvis().think("some ungrounded question")

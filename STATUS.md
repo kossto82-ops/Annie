@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 12)
+Last updated: 2026-08-21 (Increment 13)
 
 ---
 
@@ -71,6 +71,7 @@ src/jarvis/
     value_objects/curiosity_impulse.py   CuriosityImpulse (a self-triggered investigation, recommended)
     aggregates/cognitive_episode.py      CognitiveEpisode (aggregate root) + InvalidStateTransition
     aggregates/hypothesis_set.py         HypothesisSet (competing hypotheses) + UnknownHypothesis
+    aggregates/companion_model.py        CompanionModel — beliefs about the companion (Vision §5)
     entities/belief.py                   Belief (entity) + derive_confidence + BeliefExplanation
     entities/hypothesis.py               Hypothesis (entity, evidence-derived confidence)
     enums/episode_state.py               EpisodeState (6 of 12 conceptual states)
@@ -224,6 +225,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   and fades as grounded episodes accumulate (verified: 3 ungrounded → learns; +3 grounded → reverts).
   Computed from history each decision, so the current episode never self-references.
 - Gates: ruff clean · pyright strict 0 errors · pytest 145 passed.
+- Commit `b77ac9b` pushed to `origin/main`.
+
+### Increment 13 — a model of the companion ✅ (2026-08-21)
+- `CompanionModel` aggregate: beliefs *about the companion* keyed by trait, each an ordinary `Belief`
+  (confidence derived, revisable). `observe(trait, evidence)` evolves the matching belief;
+  `belief_about`, `beliefs`, `summarise()` (plain-language account of each, Vision §5/§40).
+- Never absolute truth (Vision §5, §18): a contradicting observation from the companion **weakens**
+  the belief and keeps the prior evidence — it is not silently overwritten, and Jarvis says "I may
+  be wrong". Reuses the whole belief/evidence/contradiction machinery.
+- `jarvis.companion` exposed; `jarvis.observe_companion(trait, evidence)` records and dispatches the
+  belief's events through the NervousSystem (D4: aggregate collects, orchestrator dispatches).
+- Gates: ruff clean · pyright strict 0 errors · pytest 154 passed.
 
 ---
 
@@ -302,24 +315,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A model of the companion (Vision §5).** Jarvis models *itself* (§6, done) but not yet its
-*companion* — and §5 is central to it being a companion, not an assistant: an evolving,
-hypothesis-driven model of the person (preferences, recurring goals, working patterns) that is
-never treated as absolute truth and that the companion can contradict. The pieces already exist
-(beliefs about a subject, evidence with provenance, contradiction handling); this increment gives
-them a home.
-- A `companion` model: a small collection of beliefs *about the companion* (e.g. "prefers
-  simplicity", "works late"), each grounded in evidence the companion supplies or Jarvis observes,
-  with confidence derived as usual.
-- A way to record an observation about the companion and retrieve what Jarvis currently believes
-  about them (with provenance via `narrate()`), keeping the Observation/Pattern/Hypothesis/Model
-  distinction (Vision §5) rather than collapsing to "facts".
-- Behaviour tests: repeated supporting observations strengthen a companion-belief; a contradicting
-  statement from the companion weakens it (never silently overwritten); confidence stays derived.
+**The companion model informs cognition (Vision §5, §3).** Jarvis now *holds* beliefs about the
+companion, but `think()` ignores them. Continuity means past understanding shapes new interpretation
+(Vision §3): a question should be answerable partly from what Jarvis already believes about the
+person. The smallest honest step:
+- When `think(trigger)` runs, the executive consults the `CompanionModel` for a belief whose trait
+  matches/relates to the trigger; if a confident one exists, the working belief is seeded with that
+  standing evidence, so the decision reflects what Jarvis already knows about the companion.
+- Keep it evidence-honest: the companion-belief contributes as evidence (with provenance), never as
+  an override; a contradicting answer in-episode still weakens it.
+- Behaviour tests: a `think()` about a trait Jarvis already believes concludes with higher confidence
+  than the same question from a blank slate; with no matching companion-belief, behaviour is unchanged.
 
-*(Deferred, natural follow-ups: more self-observation tendencies; wiring `HypothesisSet` into
-episodes; a durable (DB-backed) store; persisting self-beliefs; system-level weighting-policy
-injection; a `UnitInterval` base if a third [0,1] type appears.)*
+*(Deferred, natural follow-ups: relating triggers to traits semantically vs by key; recurring-goals
+and working-patterns facets of the companion model; wiring `HypothesisSet` into episodes; a durable
+(DB-backed) store; persisting self/companion beliefs; system-level weighting-policy injection.)*
 
 ---
 

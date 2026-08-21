@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
+from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.repositories.belief_repository import BeliefRepository
@@ -36,6 +37,7 @@ class Jarvis:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
         self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
+        self.companion = CompanionModel()
         self._executive = ExecutiveController(
             self.nervous_system, self.beliefs, self.episodes
         )
@@ -79,3 +81,14 @@ class Jarvis:
         """
         episode = CognitiveEpisode(trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY)
         return self._executive.run(episode)
+
+    def observe_companion(self, trait: str, evidence: Evidence) -> Belief:
+        """Record an observation about the companion and evolve Jarvis's model of
+        them (Vision §5). Returns the (revisable) belief; its events flow through
+        the nervous system.
+        """
+        belief = self.companion.observe(trait, evidence)
+        for event in self.companion.pull_events():
+            self.nervous_system.publish(event)
+        self.nervous_system.dispatch()
+        return belief
