@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 14)
+Last updated: 2026-08-21 (Increment 15)
 
 ---
 
@@ -62,6 +62,8 @@ src/jarvis/
   executive/executive_controller.py      orchestrates one episode's lifecycle
   infrastructure/in_memory_belief_store.py    InMemoryBeliefStore (BeliefRepository impl)
   infrastructure/in_memory_episode_store.py   InMemoryEpisodeStore (EpisodeRepository impl)
+  infrastructure/json_belief_store.py         JsonBeliefStore (file-backed, survives restart)
+  infrastructure/json_episode_store.py        JsonEpisodeStore (file-backed, survives restart)
   domain/
     repositories/belief_repository.py    BeliefRepository (Protocol) — persist/retrieve beliefs
     repositories/episode_repository.py   EpisodeRepository (Protocol) — record/history of episodes
@@ -248,6 +250,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - A question about a trait Jarvis already believes concludes with higher confidence than a blank
   slate; an unrelated trigger or a weakly-held belief leaves cognition unchanged.
 - Gates: ruff clean · pyright strict 0 errors · pytest 160 passed.
+- Commit `b574652` pushed to `origin/main`.
+
+### Increment 15 — durable persistence: Jarvis survives a restart ✅ (2026-08-21)
+- `JsonBeliefStore` + `JsonEpisodeStore` (infrastructure): file-backed implementations of the
+  existing `BeliefRepository`/`EpisodeRepository` protocols. Beliefs are serialised **with their
+  evidence and provenance**; confidence and stability are re-derived on load, never stored (Vision
+  §22). Selectable via `Jarvis(beliefs=..., episodes=...)`; the domain is untouched.
+- Verified across two separate Python processes: run 1 records a belief+episode; run 2 (fresh
+  interpreter, same files) remembers the episode and the belief keeps growing — real continuity
+  (Vision §3, §21). Self-model and episode history also survive the round-trip.
+- Belief reconstruction goes through the existing constructor (`_evidence=`), so no domain change;
+  the weighting policy is not persisted (a reloaded belief uses the default).
+- Gates: ruff clean · pyright strict 0 errors · pytest 167 passed.
 
 ---
 
@@ -322,6 +337,11 @@ with belief + episode events dispatched through the NervousSystem at each step.
   case-insensitive substring match of the trait in the trigger, gated at confidence ≥ 0.5. Semantic
   trigger↔trait matching is deliberately deferred; the honesty (evidence not override, weaken-able
   in-episode) is the part that must not regress.
+- **D24** Persistence stores only evidence (not confidence/stability), which are re-derived on load
+  (Vision §22 memory ≠ truth). File-backed stores implement the existing repository protocols so the
+  domain stays untouched; belief rehydration uses the dataclass `_evidence=` constructor param.
+  JSON now (stdlib, human-readable); a real DB is a later swap behind the same interface. The
+  weighting policy and the companion model are NOT yet persisted (deferred).
 - **D19** Source→weight factors live in one policy (`SourceWeightingPolicy`), not scattered constants,
   and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
   the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
@@ -331,22 +351,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Durable persistence: Jarvis survives a restart (Vision §3, §21).** Everything Jarvis learns —
-beliefs, episodes, self-model, companion model — currently lives only in process memory and vanishes
-when it stops. True continuity (Vision §3) and a "long-term" companion require the memory to outlive
-the process. The smallest honest step, behind the interfaces already in place:
-- A file-backed (e.g. JSON/SQLite) implementation of `BeliefRepository` and `EpisodeRepository`,
-  serialising beliefs *with their evidence and provenance* (memory is not truth — confidence is still
-  re-derived on load, Vision §22), selectable via `Jarvis(beliefs=..., episodes=...)`.
-- Round-trip fidelity: a belief saved and reloaded yields the same statement, evidence, derived
-  confidence and stability; episode history reloads in order.
-- Keep the domain untouched — this is purely an infrastructure implementation of existing protocols.
-- Behaviour tests: save via one Jarvis, load into another, and continuity holds (belief confidence,
-  episode count, self-observation all survive the round-trip).
+**Persist the companion model (Vision §3, §5, §21).** Beliefs and episodes now survive a restart, but
+Jarvis's model of *its companion* is still in-process only — so across a restart it forgets the person
+it is meant to know long-term, which is the sharpest remaining continuity gap. The companion model is
+just beliefs, so this reuses Increment 15's serialisation:
+- Back `CompanionModel` with a `BeliefRepository` (its own store/namespace) instead of a bare dict,
+  or give it a small dedicated file-backed store, so companion beliefs persist and reload with their
+  evidence (confidence re-derived, Vision §22).
+- `Jarvis(companion_store=...)` selectable; default stays in-memory.
+- Behaviour tests: a trait observed before a restart is still believed after it (same statement,
+  evidence, derived confidence), and it still informs cognition (Increment 14) post-restart.
 
-*(Deferred, natural follow-ups: persisting the companion model; a real DB; semantic trigger↔trait
-matching; recurring-goals/working-patterns facets; wiring `HypothesisSet` into episodes; system-level
-weighting-policy injection; a `UnitInterval` base if a third [0,1] type appears.)*
+*(Deferred, natural follow-ups: a real DB behind the JSON stores; semantic trigger↔trait matching;
+recurring-goals/working-patterns facets; wiring `HypothesisSet` into episodes; system-level
+weighting-policy injection + its persistence; a `UnitInterval` base if a third [0,1] type appears.)*
 
 ---
 
