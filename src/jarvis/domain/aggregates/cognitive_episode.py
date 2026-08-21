@@ -119,10 +119,14 @@ class CognitiveEpisode:
         return self._working_belief.explain()
 
     def observe(self, evidence: Evidence) -> None:
-        """Route a piece of evidence to the episode's working belief."""
+        """Route a piece of evidence to the episode's working belief.
+
+        The belief's events are correlated to this episode, so the whole act of
+        cognition forms one traceable process (Vision §26).
+        """
         if self._working_belief is None:
             raise ValueError("Form a working belief before observing evidence")
-        self._working_belief.add_evidence(evidence)
+        self._working_belief.add_evidence(evidence, correlation_id=self.id)
 
     def fail(self, reason: str) -> None:
         if self.state.is_terminal:

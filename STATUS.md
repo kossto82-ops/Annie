@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 16)
+Last updated: 2026-08-21 (Increment 17)
 
 ---
 
@@ -59,6 +59,7 @@ ep.working_belief.explain()        # provenance: why it concluded (Vision §8)
 src/jarvis/
   jarvis.py                              Jarvis.think() entry point
   nervous_system/nervous_system.py       subscribe / publish / dispatch (sync)
+  observability/episode_trace.py          EpisodeTrace — cognitive events grouped by episode (Vision §26)
   executive/executive_controller.py      orchestrates one episode's lifecycle
   infrastructure/in_memory_belief_store.py    InMemoryBeliefStore (BeliefRepository impl)
   infrastructure/in_memory_episode_store.py   InMemoryEpisodeStore (EpisodeRepository impl)
@@ -274,6 +275,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   default in-memory. Verified across two processes: a trait learned before a restart is still
   believed after it — and still informs cognition (Increment 14) post-restart (Vision §5).
 - Gates: ruff clean · pyright strict 0 errors · pytest 168 passed.
+- Commit `e042993` pushed to `origin/main`.
+
+### Increment 17 — per-episode decision provenance (trace) ✅ (2026-08-21)
+- Within an episode, the working belief's events now correlate to the **episode** (`observe` passes
+  `correlation_id=episode.id` to `add_evidence`, which gained an optional `correlation_id`); outside
+  an episode a belief still correlates to itself. So one act of cognition is one correlated process.
+- `EpisodeTrace` (observability) subscribes to the NervousSystem and groups cognitive events by
+  correlation. `jarvis.trace_of(episode)` returns the ordered trace: EpisodeStarted → EvidenceAdded /
+  BeliefStrengthened / ContradictionDetected / BeliefWeakened → EpisodeCompleted — internal decision
+  provenance (Vision §26), not exposed chain-of-thought.
+- Gates: ruff clean · pyright strict 0 errors · pytest 172 passed.
 
 ---
 
@@ -353,6 +365,11 @@ with belief + episode events dispatched through the NervousSystem at each step.
   domain stays untouched; belief rehydration uses the dataclass `_evidence=` constructor param.
   JSON now (stdlib, human-readable); a real DB is a later swap behind the same interface. The
   weighting policy and the companion model are NOT yet persisted (deferred).
+- **D25** Within an episode, belief events correlate to the **episode** (not the belief): `observe`
+  passes `correlation_id=episode.id`. correlation_id means "the one logical process this event belongs
+  to" (Vision §26); inside an episode that process is the episode. Outside an episode a belief still
+  correlates to its own id. The `EpisodeTrace` is a read-only observer (subscriber); it never drives
+  cognition. This is internal provenance, not user-facing chain-of-thought.
 - **D19** Source→weight factors live in one policy (`SourceWeightingPolicy`), not scattered constants,
   and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
   the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
@@ -362,19 +379,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Correlate cognitive events into a per-episode trace (Vision §26 decision provenance).** The whole
-system already emits immutable events (EpisodeStarted, EvidenceAdded, BeliefStrengthened,
-ContradictionDetected, EpisodeCompleted) through the NervousSystem, each carrying `correlation_id`
-and `causation_id` — but nothing yet assembles them into the end-to-end trace the vision asks for:
-Goal → Evidence → Beliefs → Reasoning → Confidence → Decision (Vision §26), preserved as structured
-provenance. The smallest honest step:
-- An `EpisodeTrace` collector that subscribes to the NervousSystem and groups events by their
-  episode/correlation into an ordered, queryable trace of what happened inside one act of cognition.
-- Expose it (e.g. `jarvis.last_trace()` or on the returned episode) so a decision's internal
-  provenance is inspectable — not exposing hidden chain-of-thought to end users, but keeping a
-  structured record (Vision §26).
-- Behaviour tests: a grounded `think()` produces a trace ordered Started → EvidenceAdded(+strength)
-  → Completed; a contested one includes the ContradictionDetected; correlation ties them to one episode.
+**Ask, don't guess: an ungrounded episode requests the evidence it needs (Vision §16, §37).** Jarvis
+already says "insufficient evidence" and, once it has learned the habit, "I am asking for evidence" —
+but it never says *what* evidence would resolve the question. Vision §16 frames curiosity as naming a
+valuable unknown; §37 wants uncertainty made explicit and actionable. The smallest honest step:
+- When `think()` reaches an ungrounded or tentative conclusion, produce a structured
+  `EvidenceRequest` (the working statement + what kind of observation would raise confidence), exposed
+  on the episode (e.g. `episode.evidence_request`), not just embedded in the decision string.
+- Keep it honest: the request is derived from the actual gap (no/low evidence), and disappears once
+  the belief is grounded.
+- Behaviour tests: an ungrounded `think()` yields an `EvidenceRequest` naming the statement; a
+  grounded one yields none; the request references the question being asked.
 
 *(Deferred, natural follow-ups: a real DB behind the JSON stores; persisting traces; semantic
 trigger↔trait matching; recurring-goals/working-patterns facets; wiring `HypothesisSet` into episodes;

@@ -13,6 +13,7 @@ from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.curiosity import wonder
@@ -23,6 +24,7 @@ from jarvis.executive.executive_controller import ExecutiveController
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.nervous_system.nervous_system import NervousSystem
+from jarvis.observability.episode_trace import EpisodeTrace
 
 
 class Jarvis:
@@ -39,6 +41,8 @@ class Jarvis:
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
         self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
         self.companion = CompanionModel(companion_store or InMemoryBeliefStore())
+        self._trace = EpisodeTrace()
+        self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
             self.nervous_system, self.beliefs, self.episodes, self.companion
         )
@@ -82,6 +86,12 @@ class Jarvis:
         """
         episode = CognitiveEpisode(trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY)
         return self._executive.run(episode)
+
+    def trace_of(self, episode: CognitiveEpisode) -> tuple[CognitiveEvent, ...]:
+        """The ordered cognitive events of ``episode`` -- its decision provenance
+        (Vision §26): started, the evidence and belief changes, then completed.
+        """
+        return self._trace.for_correlation(episode.id)
 
     def observe_companion(self, trait: str, evidence: Evidence) -> Belief:
         """Record an observation about the companion and evolve Jarvis's model of

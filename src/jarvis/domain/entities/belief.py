@@ -207,8 +207,14 @@ class Belief:
     def evidence(self) -> tuple[Evidence, ...]:
         return tuple(self._evidence)
 
-    def add_evidence(self, evidence: Evidence) -> None:
-        """Attach evidence and revise confidence, recording what changed."""
+    def add_evidence(self, evidence: Evidence, correlation_id: str | None = None) -> None:
+        """Attach evidence and revise confidence, recording what changed.
+
+        ``correlation_id`` lets a caller (e.g. an episode) group these events with
+        the wider process they belong to; it defaults to the belief's own id when
+        the belief evolves outside any larger process.
+        """
+        correlation = correlation_id or self.id
         before = self.confidence
         self._evidence.append(evidence)
         after = self.confidence
@@ -216,7 +222,7 @@ class Belief:
         self._record(
             EvidenceAdded(
                 subject_id=self.id,
-                correlation_id=self.id,
+                correlation_id=correlation,
                 evidence_id=evidence.id,
                 supports=evidence.supports,
             )
@@ -225,16 +231,20 @@ class Belief:
         if evidence.contradicts and before.is_stronger_than(Confidence.none()):
             self._record(
                 ContradictionDetected(
-                    belief_id=self.id, correlation_id=self.id, evidence_id=evidence.id
+                    belief_id=self.id, correlation_id=correlation, evidence_id=evidence.id
                 )
             )
         if after.is_stronger_than(before):
             self._record(
-                BeliefStrengthened(belief_id=self.id, correlation_id=self.id, confidence=after)
+                BeliefStrengthened(
+                    belief_id=self.id, correlation_id=correlation, confidence=after
+                )
             )
         elif before.is_stronger_than(after):
             self._record(
-                BeliefWeakened(belief_id=self.id, correlation_id=self.id, confidence=after)
+                BeliefWeakened(
+                    belief_id=self.id, correlation_id=correlation, confidence=after
+                )
             )
 
     def explain(self) -> BeliefExplanation:
