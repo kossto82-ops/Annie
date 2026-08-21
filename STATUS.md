@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 24)
+Last updated: 2026-08-21 (Increment 25)
 
 ---
 
@@ -93,6 +93,7 @@ src/jarvis/
     value_objects/episode_record.py      EpisodeRecord (immutable memory of a completed episode)
     value_objects/evidence_request.py    EvidenceRequest (what an ungrounded episode is missing)
     value_objects/deliberation.py        Deliberation (outcome of weighing competing explanations)
+    value_objects/action.py              Action (a declared intention + expected outcome, Vision §27)
 tests/                                   45 behaviour tests mirroring the above
 ```
 
@@ -359,6 +360,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - `jarvis.trace(correlation_id)` exposes a deliberation's ordered trace. Self-observation now filters to
   `kind == CONCLUSION`, so deliberations never pollute the belief-centric tendencies. Resolves D26.
 - Gates: ruff clean · pyright strict 0 errors · pytest 204 passed.
+- Commit `61f13fc` pushed to `origin/main`.
+
+### Increment 25 — actions: thinking vs acting, outcome → learning ✅ (2026-08-21)
+- `Action` value object (description, expected, confidence, reversible) — a declared intention with no
+  side effect (Vision §27, §28: records only). `jarvis.act(...)` returns one.
+- `jarvis.record_outcome(action, actual, met_expectation)` turns expected-vs-actual into `Evidence`
+  (source ACTION_OUTCOME) feeding a belief *about actions of that kind* (its own `actions` store), so
+  repeated matches build confidence and mismatches erode it (Vision §20). `belief_about_action(desc)`
+  retrieves it with full provenance; an `ActionOutcomeRecorded` event is emitted.
+- Gates: ruff clean · pyright strict 0 errors · pytest 211 passed.
 
 ---
 
@@ -458,24 +469,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Actions: distinguish thinking from acting, with outcome → learning (Vision §27, §20).** So far
-every act of cognition ends in a conclusion or deliberation — Jarvis *thinks* but never *acts*, and
-Vision §27 draws a hard line: an action has an expected outcome, and after it, expected-vs-actual
-becomes learning evidence. This is the missing verb. The smallest honest step (no real side effects
-yet — a recorded intention + outcome):
-- An `Action` value/entity: a description, an `expected` outcome, `confidence`, `reversibility`; and,
-  after it happens, an `actual` outcome. `jarvis.act(description, expected)` records the intention;
-  `jarvis.record_outcome(action, actual)` closes it.
-- The gap between expected and actual becomes `Evidence` feeding a belief about that kind of action
-  (reuse the epistemology) — so repeated mismatches teach Jarvis, repeated matches build confidence.
-- Keep it permission-honest (Vision §28): `act` here only *records* an intended action and its result;
-  it performs nothing autonomously.
-- Behaviour tests: an action whose actual matches expected strengthens a belief that such actions
-  succeed; a mismatch weakens it; the outcome is retrievable as provenance.
+**Actions inform decisions to act; graded autonomy (Vision §28).** Jarvis can now act and learn from
+outcomes (Increment 25), but nothing yet *uses* that learning to decide whether an action is wise, and
+Vision §28 is explicit: autonomy is earned, and Jarvis must distinguish observation / suggestion /
+preparation / permission-required action / autonomous action. The smallest honest step:
+- A `recommend_action(description, expected, reversible)` that consults `belief_about_action(description)`
+  and returns a graded recommendation: SUGGEST when the belief is confident and the action reversible;
+  ASK_FIRST when it is irreversible or the belief is weak/contested; WITHHOLD when the belief actively
+  contradicts success. Never performs anything — it recommends a *stance*.
+- Reuse the epistemology: the recommendation is derived from the action-outcome belief's confidence and
+  the reversibility flag, so it improves as Jarvis learns which actions tend to work.
+- Behaviour tests: a well-learned reversible action is SUGGESTed; an irreversible or unproven one is
+  ASK_FIRST; an action whose belief is contradicted is WITHHELD.
 
 *(Deferred, natural follow-ups: more self-observation tendencies (recency bias, complexity); a real DB
-behind the JSON stores; persisting traces; semantic trigger↔trait matching; recurring-goals/working-
-patterns facets; system-level weighting-policy injection + persistence.)*
+behind the JSON stores; persisting traces + action beliefs; semantic trigger↔trait matching;
+recurring-goals/working-patterns facets; system-level weighting-policy injection + persistence.)*
 
 ---
 

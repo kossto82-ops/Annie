@@ -12,7 +12,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
@@ -21,6 +23,8 @@ from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
 )
+from jarvis.domain.value_objects.action import Action
+from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
@@ -40,11 +44,13 @@ class Jarvis:
         beliefs: BeliefRepository | None = None,
         episodes: EpisodeRepository | None = None,
         companion_store: BeliefRepository | None = None,
+        actions_store: BeliefRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
         self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
         self.companion = CompanionModel(companion_store or InMemoryBeliefStore())
+        self.actions: BeliefRepository = actions_store or InMemoryBeliefStore()
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -132,6 +138,68 @@ class Jarvis:
         deliberation's ``episode_id`` (Vision §26).
         """
         return self._trace.for_correlation(correlation_id)
+
+    def act(
+        self,
+        description: str,
+        expected: str,
+        *,
+        confidence: Confidence | None = None,
+        reversible: bool = True,
+    ) -> Action:
+        """Declare an intention to act, with its expected outcome (Vision §27).
+
+        This only *records* the intention -- it performs nothing in the world.
+        Close the loop later with :meth:`record_outcome`.
+        """
+        return Action(
+            description=description,
+            expected=expected,
+            confidence=confidence or Confidence(0.5),
+            reversible=reversible,
+        )
+
+    def record_outcome(
+        self, action: Action, actual: str, met_expectation: bool
+    ) -> Belief:
+        """Record what actually happened and learn from expected-vs-actual (Vision §20).
+
+        The outcome becomes evidence for a belief about actions of this kind, so
+        repeated matches build confidence and repeated mismatches erode it.
+        """
+        statement = self._action_statement(action.description)
+        belief = self.actions.get_by_statement(statement) or Belief(statement=statement)
+        belief.add_evidence(
+            Evidence(
+                content=(
+                    f"acted '{action.description}': expected '{action.expected}', "
+                    f"got '{actual}'"
+                ),
+                source=EvidenceSource.ACTION_OUTCOME,
+                weight=Confidence(1.0),
+                supports=met_expectation,
+            )
+        )
+        self.actions.save(belief)
+        for event in belief.pull_events():
+            self.nervous_system.publish(event)
+        self.nervous_system.publish(
+            ActionOutcomeRecorded(
+                action_id=action.id,
+                description=action.description,
+                met_expectation=met_expectation,
+            )
+        )
+        self.nervous_system.dispatch()
+        return belief
+
+    def belief_about_action(self, description: str) -> Belief | None:
+        """What Jarvis believes about how actions of this kind turn out."""
+        return self.actions.get_by_statement(self._action_statement(description))
+
+    @staticmethod
+    def _action_statement(description: str) -> str:
+        return f"My predictions about the action '{description}' hold"
 
     def observe_companion(self, trait: str, evidence: Evidence) -> Belief:
         """Record an observation about the companion and evolve Jarvis's model of
