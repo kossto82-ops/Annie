@@ -53,23 +53,25 @@ class HypothesisSet:
         if not self.observation or not self.observation.strip():
             raise ValueError("A hypothesis set requires a non-empty observation")
 
-    def propose(self, statement: str) -> Hypothesis:
+    def propose(self, statement: str, correlation_id: str | None = None) -> Hypothesis:
         """Add a competing explanation and return it."""
         hypothesis = Hypothesis(statement=statement)
         self._hypotheses.append(hypothesis)
         self._record(
             HypothesisCreated(
                 hypothesis_id=hypothesis.id,
-                correlation_id=self.id,
+                correlation_id=correlation_id or self.id,
                 statement=hypothesis.statement,
             )
         )
         return hypothesis
 
-    def add_evidence(self, hypothesis_id: str, evidence: Evidence) -> None:
+    def add_evidence(
+        self, hypothesis_id: str, evidence: Evidence, correlation_id: str | None = None
+    ) -> None:
         """Route evidence to one hypothesis, shifting its relative standing."""
         hypothesis = self._require(hypothesis_id)
-        hypothesis.add_evidence(evidence)
+        hypothesis.add_evidence(evidence, correlation_id=correlation_id)
 
     def ranked(self) -> list[Hypothesis]:
         """Hypotheses ordered by descending confidence (ties keep insertion order).

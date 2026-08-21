@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.self_observation import (
@@ -20,6 +21,7 @@ def _record(
     trigger: str = "q",
     origin: TriggerOrigin = TriggerOrigin.COMPANION,
     stability: float = 0.5,
+    kind: EpisodeKind = EpisodeKind.CONCLUSION,
 ) -> EpisodeRecord:
     return EpisodeRecord(
         episode_id="e",
@@ -30,6 +32,7 @@ def _record(
         conclusion_confidence=Confidence(confidence),
         conclusion_stability=TemporalStability(stability),
         origin=origin,
+        kind=kind,
     )
 
 

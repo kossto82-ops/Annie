@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
@@ -49,8 +50,13 @@ def observe_evidence_habit(history: Sequence[EpisodeRecord]) -> Belief | None:
     its confidence reflects how often conclusions were actually ungrounded.
     """
     # Judge only how Jarvis handled the companion's questions. Self-triggered
-    # (curiosity) episodes must not inflate the very habit they respond to.
-    relevant = [r for r in history if r.origin is TriggerOrigin.COMPANION]
+    # (curiosity) episodes must not inflate the very habit they respond to, and
+    # deliberations are a different cognition shape (no single conclusion).
+    relevant = [
+        r
+        for r in history
+        if r.origin is TriggerOrigin.COMPANION and r.kind is EpisodeKind.CONCLUSION
+    ]
     if len(relevant) < _MINIMUM_HISTORY:
         return None
 
@@ -85,6 +91,7 @@ def observe_overconfidence(history: Sequence[EpisodeRecord]) -> Belief | None:
         r
         for r in history
         if r.origin is TriggerOrigin.COMPANION
+        and r.kind is EpisodeKind.CONCLUSION
         and r.conclusion_confidence.value >= _GROUNDED_CONFIDENCE
     ]
     if len(grounded) < _MINIMUM_HISTORY:

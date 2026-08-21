@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
@@ -67,6 +68,7 @@ class TestEpisodeStore:
             conclusion_confidence=Confidence(0.42),
             conclusion_stability=TemporalStability(0.33),
             origin=TriggerOrigin.COMPANION,
+            kind=EpisodeKind.CONCLUSION,
         )
 
     def test_history_survives_a_reload_in_order(self, tmp_path: Path) -> None:

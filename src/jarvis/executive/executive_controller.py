@@ -13,21 +13,27 @@ conclusion is grounded, tentative, or withheld.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
+from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
 )
+from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.nervous_system.nervous_system import NervousSystem
 
 # Below this evidence-derived confidence, a conclusion is not asserted as grounded
@@ -100,6 +106,84 @@ class ExecutiveController:
 
         self._remember(episode, belief, decision)
         return episode
+
+    def deliberate(
+        self, observation: str, options: Mapping[str, Sequence[Evidence]]
+    ) -> Deliberation:
+        """Weigh competing explanations as a first-class episode (Vision §17).
+
+        Runs the episode lifecycle, routes each option's evidence to a
+        HypothesisSet (correlated to the episode so it is traceable), records the
+        episode in memory as a DELIBERATION, and returns the outcome.
+        """
+        episode = CognitiveEpisode(trigger=observation)
+        self._flush(episode)  # EpisodeStarted
+
+        episode.begin_reasoning()
+        hypotheses = HypothesisSet(observation=observation)
+        for statement, evidences in options.items():
+            hypothesis = hypotheses.propose(statement, correlation_id=episode.id)
+            for piece in evidences:
+                hypotheses.add_evidence(hypothesis.id, piece, correlation_id=episode.id)
+        self._dispatch(hypotheses.pull_events())
+        self._flush(episode)
+
+        episode.begin_reflecting()
+        self._flush(episode)
+        episode.begin_deciding()
+
+        ranking = tuple((h.statement, h.confidence.value) for h in hypotheses.ranked())
+        leader = hypotheses.leading()
+        if leader is None:
+            decision = f"Competing explanations for: {observation} remain undecided."
+            deliberation = Deliberation(
+                observation=observation,
+                leading=None,
+                confidence=Confidence.none(),
+                ranking=ranking,
+                evidence_request=EvidenceRequest(
+                    question=observation,
+                    statement="competing explanations remain undecided",
+                    confidence=Confidence.none(),
+                    needed=(
+                        "evidence that distinguishes the competing explanations for: "
+                        f"{observation}"
+                    ),
+                ),
+                episode_id=episode.id,
+            )
+        else:
+            decision = (
+                f"Most likely explanation for: {observation} is "
+                f"'{leader.statement}' (confidence {leader.confidence.value:.2f})."
+            )
+            deliberation = Deliberation(
+                observation=observation,
+                leading=leader.statement,
+                confidence=leader.confidence,
+                ranking=ranking,
+                evidence_request=None,
+                episode_id=episode.id,
+            )
+        self._flush(episode)
+
+        episode.complete(decision)
+        self._flush(episode)  # EpisodeCompleted
+
+        self._episodes.record(
+            EpisodeRecord(
+                episode_id=episode.id,
+                trigger=observation,
+                decision=decision,
+                working_belief_id=leader.id if leader is not None else "",
+                outcome=episode.state,
+                conclusion_confidence=deliberation.confidence,
+                conclusion_stability=TemporalStability.none(),
+                origin=episode.origin,
+                kind=EpisodeKind.DELIBERATION,
+            )
+        )
+        return deliberation
 
     # -- cognitive steps -----------------------------------------------------
 
@@ -221,12 +305,16 @@ class ExecutiveController:
                 conclusion_confidence=belief.confidence,
                 conclusion_stability=belief.stability,
                 origin=episode.origin,
+                kind=EpisodeKind.CONCLUSION,
             )
         )
 
     # -- event plumbing ------------------------------------------------------
 
     def _flush(self, episode: CognitiveEpisode) -> None:
-        for event in episode.pull_events():
+        self._dispatch(episode.pull_events())
+
+    def _dispatch(self, events: Sequence[CognitiveEvent]) -> None:
+        for event in events:
             self._nervous_system.publish(event)
         self._nervous_system.dispatch()

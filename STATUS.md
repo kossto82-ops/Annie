@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 23)
+Last updated: 2026-08-21 (Increment 24)
 
 ---
 
@@ -78,6 +78,7 @@ src/jarvis/
     entities/belief.py                   Belief (entity) + derive_confidence + BeliefExplanation
     entities/hypothesis.py               Hypothesis (entity, evidence-derived confidence)
     enums/episode_state.py               EpisodeState (6 of 12 conceptual states)
+    enums/episode_kind.py                EpisodeKind (CONCLUSION | DELIBERATION)
     enums/evidence_source.py             EvidenceSource (Vision §8 origins)
     enums/trigger_origin.py              TriggerOrigin (COMPANION | CURIOSITY — who started the episode)
     events/domain_event.py               DomainEvent -> CognitiveEvent (immutable)
@@ -347,6 +348,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Evidence-driven and reversible (D22): appears only while the overconfidence self-belief is confident,
   fades as grounded conclusions become better spread. Read over prior episodes only (no self-reference).
 - Gates: ruff clean · pyright strict 0 errors · pytest 201 passed.
+- Commit `9b7ba4d` pushed to `origin/main`.
+
+### Increment 24 — deliberations are first-class episodes ✅ (2026-08-21)
+- `EpisodeKind` enum (CONCLUSION | DELIBERATION) added to `EpisodeRecord` (JSON store updated).
+  `executive.deliberate(observation, options)` now runs `consider` through the full episode lifecycle:
+  EpisodeStarted…EpisodeCompleted, hypothesis events **correlated to the episode** (new `correlation_id`
+  params on `HypothesisSet.propose`/`add_evidence` and `Hypothesis.add_evidence`), an episodic-memory
+  record (kind DELIBERATION), and a `Deliberation.episode_id`.
+- `jarvis.trace(correlation_id)` exposes a deliberation's ordered trace. Self-observation now filters to
+  `kind == CONCLUSION`, so deliberations never pollute the belief-centric tendencies. Resolves D26.
+- Gates: ruff clean · pyright strict 0 errors · pytest 204 passed.
 
 ---
 
@@ -446,18 +458,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Generalise `EpisodeRecord` so deliberations are first-class episodes (D26, Vision §17, §21).** The
-sharpest remaining structural gap: `jarvis.consider` (competing hypotheses, Increment 19) runs
-*outside* the episode machinery — no episodic-memory record, no per-episode trace — because
-`EpisodeRecord` is belief-centric (`working_belief_id`, `conclusion_confidence`). Deliberations are
-a real act of cognition and should be remembered like any other. The smallest honest step:
-- Make `EpisodeRecord` accommodate a deliberation outcome: e.g. an optional/second shape capturing
-  the observation, the leading explanation (or "undecided"), and its confidence — without breaking the
-  belief-shaped record (keep both, or introduce a small shared `Conclusion` the record holds).
-- Route `consider` through the episode lifecycle (CREATED→…→COMPLETED) and record it, correlating its
-  hypothesis events to the episode so `trace_of` works for deliberations too.
-- Behaviour tests: a `consider` call appends an episode record whose outcome names the leader (or
-  undecided) with its confidence; `trace_of` returns the deliberation's ordered events; history keeps order.
+**Actions: distinguish thinking from acting, with outcome → learning (Vision §27, §20).** So far
+every act of cognition ends in a conclusion or deliberation — Jarvis *thinks* but never *acts*, and
+Vision §27 draws a hard line: an action has an expected outcome, and after it, expected-vs-actual
+becomes learning evidence. This is the missing verb. The smallest honest step (no real side effects
+yet — a recorded intention + outcome):
+- An `Action` value/entity: a description, an `expected` outcome, `confidence`, `reversibility`; and,
+  after it happens, an `actual` outcome. `jarvis.act(description, expected)` records the intention;
+  `jarvis.record_outcome(action, actual)` closes it.
+- The gap between expected and actual becomes `Evidence` feeding a belief about that kind of action
+  (reuse the epistemology) — so repeated mismatches teach Jarvis, repeated matches build confidence.
+- Keep it permission-honest (Vision §28): `act` here only *records* an intended action and its result;
+  it performs nothing autonomously.
+- Behaviour tests: an action whose actual matches expected strengthens a belief that such actions
+  succeed; a mismatch weakens it; the outcome is retrievable as provenance.
 
 *(Deferred, natural follow-ups: more self-observation tendencies (recency bias, complexity); a real DB
 behind the JSON stores; persisting traces; semantic trigger↔trait matching; recurring-goals/working-
@@ -469,9 +483,9 @@ patterns facets; system-level weighting-policy injection + persistence.)*
 
 - `reflection` in the executive is still a placeholder (no genuine review of reasoning); the
   decision policy is a simple confidence threshold (D14).
-- `HypothesisSet` is reached by `jarvis.consider` (Increment 19) but a deliberation is not yet a
-  first-class `CognitiveEpisode` (no episodic-memory record / episode-trace correlation) — deferred
-  until `EpisodeRecord` is generalised (D26).
+- Deliberations reuse `CognitiveEpisode` as a lifecycle shell (no working belief) rather than a
+  belief+hypothesis unified aggregate — clean, but means an episode has two possible shapes gated by
+  `EpisodeKind` rather than one model.
 - Stability is span-based only (no count/recency weighting yet); `TemporalStability` is derived for
   beliefs but not yet for hypotheses.
 - Weighting policy is applied per-belief (default) but not yet injectable at the `Jarvis(...)` level.

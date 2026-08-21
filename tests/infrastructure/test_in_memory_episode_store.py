@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
@@ -20,6 +21,7 @@ def _record(trigger: str) -> EpisodeRecord:
         conclusion_confidence=Confidence(0.5),
         conclusion_stability=TemporalStability(0.5),
         origin=TriggerOrigin.COMPANION,
+        kind=EpisodeKind.CONCLUSION,
     )
 
 

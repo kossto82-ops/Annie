@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
@@ -29,6 +30,7 @@ def _serialise_record(record: EpisodeRecord) -> dict[str, Any]:
         "conclusion_confidence": record.conclusion_confidence.value,
         "conclusion_stability": record.conclusion_stability.value,
         "origin": record.origin.value,
+        "kind": record.kind.value,
         "recorded_at": record.recorded_at.isoformat(),
         "record_id": record.record_id,
     }
@@ -44,6 +46,7 @@ def _deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
         conclusion_confidence=Confidence(data["conclusion_confidence"]),
         conclusion_stability=TemporalStability(data["conclusion_stability"]),
         origin=TriggerOrigin(data["origin"]),
+        kind=EpisodeKind(data["kind"]),
         recorded_at=datetime.fromisoformat(data["recorded_at"]),
         record_id=data["record_id"],
     )

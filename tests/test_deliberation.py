@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from jarvis import Jarvis
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -85,3 +86,37 @@ class TestConsider:
         options: dict[str, Sequence[Evidence]] = {"a": [_ev(0.5)], "b": [_ev(0.5)]}
         jarvis.consider(_OBS, options)
         assert any(isinstance(e, HypothesisCreated) for e in seen)
+
+
+class TestDeliberationIsAFirstClassEpisode:
+    def test_a_deliberation_is_recorded_in_episodic_memory(self) -> None:
+        jarvis = Jarvis()
+        result = jarvis.consider(_OBS, {"they are busy": [_ev(0.9)]})
+        history = jarvis.episodes.history()
+        assert len(history) == 1
+        record = history[0]
+        assert record.episode_id == result.episode_id
+        assert record.trigger == _OBS
+        assert record.kind is EpisodeKind.DELIBERATION
+
+    def test_a_deliberation_is_traceable(self) -> None:
+        from jarvis.domain.events.episode_events import (
+            EpisodeCompleted,
+            EpisodeStarted,
+        )
+        from jarvis.domain.events.hypothesis_events import HypothesisCreated
+
+        jarvis = Jarvis()
+        result = jarvis.consider(_OBS, {"they are busy": [_ev(0.9)]})
+        kinds = [type(e) for e in jarvis.trace(result.episode_id)]
+        assert kinds[0] is EpisodeStarted
+        assert kinds[-1] is EpisodeCompleted
+        assert HypothesisCreated in kinds
+
+    def test_deliberations_do_not_pollute_self_observation(self) -> None:
+        # A deliberation is not a single-belief conclusion, so it must not count
+        # toward the evidence-habit / overconfidence tendencies.
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.consider(f"observation {topic}", {"x": [], "y": []})
+        assert jarvis.observe_self() is None  # no CONCLUSION episodes to judge

@@ -25,3 +25,4 @@ class Deliberation:
     confidence: Confidence  # confidence in the leader (none if undecided)
     ranking: tuple[tuple[str, float], ...]  # (statement, confidence) descending
     evidence_request: EvidenceRequest | None  # what would decide it, when undecided
+    episode_id: str  # the episode this deliberation was carried out in

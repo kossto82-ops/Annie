@@ -60,13 +60,17 @@ class Hypothesis:
     def evidence(self) -> tuple[Evidence, ...]:
         return tuple(self._evidence)
 
-    def add_evidence(self, evidence: Evidence) -> None:
-        """Attach evidence; its effect on relative confidence is read via the set."""
+    def add_evidence(self, evidence: Evidence, correlation_id: str | None = None) -> None:
+        """Attach evidence; its effect on relative confidence is read via the set.
+
+        ``correlation_id`` lets a wider process (a deliberation episode) group
+        this event with it; defaults to the hypothesis's own id.
+        """
         self._evidence.append(evidence)
         self._record(
             EvidenceAdded(
                 subject_id=self.id,
-                correlation_id=self.id,
+                correlation_id=correlation_id or self.id,
                 evidence_id=evidence.id,
                 supports=evidence.supports,
             )
