@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 18)
+Last updated: 2026-08-21 (Increment 19)
 
 ---
 
@@ -90,6 +90,7 @@ src/jarvis/
     value_objects/temporal_stability.py  TemporalStability (immutable [0,1]; time axis, ≠ confidence)
     value_objects/episode_record.py      EpisodeRecord (immutable memory of a completed episode)
     value_objects/evidence_request.py    EvidenceRequest (what an ungrounded episode is missing)
+    value_objects/deliberation.py        Deliberation (outcome of weighing competing explanations)
 tests/                                   45 behaviour tests mirroring the above
 ```
 
@@ -296,6 +297,15 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - `episode.evidence_request` exposes the gap as structured, actionable data (Vision §16, §37) —
   not just prose in the decision string. Derived from the real gap, and absent once grounded.
 - Gates: ruff clean · pyright strict 0 errors · pytest 175 passed.
+- Commit `3490aab` pushed to `origin/main`.
+
+### Increment 19 — reason with competing explanations ✅ (2026-08-21)
+- `jarvis.consider(observation, options)` weighs competing explanations via a `HypothesisSet`
+  (built in Increment 3, now reached by cognition). It routes each option's evidence, dispatches the
+  set's events, and returns a `Deliberation`: the ranking (descending), the leading explanation with
+  its derived confidence — or, on a tie / no evidence, **no leader plus an `EvidenceRequest`** for
+  what would decide (Vision §17, §37: never collapse uncertainty prematurely).
+- Gates: ruff clean · pyright strict 0 errors · pytest 181 passed.
 
 ---
 
@@ -380,6 +390,12 @@ with belief + episode events dispatched through the NervousSystem at each step.
   to" (Vision §26); inside an episode that process is the episode. Outside an episode a belief still
   correlates to its own id. The `EpisodeTrace` is a read-only observer (subscriber); it never drives
   cognition. This is internal provenance, not user-facing chain-of-thought.
+- **D26** Hypothesis deliberation (`consider`) is a **distinct cognition shape** from a single-belief
+  episode; it is NOT forced through the belief-centric `CognitiveEpisode`/`EpisodeRecord`. `consider`
+  dispatches its hypothesis events (so subscribers/trace observe them) and returns a `Deliberation`.
+  Recording deliberations to episodic memory and per-episode trace-correlation are deferred until
+  `EpisodeRecord` is generalised beyond a single working belief. Refined from the Increment-18
+  next-step note once the belief-centric record proved a poor fit (anti-vagueness: smallest reversible).
 - **D19** Source→weight factors live in one policy (`SourceWeightingPolicy`), not scattered constants,
   and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
   the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
@@ -389,22 +405,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Wire `HypothesisSet` into episodes: reason with competing explanations (Vision §17).** The
-epistemology has two shapes — a single working belief (used by `think()`) and competing hypotheses
-(`HypothesisSet`, built in Increment 3 but never reached by cognition). Vision §17 wants Jarvis to
-hold several explanations for an observation and let evidence shift them, instead of collapsing to
-one. The smallest honest step:
-- A cognition entry point (e.g. `jarvis.consider(observation, hypotheses=[...])`) that runs an
-  episode which routes evidence to a `HypothesisSet` and concludes with the leading hypothesis — or,
-  honestly, "no leader yet" when the top two tie (no premature collapse).
-- Reuse the episode lifecycle, events, trace and (later) memory; the decision names the leading
-  explanation and its confidence, or requests evidence when undecided.
-- Behaviour tests: competing explanations re-rank as evidence arrives; a tie yields no leader and an
-  evidence request; the winning explanation is reported with its derived confidence.
+**Unify the two [0,1] magnitudes behind a `UnitInterval` base (engineering hygiene, now earned).**
+Three value objects — `Confidence`, `TemporalStability`, and the implicit weight/relevance thresholds
+— share the exact same validation shape (reject <0 / >1 / NaN / bool). The rule of three has now been
+met (Confidence, TemporalStability, and repeated threshold logic), so a shared base is justified — no
+longer speculative (D12/D18 said "extract on the third"). The smallest honest step:
+- A `UnitInterval` frozen base (or mixin) holding the validation; `Confidence` and `TemporalStability`
+  derive from it, keeping their distinct types and helper methods (`is_stronger_than`,
+  `is_more_stable_than`) so the domain never conflates the two axes.
+- No behavioural change — pure consolidation; every existing test must stay green unchanged.
+- Behaviour tests: the shared validation still rejects out-of-range/NaN/bool for both types; the two
+  types remain distinct (a `Confidence` is not a `TemporalStability`).
 
-*(Deferred, natural follow-ups: a real DB behind the JSON stores; persisting traces; semantic
-trigger↔trait matching; recurring-goals/working-patterns facets; system-level weighting-policy
-injection + persistence; a `UnitInterval` base.)*
+*(Deferred, natural follow-ups: generalise `EpisodeRecord` so deliberations are first-class episodes
+(D26); a real DB behind the JSON stores; persisting traces; semantic trigger↔trait matching;
+recurring-goals/working-patterns facets; system-level weighting-policy injection + persistence.)*
 
 ---
 
@@ -412,7 +427,9 @@ injection + persistence; a `UnitInterval` base.)*
 
 - `reflection` in the executive is still a placeholder (no genuine review of reasoning); the
   decision policy is a simple confidence threshold (D14).
-- `HypothesisSet` exists but is **not yet wired into episodes** (episodes use a single belief).
+- `HypothesisSet` is reached by `jarvis.consider` (Increment 19) but a deliberation is not yet a
+  first-class `CognitiveEpisode` (no episodic-memory record / episode-trace correlation) — deferred
+  until `EpisodeRecord` is generalised (D26).
 - Stability is span-based only (no count/recency weighting yet); `TemporalStability` is derived for
   beliefs but not yet for hypotheses.
 - Weighting policy is applied per-belief (default) but not yet injectable at the `Jarvis(...)` level.

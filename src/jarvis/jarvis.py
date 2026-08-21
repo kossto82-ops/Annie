@@ -7,10 +7,11 @@ subscribe to cognitive events *before* thinking begins.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
+from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
@@ -18,8 +19,11 @@ from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.self_observation import observe_evidence_habit
+from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
+from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.executive.executive_controller import ExecutiveController
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
@@ -86,6 +90,51 @@ class Jarvis:
         """
         episode = CognitiveEpisode(trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY)
         return self._executive.run(episode)
+
+    def consider(
+        self, observation: str, options: Mapping[str, Sequence[Evidence]]
+    ) -> Deliberation:
+        """Weigh competing explanations for ``observation`` (Vision §17).
+
+        ``options`` maps each candidate explanation to the evidence bearing on it.
+        Returns the current ranking and the leading explanation -- or, when the
+        top two are tied, no leader and a request for evidence that would decide.
+        """
+        hypotheses = HypothesisSet(observation=observation)
+        for statement, evidences in options.items():
+            hypothesis = hypotheses.propose(statement)
+            for piece in evidences:
+                hypotheses.add_evidence(hypothesis.id, piece)
+        for event in hypotheses.pull_events():
+            self.nervous_system.publish(event)
+        self.nervous_system.dispatch()
+
+        ranking = tuple((h.statement, h.confidence.value) for h in hypotheses.ranked())
+        leader = hypotheses.leading()
+        if leader is None:
+            request = EvidenceRequest(
+                question=observation,
+                statement="competing explanations remain undecided",
+                confidence=Confidence.none(),
+                needed=(
+                    "evidence that distinguishes the competing explanations for: "
+                    f"{observation}"
+                ),
+            )
+            return Deliberation(
+                observation=observation,
+                leading=None,
+                confidence=Confidence.none(),
+                ranking=ranking,
+                evidence_request=request,
+            )
+        return Deliberation(
+            observation=observation,
+            leading=leader.statement,
+            confidence=leader.confidence,
+            ranking=ranking,
+            evidence_request=None,
+        )
 
     def trace_of(self, episode: CognitiveEpisode) -> tuple[CognitiveEvent, ...]:
         """The ordered cognitive events of ``episode`` -- its decision provenance
