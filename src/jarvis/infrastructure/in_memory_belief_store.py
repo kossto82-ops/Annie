@@ -25,3 +25,6 @@ class InMemoryBeliefStore:
 
     def save(self, belief: Belief) -> None:
         self._by_statement[belief.statement] = belief
+
+    def all_beliefs(self) -> tuple[Belief, ...]:
+        return tuple(self._by_statement.values())

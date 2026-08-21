@@ -80,6 +80,9 @@ class JsonBeliefStore:
         self._by_statement[belief.statement] = belief
         self._flush()
 
+    def all_beliefs(self) -> tuple[Belief, ...]:
+        return tuple(self._by_statement.values())
+
     def _load(self) -> None:
         if not self._path.exists():
             return

@@ -33,11 +33,12 @@ class Jarvis:
         nervous_system: NervousSystem | None = None,
         beliefs: BeliefRepository | None = None,
         episodes: EpisodeRepository | None = None,
+        companion_store: BeliefRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
         self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
-        self.companion = CompanionModel()
+        self.companion = CompanionModel(companion_store or InMemoryBeliefStore())
         self._executive = ExecutiveController(
             self.nervous_system, self.beliefs, self.episodes, self.companion
         )

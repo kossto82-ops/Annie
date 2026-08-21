@@ -24,6 +24,7 @@ def _boot(tmp_path: Path) -> Jarvis:
     return Jarvis(
         beliefs=JsonBeliefStore(tmp_path / "beliefs.json"),
         episodes=JsonEpisodeStore(tmp_path / "episodes.json"),
+        companion_store=JsonBeliefStore(tmp_path / "companion.json"),
     )
 
 
@@ -62,3 +63,19 @@ class TestContinuityAcrossRestart:
         self_belief = second_run.observe_self()
         assert self_belief is not None
         assert self_belief.confidence.value > 0.0
+
+    def test_companion_model_survives_a_restart_and_still_informs(self, tmp_path: Path) -> None:
+        # Jarvis must not forget the person it is meant to know (Vision §5).
+        trait = "prefers simplicity"
+        first_run = _boot(tmp_path)
+        first_run.observe_companion(trait, _ev(0.9))
+        first_run.observe_companion(trait, _ev(0.9))
+
+        second_run = _boot(tmp_path)
+        belief = second_run.companion.belief_about(trait)
+        assert belief is not None
+        assert len(belief.evidence) == 2
+        # And it still shapes cognition after the restart (Increment 14).
+        episode = second_run.think(f"will they be happy if they {trait}?")
+        assert episode.working_belief is not None
+        assert episode.working_belief.confidence.value > 0.0

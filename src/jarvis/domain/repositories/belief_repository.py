@@ -27,3 +27,7 @@ class BeliefRepository(Protocol):
     def save(self, belief: Belief) -> None:
         """Persist (insert or update) a belief."""
         ...
+
+    def all_beliefs(self) -> tuple[Belief, ...]:
+        """Every belief currently stored."""
+        ...

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 15)
+Last updated: 2026-08-21 (Increment 16)
 
 ---
 
@@ -65,7 +65,7 @@ src/jarvis/
   infrastructure/json_belief_store.py         JsonBeliefStore (file-backed, survives restart)
   infrastructure/json_episode_store.py        JsonEpisodeStore (file-backed, survives restart)
   domain/
-    repositories/belief_repository.py    BeliefRepository (Protocol) — persist/retrieve beliefs
+    repositories/belief_repository.py    BeliefRepository (Protocol) — get/save/all_beliefs
     repositories/episode_repository.py   EpisodeRepository (Protocol) — record/history of episodes
     services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
     services/self_observation.py         observe_evidence_habit — a belief about Jarvis (Vision §6/§31)
@@ -263,6 +263,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Belief reconstruction goes through the existing constructor (`_evidence=`), so no domain change;
   the weighting policy is not persisted (a reloaded belief uses the default).
 - Gates: ruff clean · pyright strict 0 errors · pytest 167 passed.
+- Commit `bfd6e41` pushed to `origin/main`.
+
+### Increment 16 — persist the companion model ✅ (2026-08-21)
+- `BeliefRepository` gained `all_beliefs()` (implemented by both in-memory and JSON stores).
+  `CompanionModel` now stores its beliefs through an injected `BeliefRepository` (its own store)
+  instead of a bare dict — so the model of the person persists with the same machinery (Vision §21),
+  and the aggregate stays free of infrastructure (repository injected, no default in the domain).
+- `Jarvis(companion_store=...)` selectable (its own file/namespace, distinct from working beliefs);
+  default in-memory. Verified across two processes: a trait learned before a restart is still
+  believed after it — and still informs cognition (Increment 14) post-restart (Vision §5).
+- Gates: ruff clean · pyright strict 0 errors · pytest 168 passed.
 
 ---
 
@@ -351,20 +362,23 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Persist the companion model (Vision §3, §5, §21).** Beliefs and episodes now survive a restart, but
-Jarvis's model of *its companion* is still in-process only — so across a restart it forgets the person
-it is meant to know long-term, which is the sharpest remaining continuity gap. The companion model is
-just beliefs, so this reuses Increment 15's serialisation:
-- Back `CompanionModel` with a `BeliefRepository` (its own store/namespace) instead of a bare dict,
-  or give it a small dedicated file-backed store, so companion beliefs persist and reload with their
-  evidence (confidence re-derived, Vision §22).
-- `Jarvis(companion_store=...)` selectable; default stays in-memory.
-- Behaviour tests: a trait observed before a restart is still believed after it (same statement,
-  evidence, derived confidence), and it still informs cognition (Increment 14) post-restart.
+**Correlate cognitive events into a per-episode trace (Vision §26 decision provenance).** The whole
+system already emits immutable events (EpisodeStarted, EvidenceAdded, BeliefStrengthened,
+ContradictionDetected, EpisodeCompleted) through the NervousSystem, each carrying `correlation_id`
+and `causation_id` — but nothing yet assembles them into the end-to-end trace the vision asks for:
+Goal → Evidence → Beliefs → Reasoning → Confidence → Decision (Vision §26), preserved as structured
+provenance. The smallest honest step:
+- An `EpisodeTrace` collector that subscribes to the NervousSystem and groups events by their
+  episode/correlation into an ordered, queryable trace of what happened inside one act of cognition.
+- Expose it (e.g. `jarvis.last_trace()` or on the returned episode) so a decision's internal
+  provenance is inspectable — not exposing hidden chain-of-thought to end users, but keeping a
+  structured record (Vision §26).
+- Behaviour tests: a grounded `think()` produces a trace ordered Started → EvidenceAdded(+strength)
+  → Completed; a contested one includes the ContradictionDetected; correlation ties them to one episode.
 
-*(Deferred, natural follow-ups: a real DB behind the JSON stores; semantic trigger↔trait matching;
-recurring-goals/working-patterns facets; wiring `HypothesisSet` into episodes; system-level
-weighting-policy injection + its persistence; a `UnitInterval` base if a third [0,1] type appears.)*
+*(Deferred, natural follow-ups: a real DB behind the JSON stores; persisting traces; semantic
+trigger↔trait matching; recurring-goals/working-patterns facets; wiring `HypothesisSet` into episodes;
+system-level weighting-policy injection + persistence; a `UnitInterval` base.)*
 
 ---
 

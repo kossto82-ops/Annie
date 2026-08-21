@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.events.domain_event import CognitiveEvent
+from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.value_objects.evidence import Evidence
 
 # A companion-belief only informs new cognition once it is at least this confident
@@ -25,29 +26,34 @@ _RELEVANCE_CONFIDENCE = 0.5
 
 
 class CompanionModel:
-    """A set of beliefs about the companion, each grounded in evidence."""
+    """A set of beliefs about the companion, each grounded in evidence.
 
-    def __init__(self) -> None:
-        self._beliefs: dict[str, Belief] = {}
+    Beliefs live in an injected ``BeliefRepository`` (its own store), so the model
+    of the companion persists with the same machinery as any other belief
+    (Vision §21) while the aggregate itself stays free of infrastructure.
+    """
+
+    def __init__(self, beliefs: BeliefRepository) -> None:
+        self._beliefs = beliefs
         self._pending_events: list[CognitiveEvent] = []
 
     def observe(self, trait: str, evidence: Evidence) -> Belief:
         """Record an observation about the companion, evolving the matching belief."""
-        belief = self._beliefs.get(trait)
+        belief = self._beliefs.get_by_statement(trait)
         if belief is None:
             belief = Belief(statement=trait)
-            self._beliefs[trait] = belief
         belief.add_evidence(evidence)
+        self._beliefs.save(belief)
         self._pending_events.extend(belief.pull_events())
         return belief
 
     def belief_about(self, trait: str) -> Belief | None:
         """What Jarvis currently believes about ``trait``, or None if nothing yet."""
-        return self._beliefs.get(trait)
+        return self._beliefs.get_by_statement(trait)
 
     def beliefs(self) -> tuple[Belief, ...]:
         """Every belief Jarvis holds about the companion."""
-        return tuple(self._beliefs.values())
+        return self._beliefs.all_beliefs()
 
     def relevant_to(self, trigger: str) -> Belief | None:
         """A confidently-held companion belief bearing on ``trigger``, or None.
@@ -56,7 +62,7 @@ class CompanionModel:
         deterministic relation for now (semantic matching is a later concern).
         """
         lowered = trigger.lower()
-        for belief in self._beliefs.values():
+        for belief in self._beliefs.all_beliefs():
             if (
                 belief.statement.lower() in lowered
                 and belief.confidence.value >= _RELEVANCE_CONFIDENCE
@@ -66,7 +72,7 @@ class CompanionModel:
 
     def summarise(self) -> list[str]:
         """A plain-language account of each belief about the companion (Vision §5, §40)."""
-        return [belief.explain().narrate() for belief in self._beliefs.values()]
+        return [belief.explain().narrate() for belief in self._beliefs.all_beliefs()]
 
     def pull_events(self) -> list[CognitiveEvent]:
         """Return and clear the events recorded since the last pull."""
