@@ -132,6 +132,36 @@ class TestTemporalStability:
         assert belief.stability.value == 0.0
 
 
+class TestSourceWeighting:
+    def _belief_with(self, source: EvidenceSource) -> Belief:
+        belief = Belief(statement="the user prefers simplicity")
+        belief.add_evidence(
+            Evidence(content="obs", source=source, weight=Confidence(0.8))
+        )
+        return belief
+
+    def test_source_shapes_confidence_for_equal_raw_weight(self) -> None:
+        # Same raw weight (0.8), different source -> different confidence (Vision §11).
+        confirmed = self._belief_with(EvidenceSource.USER_STATEMENT)
+        observed = self._belief_with(EvidenceSource.DIRECT_OBSERVATION)
+        assert confirmed.confidence.is_stronger_than(observed.confidence)
+
+    def test_weighting_policy_is_injectable(self) -> None:
+        from jarvis.domain.services.evidence_weighting import SourceWeightingPolicy
+
+        sceptical = Belief(
+            statement="x",
+            weighting_policy=SourceWeightingPolicy(
+                factors={EvidenceSource.USER_STATEMENT: 0.1}
+            ),
+        )
+        trusting = Belief(statement="y")  # default policy
+        piece = dict(source=EvidenceSource.USER_STATEMENT, weight=Confidence(0.8))
+        sceptical.add_evidence(Evidence(content="o", **piece))  # type: ignore[arg-type]
+        trusting.add_evidence(Evidence(content="o", **piece))  # type: ignore[arg-type]
+        assert trusting.confidence.is_stronger_than(sceptical.confidence)
+
+
 class TestEvents:
     def test_supporting_evidence_emits_added_then_strengthened(self) -> None:
         belief = Belief(statement="x")

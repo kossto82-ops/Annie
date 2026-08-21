@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 6)
+Last updated: 2026-08-21 (Increment 7)
 
 ---
 
@@ -63,6 +63,7 @@ src/jarvis/
   infrastructure/in_memory_belief_store.py   InMemoryBeliefStore (BeliefRepository impl)
   domain/
     repositories/belief_repository.py    BeliefRepository (Protocol) — persist/retrieve beliefs
+    services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
     aggregates/cognitive_episode.py      CognitiveEpisode (aggregate root) + InvalidStateTransition
     aggregates/hypothesis_set.py         HypothesisSet (competing hypotheses) + UnknownHypothesis
     entities/belief.py                   Belief (entity) + derive_confidence + BeliefExplanation
@@ -149,6 +150,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   below `LOW_STABILITY_THRESHOLD` (0.2) carries a caution ("narrow time window — possible
   overfitting"). Same confidence + different time spread → different behaviour.
 - Gates: ruff clean · pyright strict 0 errors · pytest 110 passed.
+- Commit `4fbb2be` pushed to `origin/main`.
+
+### Increment 7 — source-based evidence weighting ✅ (2026-08-21)
+- `EvidenceWeightingPolicy` protocol + `SourceWeightingPolicy` (domain **service**, first `services/`).
+  Turns an evidence's *raw* weight into an *effective* weight via a per-source factor, without
+  mutating the evidence (provenance intact). Enacts Vision §11: explicit confirmation
+  (`USER_STATEMENT` ×1.0) > repeated behaviour (`REPEATED_BEHAVIOR` ×0.8) > lone observation
+  (`DIRECT_OBSERVATION` ×0.5).
+- `derive_confidence(evidence, policy=DEFAULT_WEIGHTING)` uses effective weights; `Belief` carries an
+  injectable `weighting_policy` (default keeps `USER_STATEMENT` behaviour unchanged). Same raw weight,
+  different source → different confidence.
+- Gates: ruff clean · pyright strict 0 errors · pytest 118 passed.
 
 ---
 
@@ -203,24 +216,30 @@ with belief + episode events dispatched through the NervousSystem at each step.
   axes must not collapse), even though both are [0,1] magnitudes. A shared `UnitInterval` base is a
   candidate only on the third such type (rule of three). Stability scale `STABILITY_REFERENCE = 30d`
   and `LOW_STABILITY_THRESHOLD = 0.2` are tunable; stability is span-based (count-weighting deferred).
+- **D19** Source→weight factors live in one policy (`SourceWeightingPolicy`), not scattered constants,
+  and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
+  the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
+  prior USER_STATEMENT-based tests/behaviour are unchanged; other sources scale down.
 
 ---
 
 ## Next increment (recommended, not yet started)
 
-**Source-based evidence weighting + explicit-confirmation strength (Vision §11).** Today the caller
-assigns each `Evidence.weight` by hand and `EvidenceSource` is recorded but unused. The vision wants
-the *source* to shape how much a piece of evidence counts: explicit confirmation from the companion
-should weigh strongly; a single isolated observation weakly; repeated behaviour more than a one-off.
-- A small domain policy mapping `EvidenceSource` (+ supports/contradicts) to an effective weight,
-  applied when evidence enters a belief — without losing the raw weight (provenance stays intact).
-- Enacts §11 directly: `USER_STATEMENT` (explicit confirmation) > `REPEATED_BEHAVIOR` > a lone
-  `DIRECT_OBSERVATION`. Keep it a named, testable policy object, not scattered constants.
-- Behaviour tests: identical raw weight but different source yields different effective contribution;
-  explicit confirmation outweighs an isolated observation; the policy is injectable.
+**"Why do you believe this?" — a genuine explanation surface (Vision §26, §40).** The provenance is
+already captured (`belief.explain()` returns supporting/contradicting evidence; confidence, stability
+and source weighting all derive from it). The next step turns that into the thing the vision holds up
+as *the* deliverable: Jarvis being able to say, in words, why it holds a belief, how strongly, how
+stable it is, and what would change its mind.
+- A `BeliefExplanation.narrate()` (or a small explainer service) that renders the structured
+  provenance into a human-readable account: statement, confidence, stability, the strongest
+  supporting evidence (with source), any contradictions, and an honest uncertainty note.
+- Surface it on the episode result so `think()` can explain its own decision on request.
+- Behaviour tests: a grounded belief narrates its supporting evidence and confidence; a contested
+  belief names the contradiction; an ungrounded belief says it lacks evidence.
 
 *(Deferred, natural follow-ups: episodic memory of past episodes; wiring `HypothesisSet` into
-episodes; a durable (DB-backed) `BeliefRepository`; a `UnitInterval` base if a third [0,1] type appears.)*
+episodes; a durable (DB-backed) `BeliefRepository`; system-level injection of the weighting policy
+via `Jarvis(...)`; a `UnitInterval` base if a third [0,1] type appears.)*
 
 ---
 
@@ -231,8 +250,7 @@ episodes; a durable (DB-backed) `BeliefRepository`; a `UnitInterval` base if a t
 - `HypothesisSet` exists but is **not yet wired into episodes** (episodes use a single belief).
 - Stability is span-based only (no count/recency weighting yet); `TemporalStability` is derived for
   beliefs but not yet for hypotheses.
-- Source-based evidence weighting (Vision §11) not implemented — caller sets `weight`; `EvidenceSource`
-  is recorded but does not yet influence contribution (next increment).
+- Weighting policy is applied per-belief (default) but not yet injectable at the `Jarvis(...)` level.
 - Persistence is process-lifetime only (`InMemoryBeliefStore`); no durable/DB store yet.
 - Belief retrieval keys on the exact trigger string (D17), not semantic meaning of statements.
 - Source-based weighting policy (Vision §11: explicit confirmation weighs more) not implemented —

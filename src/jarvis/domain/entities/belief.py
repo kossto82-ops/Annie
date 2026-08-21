@@ -37,6 +37,10 @@ from jarvis.domain.events.belief_events import (
 )
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.evidence_events import EvidenceAdded
+from jarvis.domain.services.evidence_weighting import (
+    DEFAULT_WEIGHTING,
+    EvidenceWeightingPolicy,
+)
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
@@ -48,10 +52,18 @@ _PRIOR = 1.0
 STABILITY_REFERENCE = timedelta(days=30)
 
 
-def derive_confidence(evidence: tuple[Evidence, ...]) -> Confidence:
-    """Compute a belief's confidence purely from the evidence supporting it."""
-    supporting = sum(e.weight.value for e in evidence if e.supports)
-    contradicting = sum(e.weight.value for e in evidence if e.contradicts)
+def derive_confidence(
+    evidence: tuple[Evidence, ...],
+    policy: EvidenceWeightingPolicy = DEFAULT_WEIGHTING,
+) -> Confidence:
+    """Compute a belief's confidence from its evidence, weighted by source.
+
+    Each piece contributes its *effective* weight (raw weight scaled by ``policy``
+    from its source), so explicit confirmation counts for more than an isolated
+    observation (Vision §11) without altering the raw evidence.
+    """
+    supporting = sum(policy.effective_weight(e) for e in evidence if e.supports)
+    contradicting = sum(policy.effective_weight(e) for e in evidence if e.contradicts)
     return Confidence(supporting / (supporting + contradicting + _PRIOR))
 
 
@@ -108,6 +120,7 @@ class Belief:
     statement: str
     id: str = field(default_factory=_new_id)
     formed_at: datetime = field(default_factory=_now)
+    weighting_policy: EvidenceWeightingPolicy = DEFAULT_WEIGHTING
     _evidence: list[Evidence] = field(default_factory=_empty_evidence, repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
@@ -120,7 +133,7 @@ class Belief:
     @property
     def confidence(self) -> Confidence:
         """The belief's strength, always derived from its current evidence."""
-        return derive_confidence(tuple(self._evidence))
+        return derive_confidence(tuple(self._evidence), self.weighting_policy)
 
     @property
     def stability(self) -> TemporalStability:
