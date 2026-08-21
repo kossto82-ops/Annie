@@ -7,40 +7,25 @@ time is that support?". A belief can be highly confident yet unstable (a single
 recent burst of evidence) -- exactly the situation Jarvis must treat with caution
 to avoid overfitting to isolated events (Vision §11).
 
-Like ``Confidence`` it is an immutable magnitude in [0, 1] that rejects invalid
-input rather than clamping. The two share validation shape but not identity; a
-common ``UnitInterval`` base is a candidate only once a third such type appears
-(rule of three).
+It shares the [0, 1] validation of :class:`UnitInterval` but is a distinct type,
+so stability and confidence can never be conflated.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-_MINIMUM = 0.0
-_MAXIMUM = 1.0
+from jarvis.domain.value_objects.unit_interval import UnitInterval
 
 
 @dataclass(frozen=True, slots=True)
-class TemporalStability:
+class TemporalStability(UnitInterval):
     """How steady a belief's support has been over time, in [0.0, 1.0]."""
-
-    value: float
-
-    def __post_init__(self) -> None:
-        if self.value is True or self.value is False:
-            raise TypeError("TemporalStability must be a real number, not a bool")
-        if self.value != self.value:  # NaN
-            raise ValueError("TemporalStability must not be NaN")
-        if not _MINIMUM <= self.value <= _MAXIMUM:
-            raise ValueError(
-                f"TemporalStability must be within [{_MINIMUM}, {_MAXIMUM}], got {self.value}"
-            )
 
     @classmethod
     def none(cls) -> TemporalStability:
         """No temporal stability (e.g. a single-moment belief)."""
-        return cls(_MINIMUM)
+        return cls(0.0)
 
     def is_more_stable_than(self, other: TemporalStability) -> bool:
         return self.value > other.value

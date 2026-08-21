@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 19)
+Last updated: 2026-08-21 (Increment 20)
 
 ---
 
@@ -85,9 +85,10 @@ src/jarvis/
     events/evidence_events.py            EvidenceAdded (shared by belief + hypothesis)
     events/belief_events.py              BeliefStrengthened, BeliefWeakened, ContradictionDetected
     events/hypothesis_events.py          HypothesisCreated
-    value_objects/confidence.py          Confidence (immutable, validated [0,1])
+    value_objects/unit_interval.py       UnitInterval (shared [0,1] validation base)
+    value_objects/confidence.py          Confidence (UnitInterval subtype)
     value_objects/evidence.py            Evidence (immutable, weighted, supports/contradicts)
-    value_objects/temporal_stability.py  TemporalStability (immutable [0,1]; time axis, ≠ confidence)
+    value_objects/temporal_stability.py  TemporalStability (UnitInterval subtype; time axis, ≠ confidence)
     value_objects/episode_record.py      EpisodeRecord (immutable memory of a completed episode)
     value_objects/evidence_request.py    EvidenceRequest (what an ungrounded episode is missing)
     value_objects/deliberation.py        Deliberation (outcome of weighing competing explanations)
@@ -306,6 +307,15 @@ with belief + episode events dispatched through the NervousSystem at each step.
   its derived confidence — or, on a tie / no evidence, **no leader plus an `EvidenceRequest`** for
   what would decide (Vision §17, §37: never collapse uncertainty prematurely).
 - Gates: ruff clean · pyright strict 0 errors · pytest 181 passed.
+- Commit `95b5e63` pushed to `origin/main`.
+
+### Increment 20 — UnitInterval base (consolidation) ✅ (2026-08-21)
+- `UnitInterval` frozen base holds the shared [0,1] validation (reject <0 / >1 / NaN / bool).
+  `Confidence` and `TemporalStability` now derive from it but stay **distinct types** with their own
+  helpers (`is_stronger_than`, `is_more_stable_than`), so the two axes are never conflated (Vision §10).
+- Pure consolidation — no behaviour change: all 181 prior tests stayed green unchanged; 10 new tests
+  pin the shared validation and type distinctness. Fulfils the rule-of-three deferral in D12/D18.
+- Gates: ruff clean · pyright strict 0 errors · pytest 191 passed.
 
 ---
 
@@ -405,17 +415,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Unify the two [0,1] magnitudes behind a `UnitInterval` base (engineering hygiene, now earned).**
-Three value objects — `Confidence`, `TemporalStability`, and the implicit weight/relevance thresholds
-— share the exact same validation shape (reject <0 / >1 / NaN / bool). The rule of three has now been
-met (Confidence, TemporalStability, and repeated threshold logic), so a shared base is justified — no
-longer speculative (D12/D18 said "extract on the third"). The smallest honest step:
-- A `UnitInterval` frozen base (or mixin) holding the validation; `Confidence` and `TemporalStability`
-  derive from it, keeping their distinct types and helper methods (`is_stronger_than`,
-  `is_more_stable_than`) so the domain never conflates the two axes.
-- No behavioural change — pure consolidation; every existing test must stay green unchanged.
-- Behaviour tests: the shared validation still rejects out-of-range/NaN/bool for both types; the two
-  types remain distinct (a `Confidence` is not a `TemporalStability`).
+**A second self-observation tendency: overconfidence (Vision §6, §31).** Self-observation currently
+detects exactly one tendency ("I conclude without sufficient evidence"). The vision lists several
+(overconfidence, recency bias, excessive complexity). The next honest, high-value one — and now
+directly measurable thanks to the temporal-stability axis (Increment 6) and episode records — is
+**overconfidence**: reaching grounded conclusions that rest on narrow, unstable evidence.
+- Record stability alongside `conclusion_confidence` on `EpisodeRecord` (or derive it), so a
+  self-observation can spot episodes that concluded "grounded" yet with low stability.
+- `observe_overconfidence(history)` → a belief about Jarvis ("I tend to be overconfident on thin
+  evidence"), grounded like the evidence-habit belief; surfaced via `observe_self()` alongside it.
+- Keep it symmetric with Increment 10/11/12: it can raise curiosity and, once confident, temper how
+  `think()` phrases a grounded-but-unstable conclusion.
+- Behaviour tests: a history of grounded-but-low-stability conclusions forms the overconfidence
+  self-belief; a history of well-spread grounded conclusions does not.
 
 *(Deferred, natural follow-ups: generalise `EpisodeRecord` so deliberations are first-class episodes
 (D26); a real DB behind the JSON stores; persisting traces; semantic trigger↔trait matching;
