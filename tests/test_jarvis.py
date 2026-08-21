@@ -179,3 +179,28 @@ class TestContinuityAcrossEpisodes:
         second = jarvis.think(question)  # revisited with no new evidence
         assert second.result is not None
         assert "Tentative" in second.result
+
+
+class TestSelfObservation:
+    def test_no_self_belief_without_enough_history(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("only one question")
+        assert jarvis.observe_self() is None
+
+    def test_habitually_ungrounded_thinking_becomes_a_self_belief(self) -> None:
+        # Vision §6, §31: Jarvis notices its own tendency from measurable history.
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"an unfounded question about {topic}")  # no evidence
+        self_belief = jarvis.observe_self()
+        assert self_belief is not None
+        assert self_belief.confidence.value > 0.0
+        assert "sufficient evidence" in self_belief.statement
+
+    def test_well_grounded_thinking_does_not_incriminate_jarvis(self) -> None:
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"question about {topic}", evidence=[_ev(0.9), _ev(0.9)])
+        self_belief = jarvis.observe_self()
+        assert self_belief is not None
+        assert self_belief.confidence == Confidence.none()

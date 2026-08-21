@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from jarvis.domain.enums.episode_state import EpisodeState
+from jarvis.domain.value_objects.confidence import Confidence
 
 
 def _now() -> datetime:
@@ -22,12 +23,18 @@ def _now() -> datetime:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class EpisodeRecord:
-    """A snapshot of a completed episode, kept in episodic memory."""
+    """A snapshot of a completed episode, kept in episodic memory.
+
+    ``conclusion_confidence`` is the working belief's confidence *at the time the
+    episode completed* -- a structured signal (not the decision text) so later
+    self-observation can measure Jarvis's own tendencies (Vision §6, §31).
+    """
 
     episode_id: str
     trigger: str
     decision: str
     working_belief_id: str
     outcome: EpisodeState
+    conclusion_confidence: Confidence
     recorded_at: datetime = field(default_factory=_now)
     record_id: str = field(default_factory=lambda: str(uuid.uuid4()))

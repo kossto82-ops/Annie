@@ -10,8 +10,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
+from jarvis.domain.entities.belief import Belief
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.services.self_observation import observe_evidence_habit
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.executive.executive_controller import ExecutiveController
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
@@ -45,3 +47,12 @@ class Jarvis:
         """
         episode = CognitiveEpisode(trigger=trigger)
         return self._executive.run(episode, evidence)
+
+    def observe_self(self) -> Belief | None:
+        """Look back over past episodes and form a belief about Jarvis's own
+        tendencies (Vision §6, §31), or None if there is too little history.
+
+        The self-belief is grounded in the episode history and revisable like any
+        other belief -- it is not a fixed personality trait.
+        """
+        return observe_evidence_habit(self.episodes.history())

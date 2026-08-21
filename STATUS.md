@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 9)
+Last updated: 2026-08-21 (Increment 10)
 
 ---
 
@@ -66,6 +66,7 @@ src/jarvis/
     repositories/belief_repository.py    BeliefRepository (Protocol) — persist/retrieve beliefs
     repositories/episode_repository.py   EpisodeRepository (Protocol) — record/history of episodes
     services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
+    services/self_observation.py         observe_evidence_habit — a belief about Jarvis (Vision §6/§31)
     aggregates/cognitive_episode.py      CognitiveEpisode (aggregate root) + InvalidStateTransition
     aggregates/hypothesis_set.py         HypothesisSet (competing hypotheses) + UnknownHypothesis
     entities/belief.py                   Belief (entity) + derive_confidence + BeliefExplanation
@@ -184,6 +185,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - This is *memory of what happened*, distinct from beliefs (*epistemology*) — Vision §22. Groundwork
   for later self-modeling over past cognition (Vision §6, §31).
 - Gates: ruff clean · pyright strict 0 errors · pytest 127 passed.
+- Commit `7286c34` pushed to `origin/main`.
+
+### Increment 10 — self-observation: a model of Jarvis itself ✅ (2026-08-21)
+- `EpisodeRecord` gained `conclusion_confidence` (the working belief's confidence at completion) —
+  a structured signal so self-observation measures history, not decision text.
+- `observe_evidence_habit(history)` (domain service) forms a **belief about Jarvis** —
+  "I tend to conclude without sufficient evidence" — grounded in one piece of evidence per past
+  episode (ungrounded episodes support it, grounded ones contradict it). It **emerges from
+  measurable history**, not fake personality, and is revisable like any belief (Vision §6, §31).
+- `jarvis.observe_self()` surfaces it (None below a 3-episode minimum). `self_belief.explain().narrate()`
+  makes Jarvis explain its own tendency.
+- Gates: ruff clean · pyright strict 0 errors · pytest 134 passed.
 
 ---
 
@@ -238,6 +251,12 @@ with belief + episode events dispatched through the NervousSystem at each step.
   axes must not collapse), even though both are [0,1] magnitudes. A shared `UnitInterval` base is a
   candidate only on the third such type (rule of three). Stability scale `STABILITY_REFERENCE = 30d`
   and `LOW_STABILITY_THRESHOLD = 0.2` are tunable; stability is span-based (count-weighting deferred).
+- **D20** Self-observation reuses the ordinary epistemology: a self-observation is `Evidence` about
+  Jarvis → a `Belief` with derived confidence, so self-beliefs are provisional/revisable (Vision §6),
+  never asserted personality. It must be driven by measurable `EpisodeRecord` data (hence
+  `conclusion_confidence` on the record), not by parsing decision text. `_GROUNDED_CONFIDENCE = 0.5`
+  in the service mirrors the executive's D14 value (kept separate so the domain doesn't import the
+  application layer); `_MINIMUM_HISTORY = 3`.
 - **D19** Source→weight factors live in one policy (`SourceWeightingPolicy`), not scattered constants,
   and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
   the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
@@ -247,23 +266,23 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Self-observation over episode history (Vision §6, §31).** Jarvis now records its episodes; the
-next step is the first glimmer of a model of *itself*: noticing measurable patterns in its own past
-cognition and recording them as evidence about Jarvis (not fake personality text — it must emerge
-from the history). The smallest honest start:
-- A `self_observation` service that scans `episodes.history()` for a measurable tendency — e.g.
-  "a large share of my recent conclusions were 'insufficient evidence'" (I habitually conclude
-  without enough evidence) or "I repeatedly revisit the same question" — and yields a `Belief`
-  *about Jarvis itself*, grounded in `Evidence` drawn from the episode records.
-- Reuse the existing epistemology: a self-observation is just evidence → a belief with derived
-  confidence, so "I tend to X" is itself provisional and revisable (Vision §6).
-- Behaviour tests: given a history dominated by ungrounded conclusions, the observation forms a
-  belief "I often conclude without sufficient evidence" with non-zero confidence; a healthy history
-  does not.
+**Curiosity: self-observation drives an autonomous corrective episode (Vision §16, §31).** Jarvis
+can now notice "I tend to conclude without sufficient evidence" — but nothing happens with that
+insight. The vision's loop is self-observation → recommendation → change (Vision §31), and curiosity
+is the mechanism that turns a known weakness/uncertainty into a *self-triggered* episode (Vision §16:
+"this uncertainty is worth reducing"). The smallest honest step:
+- A `curiosity` check that, when a self-belief like the evidence habit crosses a confidence
+  threshold, emits a `CuriosityRaised`-style outcome / spawns an episode whose trigger is internal
+  (e.g. "gather more evidence before concluding") rather than user-driven — the first episode
+  triggered by Jarvis itself, not by the companion.
+- Keep it a *recommendation/preparation*, not an unsupervised action (Vision §28: autonomy is earned;
+  not every goal authorises an action).
+- Behaviour tests: a strong evidence-habit self-belief raises curiosity and produces an
+  internally-triggered episode; a healthy self-model raises none.
 
-*(Deferred, natural follow-ups: wiring `HypothesisSet` into episodes; a durable (DB-backed) store;
-system-level injection of the weighting policy via `Jarvis(...)`; curiosity/autonomous episodes
-(§16); a `UnitInterval` base if a third [0,1] type appears.)*
+*(Deferred, natural follow-ups: more self-observation tendencies (overconfidence, complexity);
+wiring `HypothesisSet` into episodes; a durable (DB-backed) store; persisting self-beliefs so they
+evolve across observations; system-level weighting-policy injection.)*
 
 ---
 
