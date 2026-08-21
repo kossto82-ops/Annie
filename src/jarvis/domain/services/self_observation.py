@@ -18,6 +18,7 @@ from collections.abc import Sequence
 
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
@@ -42,11 +43,14 @@ def observe_evidence_habit(history: Sequence[EpisodeRecord]) -> Belief | None:
     belief about Jarvis, grounded in one piece of evidence per past episode, so
     its confidence reflects how often conclusions were actually ungrounded.
     """
-    if len(history) < _MINIMUM_HISTORY:
+    # Judge only how Jarvis handled the companion's questions. Self-triggered
+    # (curiosity) episodes must not inflate the very habit they respond to.
+    relevant = [r for r in history if r.origin is TriggerOrigin.COMPANION]
+    if len(relevant) < _MINIMUM_HISTORY:
         return None
 
     belief = Belief(statement=INSUFFICIENT_EVIDENCE_HABIT)
-    for record in history:
+    for record in relevant:
         ungrounded = record.conclusion_confidence.value < _GROUNDED_CONFIDENCE
         belief.add_evidence(
             Evidence(

@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 
 from jarvis.domain.entities.belief import Belief, BeliefExplanation
 from jarvis.domain.enums.episode_state import EpisodeState
+from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.value_objects.evidence import Evidence
@@ -55,6 +56,7 @@ class CognitiveEpisode:
     id: str = field(default_factory=_new_episode_id)
     state: EpisodeState = EpisodeState.CREATED
     result: str | None = None
+    origin: TriggerOrigin = TriggerOrigin.COMPANION
     _working_belief: Belief | None = field(default=None, repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False

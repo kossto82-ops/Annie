@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 10)
+Last updated: 2026-08-21 (Increment 11)
 
 ---
 
@@ -67,12 +67,15 @@ src/jarvis/
     repositories/episode_repository.py   EpisodeRepository (Protocol) — record/history of episodes
     services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
     services/self_observation.py         observe_evidence_habit — a belief about Jarvis (Vision §6/§31)
+    services/curiosity.py                wonder — a self-belief → CuriosityImpulse (Vision §16)
+    value_objects/curiosity_impulse.py   CuriosityImpulse (a self-triggered investigation, recommended)
     aggregates/cognitive_episode.py      CognitiveEpisode (aggregate root) + InvalidStateTransition
     aggregates/hypothesis_set.py         HypothesisSet (competing hypotheses) + UnknownHypothesis
     entities/belief.py                   Belief (entity) + derive_confidence + BeliefExplanation
     entities/hypothesis.py               Hypothesis (entity, evidence-derived confidence)
     enums/episode_state.py               EpisodeState (6 of 12 conceptual states)
     enums/evidence_source.py             EvidenceSource (Vision §8 origins)
+    enums/trigger_origin.py              TriggerOrigin (COMPANION | CURIOSITY — who started the episode)
     events/domain_event.py               DomainEvent -> CognitiveEvent (immutable)
     events/episode_events.py             EpisodeStarted, EpisodeCompleted
     events/evidence_events.py            EvidenceAdded (shared by belief + hypothesis)
@@ -197,6 +200,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - `jarvis.observe_self()` surfaces it (None below a 3-episode minimum). `self_belief.explain().narrate()`
   makes Jarvis explain its own tendency.
 - Gates: ruff clean · pyright strict 0 errors · pytest 134 passed.
+- Commit `20455ec` pushed to `origin/main`.
+
+### Increment 11 — curiosity: the first self-triggered episode ✅ (2026-08-21)
+- `TriggerOrigin` enum (COMPANION | CURIOSITY) on `CognitiveEpisode` and `EpisodeRecord`. Episodes
+  now know who started them (Vision §12).
+- `wonder(self_belief)` (curiosity service) turns a confident self-belief into a `CuriosityImpulse`
+  (a *recommendation* — an internal trigger + rationale, not an action; Vision §16, §28).
+- `jarvis.feel_curious()` yields the impulse (None when healthy); `jarvis.pursue(impulse)` runs the
+  first episode Jarvis initiates **on its own** (CURIOSITY origin), through the normal executive.
+- Feedback loop broken: `observe_evidence_habit` judges only COMPANION episodes, so self-triggered
+  curiosity episodes never inflate the very tendency they answer.
+- Gates: ruff clean · pyright strict 0 errors · pytest 142 passed.
 
 ---
 
@@ -257,6 +272,10 @@ with belief + episode events dispatched through the NervousSystem at each step.
   `conclusion_confidence` on the record), not by parsing decision text. `_GROUNDED_CONFIDENCE = 0.5`
   in the service mirrors the executive's D14 value (kept separate so the domain doesn't import the
   application layer); `_MINIMUM_HISTORY = 3`.
+- **D21** Self-observation judges only `COMPANION`-origin episodes; `CURIOSITY`-origin (self-triggered)
+  episodes are excluded so curiosity cannot inflate the tendency it responds to (no self-reinforcing
+  loop). Curiosity stops at a `CuriosityImpulse` (recommendation); `Jarvis.pursue` runs it as a
+  deliberate step, not automatically — autonomy is earned (Vision §28). `CURIOSITY_THRESHOLD = 0.5`.
 - **D19** Source→weight factors live in one policy (`SourceWeightingPolicy`), not scattered constants,
   and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
   the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
@@ -266,19 +285,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Curiosity: self-observation drives an autonomous corrective episode (Vision §16, §31).** Jarvis
-can now notice "I tend to conclude without sufficient evidence" — but nothing happens with that
-insight. The vision's loop is self-observation → recommendation → change (Vision §31), and curiosity
-is the mechanism that turns a known weakness/uncertainty into a *self-triggered* episode (Vision §16:
-"this uncertainty is worth reducing"). The smallest honest step:
-- A `curiosity` check that, when a self-belief like the evidence habit crosses a confidence
-  threshold, emits a `CuriosityRaised`-style outcome / spawns an episode whose trigger is internal
-  (e.g. "gather more evidence before concluding") rather than user-driven — the first episode
-  triggered by Jarvis itself, not by the companion.
-- Keep it a *recommendation/preparation*, not an unsupervised action (Vision §28: autonomy is earned;
-  not every goal authorises an action).
-- Behaviour tests: a strong evidence-habit self-belief raises curiosity and produces an
-  internally-triggered episode; a healthy self-model raises none.
+**Learning: close the loop so a curiosity episode changes future behaviour (Vision §20, §31).**
+Right now `pursue()` runs a self-triggered episode but nothing durable comes of it — and Vision §20
+is explicit: "if Jarvis repeatedly makes the same mistake but does not change future behaviour, it
+has not learned." The smallest honest step that makes a pursued curiosity *matter*:
+- A pursued curiosity episode that yields a `Belief` (or a lesson record) which the executive then
+  consults — e.g. after acknowledging the evidence habit, `think()` on a still-ungrounded question
+  phrases its decision as an explicit request for evidence ("I have learned I do this; I am asking
+  for evidence before concluding") rather than a flat non-conclusion.
+- Keep the change measurable and evidence-driven (not a hard-coded mode): the shift is triggered by
+  the presence of a confident self-belief, and it decays if the habit stops recurring.
+- Behaviour tests: given a confident evidence-habit belief, an ungrounded `think()` visibly changes
+  its output; once the habit belief is no longer confident, behaviour reverts.
 
 *(Deferred, natural follow-ups: more self-observation tendencies (overconfidence, complexity);
 wiring `HypothesisSet` into episodes; a durable (DB-backed) store; persisting self-beliefs so they

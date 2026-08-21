@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from jarvis.domain.enums.episode_state import EpisodeState
+from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.self_observation import (
     INSUFFICIENT_EVIDENCE_HABIT,
     observe_evidence_habit,
@@ -11,7 +12,11 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 
 
-def _record(confidence: float, trigger: str = "q") -> EpisodeRecord:
+def _record(
+    confidence: float,
+    trigger: str = "q",
+    origin: TriggerOrigin = TriggerOrigin.COMPANION,
+) -> EpisodeRecord:
     return EpisodeRecord(
         episode_id="e",
         trigger=trigger,
@@ -19,6 +24,7 @@ def _record(confidence: float, trigger: str = "q") -> EpisodeRecord:
         working_belief_id="b",
         outcome=EpisodeState.COMPLETED,
         conclusion_confidence=Confidence(confidence),
+        origin=origin,
     )
 
 
@@ -44,3 +50,13 @@ class TestObserveEvidenceHabit:
         assert belief is not None
         assert len(belief.evidence) == 3
         assert "no evidence" not in belief.explain().narrate()  # it is grounded
+
+    def test_self_triggered_episodes_are_excluded(self) -> None:
+        # Curiosity (self-triggered) episodes must not feed the habit they answer.
+        history = [
+            _record(0.0, origin=TriggerOrigin.COMPANION),
+            _record(0.0, origin=TriggerOrigin.COMPANION),
+            _record(0.0, origin=TriggerOrigin.CURIOSITY),
+        ]
+        # Only 2 companion episodes -> below the minimum -> no self-belief.
+        assert observe_evidence_habit(history) is None

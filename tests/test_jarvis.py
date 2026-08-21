@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from jarvis import Jarvis
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.events.evidence_events import EvidenceAdded
@@ -204,3 +205,39 @@ class TestSelfObservation:
         self_belief = jarvis.observe_self()
         assert self_belief is not None
         assert self_belief.confidence == Confidence.none()
+
+
+class TestCuriosity:
+    def _make_habitually_ungrounded(self) -> Jarvis:
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c", "d"):
+            jarvis.think(f"an unfounded question about {topic}")
+        return jarvis
+
+    def test_a_healthy_jarvis_feels_no_curiosity(self) -> None:
+        jarvis = Jarvis()
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"question about {topic}", evidence=[_ev(0.9), _ev(0.9)])
+        assert jarvis.feel_curious() is None
+
+    def test_a_recognised_weakness_raises_curiosity(self) -> None:
+        assert self._make_habitually_ungrounded().feel_curious() is not None
+
+    def test_pursuing_curiosity_runs_a_self_triggered_episode(self) -> None:
+        # The first episode Jarvis initiates on its own (Vision §16, §31).
+        jarvis = self._make_habitually_ungrounded()
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        episode = jarvis.pursue(impulse)
+        assert episode.origin is TriggerOrigin.CURIOSITY
+        assert episode.state == EpisodeState.COMPLETED
+
+    def test_self_triggered_episodes_do_not_inflate_the_habit(self) -> None:
+        # Pursuing curiosity must not feed the very tendency it responds to.
+        jarvis = self._make_habitually_ungrounded()
+        before = jarvis.observe_self()
+        assert before is not None
+        jarvis.pursue(jarvis.feel_curious())  # type: ignore[arg-type]
+        after = jarvis.observe_self()
+        assert after is not None
+        assert len(after.evidence) == len(before.evidence)  # curiosity episode excluded

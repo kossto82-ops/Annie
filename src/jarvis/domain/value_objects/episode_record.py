@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from jarvis.domain.enums.episode_state import EpisodeState
+from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
 
 
@@ -36,5 +37,6 @@ class EpisodeRecord:
     working_belief_id: str
     outcome: EpisodeState
     conclusion_confidence: Confidence
+    origin: TriggerOrigin
     recorded_at: datetime = field(default_factory=_now)
     record_id: str = field(default_factory=lambda: str(uuid.uuid4()))

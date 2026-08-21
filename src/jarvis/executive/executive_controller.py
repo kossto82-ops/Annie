@@ -132,6 +132,7 @@ class ExecutiveController:
                 working_belief_id=belief.id,
                 outcome=episode.state,
                 conclusion_confidence=belief.confidence,
+                origin=episode.origin,
             )
         )
 
