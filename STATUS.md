@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 13)
+Last updated: 2026-08-21 (Increment 14)
 
 ---
 
@@ -237,6 +237,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - `jarvis.companion` exposed; `jarvis.observe_companion(trait, evidence)` records and dispatches the
   belief's events through the NervousSystem (D4: aggregate collects, orchestrator dispatches).
 - Gates: ruff clean · pyright strict 0 errors · pytest 154 passed.
+- Commit `45f6e17` pushed to `origin/main`.
+
+### Increment 14 — the companion model informs cognition ✅ (2026-08-21)
+- `CompanionModel.relevant_to(trigger)` returns a confidently-held companion belief whose trait
+  appears in the trigger (≥ `_RELEVANCE_CONFIDENCE` 0.5; substring match — semantic matching deferred).
+- The executive seeds the working belief from it: a confident companion belief enters `think()` as
+  **standing evidence** (SYSTEM_OBSERVATION, weight = the belief's confidence, provenance kept) — never
+  an override; caller evidence in the episode can still outweigh it (Vision §3, §5).
+- A question about a trait Jarvis already believes concludes with higher confidence than a blank
+  slate; an unrelated trigger or a weakly-held belief leaves cognition unchanged.
+- Gates: ruff clean · pyright strict 0 errors · pytest 160 passed.
 
 ---
 
@@ -306,6 +317,11 @@ with belief + episode events dispatched through the NervousSystem at each step.
   self-belief's confidence decays, satisfying Vision §20 (changed future behaviour) while keeping the
   change honest and evidence-driven. The self-model is read over PRIOR episodes only (the current one
   is unrecorded at decision time), so no self-reference.
+- **D23** A companion belief informs `think()` as ordinary **evidence** (SYSTEM_OBSERVATION, weight =
+  the belief's confidence), seeded before caller evidence — never an override. Relevance is a
+  case-insensitive substring match of the trait in the trigger, gated at confidence ≥ 0.5. Semantic
+  trigger↔trait matching is deliberately deferred; the honesty (evidence not override, weaken-able
+  in-episode) is the part that must not regress.
 - **D19** Source→weight factors live in one policy (`SourceWeightingPolicy`), not scattered constants,
   and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
   the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
@@ -315,21 +331,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**The companion model informs cognition (Vision §5, §3).** Jarvis now *holds* beliefs about the
-companion, but `think()` ignores them. Continuity means past understanding shapes new interpretation
-(Vision §3): a question should be answerable partly from what Jarvis already believes about the
-person. The smallest honest step:
-- When `think(trigger)` runs, the executive consults the `CompanionModel` for a belief whose trait
-  matches/relates to the trigger; if a confident one exists, the working belief is seeded with that
-  standing evidence, so the decision reflects what Jarvis already knows about the companion.
-- Keep it evidence-honest: the companion-belief contributes as evidence (with provenance), never as
-  an override; a contradicting answer in-episode still weakens it.
-- Behaviour tests: a `think()` about a trait Jarvis already believes concludes with higher confidence
-  than the same question from a blank slate; with no matching companion-belief, behaviour is unchanged.
+**Durable persistence: Jarvis survives a restart (Vision §3, §21).** Everything Jarvis learns —
+beliefs, episodes, self-model, companion model — currently lives only in process memory and vanishes
+when it stops. True continuity (Vision §3) and a "long-term" companion require the memory to outlive
+the process. The smallest honest step, behind the interfaces already in place:
+- A file-backed (e.g. JSON/SQLite) implementation of `BeliefRepository` and `EpisodeRepository`,
+  serialising beliefs *with their evidence and provenance* (memory is not truth — confidence is still
+  re-derived on load, Vision §22), selectable via `Jarvis(beliefs=..., episodes=...)`.
+- Round-trip fidelity: a belief saved and reloaded yields the same statement, evidence, derived
+  confidence and stability; episode history reloads in order.
+- Keep the domain untouched — this is purely an infrastructure implementation of existing protocols.
+- Behaviour tests: save via one Jarvis, load into another, and continuity holds (belief confidence,
+  episode count, self-observation all survive the round-trip).
 
-*(Deferred, natural follow-ups: relating triggers to traits semantically vs by key; recurring-goals
-and working-patterns facets of the companion model; wiring `HypothesisSet` into episodes; a durable
-(DB-backed) store; persisting self/companion beliefs; system-level weighting-policy injection.)*
+*(Deferred, natural follow-ups: persisting the companion model; a real DB; semantic trigger↔trait
+matching; recurring-goals/working-patterns facets; wiring `HypothesisSet` into episodes; system-level
+weighting-policy injection; a `UnitInterval` base if a third [0,1] type appears.)*
 
 ---
 

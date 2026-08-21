@@ -16,7 +16,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
+from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.self_observation import observe_evidence_habit
@@ -55,10 +57,12 @@ class ExecutiveController:
         nervous_system: NervousSystem,
         beliefs: BeliefRepository,
         episodes: EpisodeRepository,
+        companion: CompanionModel,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
         self._episodes = episodes
+        self._companion = companion
 
     def run(
         self, episode: CognitiveEpisode, evidence: Iterable[Evidence] = ()
@@ -72,6 +76,7 @@ class ExecutiveController:
 
         episode.begin_reasoning()
         belief = self._resolve_working_belief(episode)
+        self._seed_from_companion(episode)
         for piece in evidence:
             episode.observe(piece)
         self._beliefs.save(belief)
@@ -100,6 +105,25 @@ class ExecutiveController:
             episode.adopt_working_belief(remembered)
             return remembered
         return episode.form_working_belief(statement)
+
+    def _seed_from_companion(self, episode: CognitiveEpisode) -> None:
+        """If Jarvis already believes something relevant about the companion, feed
+        it in as standing evidence (Vision §3, §5) -- provenance kept, not an
+        override; new evidence in the episode can still outweigh it.
+        """
+        relevant = self._companion.relevant_to(episode.trigger)
+        if relevant is None:
+            return
+        episode.observe(
+            Evidence(
+                content=(
+                    f"I already believe about my companion: {relevant.statement} "
+                    f"(confidence {relevant.confidence.value:.2f})"
+                ),
+                source=EvidenceSource.SYSTEM_OBSERVATION,
+                weight=relevant.confidence,
+            )
+        )
 
     def _reflect(self, belief: Belief) -> None:
         # Reflection has no observable output yet; a later increment turns this

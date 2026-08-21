@@ -39,7 +39,7 @@ class Jarvis:
         self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
         self.companion = CompanionModel()
         self._executive = ExecutiveController(
-            self.nervous_system, self.beliefs, self.episodes
+            self.nervous_system, self.beliefs, self.episodes, self.companion
         )
 
     def think(

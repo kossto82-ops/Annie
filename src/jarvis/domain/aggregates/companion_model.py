@@ -19,6 +19,10 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.value_objects.evidence import Evidence
 
+# A companion-belief only informs new cognition once it is at least this confident
+# -- weak suspicion about the companion should not colour every answer (Vision §5).
+_RELEVANCE_CONFIDENCE = 0.5
+
 
 class CompanionModel:
     """A set of beliefs about the companion, each grounded in evidence."""
@@ -44,6 +48,21 @@ class CompanionModel:
     def beliefs(self) -> tuple[Belief, ...]:
         """Every belief Jarvis holds about the companion."""
         return tuple(self._beliefs.values())
+
+    def relevant_to(self, trigger: str) -> Belief | None:
+        """A confidently-held companion belief bearing on ``trigger``, or None.
+
+        Matched by the trait appearing in the trigger -- a deliberately simple,
+        deterministic relation for now (semantic matching is a later concern).
+        """
+        lowered = trigger.lower()
+        for belief in self._beliefs.values():
+            if (
+                belief.statement.lower() in lowered
+                and belief.confidence.value >= _RELEVANCE_CONFIDENCE
+            ):
+                return belief
+        return None
 
     def summarise(self) -> list[str]:
         """A plain-language account of each belief about the companion (Vision §5, §40)."""

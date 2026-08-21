@@ -16,6 +16,7 @@ from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
+_TRAIT_PHRASE = "prefers simplicity"  # must appear verbatim in a relevant trigger
 
 
 def _ev(
@@ -267,6 +268,44 @@ class TestCompanionModel:
         jarvis.observe_companion(self._TRAIT, _ev(0.9))
         jarvis.think("some unrelated question")
         assert [b.statement for b in jarvis.companion.beliefs()] == [self._TRAIT]
+
+
+class TestCompanionModelInformsCognition:
+    _TRAIT = "prefers simplicity"
+
+    def _make_confident(self, jarvis: Jarvis) -> None:
+        jarvis.observe_companion(self._TRAIT, _ev(0.9))
+        jarvis.observe_companion(self._TRAIT, _ev(0.9))
+
+    def test_prior_knowledge_raises_confidence_over_a_blank_slate(self) -> None:
+        # Vision §3: past understanding shapes new interpretation.
+        question = f"will my companion be happy given they {_TRAIT_PHRASE}?"
+
+        blank = Jarvis().think(question)
+        assert blank.working_belief is not None
+
+        informed = Jarvis()
+        self._make_confident(informed)
+        episode = informed.think(question)
+        assert episode.working_belief is not None
+        assert episode.working_belief.confidence.is_stronger_than(
+            blank.working_belief.confidence
+        )
+
+    def test_no_relevant_belief_leaves_cognition_unchanged(self) -> None:
+        jarvis = Jarvis()
+        jarvis.observe_companion("likes strong coffee", _ev(0.9))
+        jarvis.observe_companion("likes strong coffee", _ev(0.9))
+        episode = jarvis.think(f"will they be happy if they {_TRAIT_PHRASE}?")
+        assert episode.working_belief is not None
+        assert episode.working_belief.confidence == Confidence.none()
+
+    def test_a_weakly_held_belief_does_not_inform_cognition(self) -> None:
+        jarvis = Jarvis()
+        jarvis.observe_companion(self._TRAIT, _ev(0.1))  # stays below threshold
+        episode = jarvis.think(f"do they {_TRAIT_PHRASE}?")
+        assert episode.working_belief is not None
+        assert episode.working_belief.confidence == Confidence.none()
 
 
 class TestLearning:

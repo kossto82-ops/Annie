@@ -66,6 +66,25 @@ class TestEvents:
         assert ContradictionDetected in kinds
 
 
+class TestRelevance:
+    def test_a_confident_belief_is_relevant_when_its_trait_is_in_the_trigger(self) -> None:
+        model = CompanionModel()
+        model.observe(_TRAIT, _ev(0.9))
+        model.observe(_TRAIT, _ev(0.9))
+        assert model.relevant_to(f"will they act because they {_TRAIT}?") is not None
+
+    def test_an_unrelated_trigger_matches_nothing(self) -> None:
+        model = CompanionModel()
+        model.observe(_TRAIT, _ev(0.9))
+        model.observe(_TRAIT, _ev(0.9))
+        assert model.relevant_to("what time is it?") is None
+
+    def test_a_weakly_held_belief_is_not_relevant(self) -> None:
+        model = CompanionModel()
+        model.observe(_TRAIT, _ev(0.1))  # confidence stays below the threshold
+        assert model.relevant_to(f"do they {_TRAIT}?") is None
+
+
 class TestSummary:
     def test_summarise_narrates_each_belief(self) -> None:
         model = CompanionModel()
