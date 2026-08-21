@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 33)
+Last updated: 2026-08-21 (Increment 34)
 
 ---
 
@@ -457,6 +457,14 @@ with belief + episode events dispatched through the NervousSystem at each step.
   accrete spurious evidence. `episode.attention` exposes the choice. Existing behaviour unchanged
   (novel/evidence-bearing triggers still FULL).
 - Gates: ruff clean · pyright strict 0 errors · pytest 238 passed.
+- Commit `ddbeb78` pushed to `origin/main`.
+
+### Increment 34 — a brief answer reads as brief ✅ (2026-08-21)
+- A BRIEF episode's decision now reflects the routing: "From what I already understand about: … — I
+  hold this with confidence X." derived from `episode.attention` (Vision §14, §40). FULL episodes are
+  unchanged. Truthful: only a genuinely BRIEF (already-confident, no-new-evidence) episode gets the
+  phrasing. No new mechanism — just surfacing Increment 33's routing in the answer.
+- Gates: ruff clean · pyright strict 0 errors · pytest 240 passed.
 
 ---
 
@@ -556,17 +564,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A brief answer should read as brief (Vision §14, §40 — surface the routing).** Increment 33 routes
-attention and skips work, but a BRIEF episode's `result` string still reads identically to a FULL one,
-so the companion can't tell Jarvis answered from memory rather than fresh reasoning. Small, honest
-surfacing step:
-- When an episode is handled BRIEF, its decision phrasing reflects that ("From what I already
-  understand: …"), derived from `episode.attention` — not a new mechanism, just making the existing
-  routing visible in the answer.
-- Keep it truthful: only a genuinely BRIEF (already-confident, no-new-evidence) episode gets the
-  phrasing; FULL episodes are unchanged.
-- Behaviour tests: a repeated known question's result says it drew on existing understanding; a novel
-  or evidence-bearing one does not; the underlying confidence/decision is otherwise unchanged.
+**Contradiction as a first-class *cognitive event the companion can see* (Vision §18).** Contradiction
+is already detected inside a belief (`ContradictionDetected`, Increment 3) and weakens confidence, but
+Vision §18 wants it to be a first-class moment Jarvis can *report* — "this contradicts what I
+previously believed" — not just an internal event on the trace. The companion-model is where this
+matters most (the person contradicting Jarvis's model of them). Small honest step:
+- `jarvis.observe_companion(...)` (or a query) returns/flags when the new observation *contradicted* an
+  existing companion belief, so the caller learns a contradiction just occurred; and
+  `explain_companion` already narrates "I may be wrong" — tie the two together with an explicit
+  "you've contradicted what I believed" acknowledgement derived from the emitted `ContradictionDetected`.
+- Truthful: only fires when there was a held belief to contradict (confidence was > 0 before).
+- Behaviour tests: a contradicting companion observation is reported as a contradiction; a first or
+  consistent one is not; the acknowledgement traces to a real `ContradictionDetected` event.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15); excessive-complexity
 self-observation tendency; a real DB behind the JSON stores; persisting traces; semantic

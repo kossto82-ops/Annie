@@ -116,7 +116,7 @@ class ExecutiveController:
         self._flush(episode)
 
         episode.begin_deciding()
-        decision = self._decide(episode.trigger, belief)
+        decision = self._decide(episode.trigger, belief, episode.attention)
         self._maybe_request_evidence(episode, belief)
         self._flush(episode)
 
@@ -238,8 +238,14 @@ class ExecutiveController:
         # into a genuine review of the reasoning behind ``belief``.
         _ = belief
 
-    def _decide(self, trigger: str, belief: Belief) -> str:
+    def _decide(self, trigger: str, belief: Belief, attention: Attention) -> str:
         confidence = belief.confidence.value
+        if attention is Attention.BRIEF:
+            # Answered from existing understanding, not fresh grounding (Vision §14).
+            return (
+                f"From what I already understand about: {trigger} — I hold this "
+                f"with confidence {confidence:.2f}."
+            )
         if confidence <= 0.0:
             if self._recognises_evidence_habit():
                 # Behaviour changed by a learned tendency (Vision §20), not a guess.

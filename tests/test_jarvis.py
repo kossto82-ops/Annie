@@ -78,6 +78,21 @@ class TestAttention:
         assert episode.working_belief is not None
         assert len(episode.working_belief.evidence) == 3
 
+    def test_a_brief_answer_reads_as_brief(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think(self._Q, evidence=[_ev(0.9), _ev(0.9)])
+        repeat = jarvis.think(self._Q)
+        assert repeat.result is not None
+        assert "From what I already understand" in repeat.result
+
+    def test_a_full_answer_does_not_claim_prior_understanding(self) -> None:
+        episode = Jarvis().think(
+            self._Q, evidence=[_ev(0.9), _ev(0.9)]
+        )  # FULL, grounded
+        assert episode.result is not None
+        assert "From what I already understand" not in episode.result
+        assert "Concluded" in episode.result
+
 
 class TestEpistemologyDrivesTheDecision:
     def test_no_evidence_yields_an_honest_non_conclusion(self) -> None:
