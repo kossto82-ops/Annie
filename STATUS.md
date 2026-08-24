@@ -1080,6 +1080,50 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ---
 
+## Roadmap — the reflective cycle & outstanding threads  (2026-08-24)
+
+The organising goal now (user-chosen 2026-08-24): build the **reflective cycle**
+**Remember → Connect → Reflect → Hypothesise → Challenge → Learn → Act** as Jarvis's own autonomous mode,
+*inside* the core (D32 — not a wrapper; §1/§38). What makes it novel is that every stage is
+evidence-grounded, derived, revisable, auditable, and involves no LLM — not the loop shape itself.
+All prior deferred threads are folded in below so nothing is lost.
+
+### Track A — the reflective cycle (primary)
+| Stage | Status | Notes |
+|---|---|---|
+| Remember | ✅ done | episodic + belief + companion + action memory, persistent |
+| **Connect** | ✅ done (Incr 74) | `Connection`, `connections()`, `related_beliefs()` — links by shared evidence |
+| **Reflect** | ▶ NEXT | replace the §19 placeholder: notice patterns across connected clusters → structured findings |
+| Hypothesise (autonomous) | ⬜ | reuse `HypothesisSet` (§17) but *brewed from* reflection, not triggered by `consider()` |
+| Challenge | ⬜ | actively seek falsifying evidence for a leading hypothesis (self-adversarial; beyond §11) |
+| Learn | ✅ exists | action-outcome learning + self-model behaviour change — wire into the cycle |
+| Act | ✅ exists | graded autonomy / stances — wire into the cycle |
+| Run the whole cycle autonomously | ⬜ | generalise `feel_curious`/`pursue`: Jarvis triggers the cycle on itself |
+
+### Track B — perception → the LLM adapter (highest external impact, separate)
+- Seam done (Increments 63–68): `PerceptionSource`, streams, provenance, contested-belief resolution.
+- **Open:** an LLM-backed `PerceptionSource` (§32) — the piece that lets Jarvis understand real language.
+  Needs an explicit decision (which provider, where secrets live, offline/test story) before any code,
+  and must keep the §38 boundary (LLM produces evidence, never decides). **Flag when we want this; design first.**
+
+### Track C — §15 cognitive energy (self-contained, still open)
+- Per-episode cost (FULL > BRIEF), accumulate + expose read-only, later a budget that makes attention
+  *choose* BRIEF under load. Deepens Increment 33/34 attention. No deps. Pick up any time.
+
+### Track D — smaller finish-offs (fold in opportunistically, not their own phase)
+- Unify the two `CognitiveEpisode` shapes (conclusion vs deliberation) — or document the split as final.
+- `TemporalStability` for hypotheses (currently beliefs only); count/recency weighting.
+- Injectable weighting policy at `Jarvis(...)` level (currently per-belief default).
+- Semantic matching for belief/connection identity (beyond exact-string D17) — naturally becomes an
+  LLM/embedding job once Track B exists.
+- Persist traces; consider a real DB behind the JSON stores; pin ruff/pyright in a lockfile.
+
+**Sequencing decision:** finish Track A (the cycle) next — it is what makes the system *revolutionary*
+and it only needs what already exists. Track B (LLM) is the biggest external-value jump but is gated on a
+design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
+
+---
+
 ## Next increment (recommended, not yet started)
 
 **Reflect (cycle stage 2): notice a pattern across connected beliefs (Vision §19, §31).** Increment 74
@@ -1103,24 +1147,34 @@ semantic trigger↔trait matching; recurring-goals/working-patterns facets; weig
 
 ---
 
-## Known limitations / not built yet
+## Known limitations / not built yet  (refreshed 2026-08-24, Increment 74)
 
-- `reflection` in the executive is still a placeholder (no genuine review of reasoning); the
-  decision policy is a simple confidence threshold (D14).
-- Deliberations reuse `CognitiveEpisode` as a lifecycle shell (no working belief) rather than a
-  belief+hypothesis unified aggregate — clean, but means an episode has two possible shapes gated by
-  `EpisodeKind` rather than one model.
-- Stability is span-based only (no count/recency weighting yet); `TemporalStability` is derived for
-  beliefs but not yet for hypotheses.
-- Weighting policy is applied per-belief (default) but not yet injectable at the `Jarvis(...)` level.
-- Default stores are in-memory; durable JSON stores are opt-in per store (`Jarvis(beliefs=, episodes=,
-  companion_store=, actions_store=)`). No real DB yet; traces are not persisted.
-- Belief retrieval keys on the exact trigger string (D17), not semantic meaning of statements.
-- Source-based weighting policy (Vision §11: explicit confirmation weighs more) not implemented —
-  the caller assigns weight; `EvidenceSource` is recorded for when policy arrives.
-- No goals, curiosity, memory, self-modeling. No persistence. No LLM.
-- NervousSystem single-threaded synchronous drain only.
-- ruff/pyright installed into the interpreter, not pinned in a lockfile.
+**Big missing capability (the ~20–30% gap):**
+- **No real perception yet.** The `PerceptionSource` seam exists (Increments 63–68) but the only
+  implementation is the dumb `KeywordPerception`. Jarvis cannot understand real language — an LLM adapter
+  behind the same Protocol (§32) is the single highest-impact remaining piece. Separate track: needs an
+  API/secret + design decision (see Roadmap).
+
+**Reflective cycle — partially built (see Roadmap for order):**
+- Connect ✅ (Increment 74). Reflect / autonomous Hypothesise / Challenge / cycle-wiring: NOT built.
+- `reflection` in the executive is still a lifecycle placeholder (no genuine review of reasoning); the
+  real Reflect stage is the next increment. Decision policy is still a confidence threshold (D14).
+
+**Smaller open threads:**
+- Deliberations reuse `CognitiveEpisode` as a lifecycle shell (two episode shapes gated by `EpisodeKind`
+  rather than one unified belief+hypothesis model).
+- `TemporalStability` is span-based (no count/recency weighting) and derived for beliefs, not hypotheses.
+- Weighting policy is per-belief (default `SourceWeightingPolicy` — §11 source weighting DOES exist,
+  Increment 7) but not injectable at the `Jarvis(...)` level.
+- Belief/connection identity keys on exact strings (D17): trigger for beliefs, evidence *content* for
+  connections. No semantic matching yet — the deliberate later, richer step.
+- Persistence is per-store JSON (`Jarvis.persistent` wires all 7); no real DB; traces are not persisted.
+- §15 cognitive energy/cost: not started (self-contained track, still open).
+- NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
+
+**Already built (do not list as missing):** goals & decomposition, curiosity (incl. give-up/ask-for-help),
+episodic + belief + companion + action memory, self-model (3 tendencies), graded autonomy, attention,
+persistence across restart, perception seam + streams + contested-belief resolution, belief connections.
 
 ---
 
