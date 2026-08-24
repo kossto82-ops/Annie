@@ -33,6 +33,7 @@ class TestStateSummary:
         assert summary.self_tendencies == ()
         assert summary.companion_traits == ()
         assert summary.learned_actions == ()
+        assert summary.recurring_goals == ()
 
     def test_the_summary_is_immutable(self) -> None:
         summary = Jarvis().state_summary()
@@ -70,3 +71,15 @@ class TestSummaryReflectsState:
         learned = summary.learned_actions[0]
         assert learned.description == "tidy the notes"
         assert learned.stance is ActionStance.SUGGEST
+
+    def test_it_lists_recurring_goals(self) -> None:
+        from jarvis.domain.value_objects.goal import Goal
+
+        jarvis = Jarvis()
+        goal = Goal(statement="ship the parser")
+        for question in ("q1", "q2", "q3"):
+            jarvis.think(question, goal=goal)
+
+        summary = jarvis.state_summary()
+        assert summary.recurring_goals == (("ship the parser", 3),)
+        assert summary.recurring_goals == jarvis.recurring_goals()

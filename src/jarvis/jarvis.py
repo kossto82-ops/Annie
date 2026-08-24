@@ -177,6 +177,12 @@ class Jarvis:
         else:
             lines.append("About my companion: I do not yet know much about them.")
 
+        recurring = self.recurring_goals()
+        if recurring:
+            lines.append("What I keep returning to:")
+            for goal, count in recurring:
+                lines.append(f"  - {goal} ({count} times)")
+
         episodes = len(self.episodes.history())
         lines.append(
             f"This rests on {episodes} past episode(s); everything here is "
@@ -205,6 +211,7 @@ class Jarvis:
                 self._summarise_action(belief.statement, belief.confidence.value)
                 for belief in self.actions.all_beliefs()
             ),
+            recurring_goals=self.recurring_goals(),
         )
 
     def _summarise_action(self, statement: str, confidence: float) -> LearnedAction:

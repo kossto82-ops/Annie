@@ -48,3 +48,19 @@ class TestIntrospect:
         # A trait never observed must not appear in the self-account.
         text = Jarvis().introspect()
         assert "prefers simplicity" not in text
+
+    def test_it_surfaces_a_recurring_goal(self) -> None:
+        from jarvis.domain.value_objects.goal import Goal
+
+        jarvis = Jarvis()
+        goal = Goal(statement="ship the parser")
+        for question in ("q1", "q2", "q3"):
+            jarvis.think(question, goal=goal)
+        text = jarvis.introspect()
+        assert "What I keep returning to:" in text
+        assert "ship the parser (3 times)" in text
+
+    def test_a_goal_less_jarvis_says_nothing_about_recurring_goals(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a plain question")
+        assert "keep returning to" not in jarvis.introspect()

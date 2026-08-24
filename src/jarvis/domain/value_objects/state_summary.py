@@ -35,3 +35,4 @@ class StateSummary:
     self_tendencies: tuple[Scored, ...]  # recognised biases about its own cognition
     companion_traits: tuple[Scored, ...]  # beliefs about the companion
     learned_actions: tuple[LearnedAction, ...]  # action learning + its stance
+    recurring_goals: tuple[tuple[str, int], ...]  # goals kept returning to, with counts

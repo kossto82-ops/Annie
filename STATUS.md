@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 43)
+Last updated: 2026-08-24 (Increment 44)
 
 ---
 
@@ -571,6 +571,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   still explains the why. (Same spirit as D9: not all cognition binds to one entity.)
 - Gates: ruff clean · pyright strict 0 errors · pytest 267 passed.
 
+### Increment 44 — recurring goals show up in the self-account ✅ (2026-08-24)
+- `introspect()` now adds a "What I keep returning to:" section listing `recurring_goals()` with counts
+  ("ship the parser (3 times)") after the self-tendency and companion lines; absent when none recur
+  (Vision §29, §30). So a companion asking "what are you about?" hears Jarvis's own recurring purposes.
+- `StateSummary` gained a `recurring_goals: tuple[tuple[str, int], ...]` field, populated from
+  `recurring_goals()`; a fresh Jarvis's snapshot has an empty tuple (Vision §21). The machine-readable
+  snapshot now carries the same fact as the narrated account.
+- Pure read-model over existing state: nothing invented, nothing asserted as good — it names what
+  Jarvis has returned to, and how often.
+- Gates: ruff clean · pyright strict 0 errors · pytest 270 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -677,17 +688,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A recurring goal shows up in introspection / the state snapshot (Vision §29, §30, §21).** Jarvis can
-now *notice* and be *moved by* the goals it keeps returning to (Increments 42–43), but neither
-`introspect()` nor `state_summary()` mentions them — so a companion asking "what are you about?" would
-not hear its own recurring purposes. Smallest honest step:
-- In `introspect()`, after the self-tendency and companion lines, if `recurring_goals()` is non-empty
-  add a truthful line naming the top recurring goal(s) and how often — "I keep returning to: X (3
-  times)". Purely a read-model over existing state; nothing invented, nothing asserted as good.
-- Optionally mirror it in `StateSummary` as a `recurring_goals: tuple[tuple[str, int], ...]` field so
-  the machine-readable snapshot carries the same fact (fresh Jarvis → empty tuple).
-- Behaviour tests: after three same-goal companion episodes, `introspect()` contains the goal text and
-  count; a goal-less Jarvis's introspection is unchanged; the summary field matches `recurring_goals()`.
+**A goal reached vs. a goal still open — did pursuing it change anything? (Vision §26, §27, §20).**
+Jarvis records goals, remembers them, and is moved by the recurring ones — but it never notices whether
+a goal was *met*. `Goal` already carries an optional `success_criterion` that is stored and never read.
+Smallest honest step toward goal-aware learning:
+- Add a way for the companion to tell Jarvis a goal was reached, e.g. `jarvis.mark_goal_reached(goal)` →
+  records `Evidence(ACTION_OUTCOME-like)` into a belief "The goal 'X' is reachable" in a small store,
+  exactly as action-outcome learning already works (Increment 25) — reachability is derived, revisable.
+- Then `recurring_goals()`/introspection can distinguish "still returning to (unmet)" from a goal it has
+  learned it can reach. Keep it truthful: no criterion evaluation logic yet (the companion asserts the
+  outcome); Jarvis only records and derives confidence.
+- Behaviour tests: marking a goal reached forms/strengthens a "reachable" belief; an unmet recurring
+  goal stays absent from that store; the belief round-trips if the store is persistent.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
