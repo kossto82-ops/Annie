@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 64)
+Last updated: 2026-08-24 (Increment 65)
 
 ---
 
@@ -825,6 +825,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   confidence and can be contradicted. No new state, no persistence beyond the existing companion store.
 - Gates: ruff clean · pyright strict 0 errors · pytest 331 passed.
 
+### Increment 65 — a perception tour + README: language in, cognition out ✅ (2026-08-24)
+- New `examples/perceiving.py`: one Jarvis `perceive(...)`s a grounding cue, a negated cue (honest
+  insufficient conclusion), and a cue-less line (silence); `perceive_about_companion` accretes a
+  companion belief then has it contradicted ("I may be wrong"); and a tiny custom `UppercaseIsCertain`
+  `PerceptionSource` is injected to show a different perceiver drops in behind the same Protocol without
+  the core changing (Vision §32, §38). Deterministic, runs exit 0, type-checks.
+- README gains a "Perceive" group (`perceive`, `perceive_about_companion`, `Jarvis(perception=…)`),
+  renames the old block to "Reason", and the examples list now points at all four tours. Consolidation
+  only — no behaviour change, all prior tests green.
+- Gates: ruff clean · pyright strict 0 errors · pytest 331 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -944,18 +955,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A perception example, end to end: language in, cognition out (Vision §32, §40).**
-Increments 63–64 opened the perception seam and wired it to the companion model, but there is no runnable
-story showing it — the three example tours all still hand-build `Evidence`. The single best artifact for
-"Jarvis can now take language" is missing. Smallest honest step:
-- Add `examples/perceiving.py`: one Jarvis that `perceive(...)`s a few utterances (a grounding cue, a
-  cue-less line that stays silent, a negated cue) and `perceive_about_companion(trait, …)`s a couple of
-  observations, printing the episode conclusion / companion belief each turn so the seam is legible. Show
-  that a smarter perceiver is a drop-in by injecting a tiny custom `PerceptionSource`. Deterministic;
-  runs exit 0 and type-checks.
-- Extend the README Vocabulary with `perceive`/`perceive_about_companion` and a one-line "Perceive"
-  group; point the examples list at the new tour. Consolidation only — no behaviour change.
-- Behaviour check: the example is import-clean and deterministic; the README lists the new methods.
+**Perception carries its own confidence — an observation's certainty should shape evidence weight, and
+the seam should let a perceiver report how sure it is (Vision §8, §9, §32).** `KeywordPerception` already
+varies weight by cue ("definitely" 1.0 vs "maybe" 0.3), but nothing downstream can see or reason about
+*how the perceiver arrived at that* — the seam returns bare `Evidence`. Before an LLM perceiver arrives,
+make the seam honest about perceiver uncertainty. Smallest honest step:
+- Have the perceiver stamp provenance/uncertainty into the `Evidence` it makes (e.g. set `Evidence.context`
+  to the recognised cue or a short "perceived via <rule>" note), so `explain()`/`narrate()` show *why*
+  the evidence carries the weight it does — perception becomes auditable, not magic. No new type; reuse
+  the existing `context` field.
+- Keep the boundary strict: still just evidence; confidence still derived. This makes the future
+  LLM-adapter's job explicit — it must report calibrated weight + provenance, never a decision.
+- Behaviour tests: perceived evidence carries a non-empty `context` naming the cue; `narrate()` surfaces
+  it; a cue-less observation still yields nothing.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

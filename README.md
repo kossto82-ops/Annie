@@ -70,7 +70,12 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `Jarvis()` — ephemeral (in-memory).
 - `Jarvis.persistent(directory)` — all memory (beliefs, episodes, companion, actions, reversibility, goals) on disk under one dir.
 
-**Perceive & reason**
+**Perceive**
+- `perceive(observation, trigger=None, goal=None)` — turn a raw observation into evidence (via the injected `PerceptionSource`) and reason over it; unknown input yields honest silence.
+- `perceive_about_companion(trait, observation)` — perceive an utterance about the companion and fold it into the lasting companion model.
+- `Jarvis(perception=…)` — inject any `PerceptionSource` (a dumb keyword rule by default; an LLM-backed perceiver is a drop-in behind the same Protocol).
+
+**Reason**
 - `think(trigger, evidence=(), goal=None)` — run a cognitive episode toward one grounded conclusion, optionally *toward* a `Goal`; returns the episode.
 - `consider(observation, options)` — weigh competing explanations (`{statement: [evidence, ...]}`); returns a `Deliberation`.
 
@@ -106,8 +111,9 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `trace_of(episode)` / `trace(correlation_id)` — the ordered event trace of one act of cognition.
 
 Runnable end-to-end tours live in [`examples/main_loop.py`](examples/main_loop.py) (the core loop),
-[`examples/goal_arc.py`](examples/goal_arc.py) (the goal → stuck → ask-for-help → help-received arc), and
-[`examples/goal_parts.py`](examples/goal_parts.py) (a goal made of parts, worked one blocker at a time).
+[`examples/goal_arc.py`](examples/goal_arc.py) (the goal → stuck → ask-for-help → help-received arc),
+[`examples/goal_parts.py`](examples/goal_parts.py) (a goal made of parts, worked one blocker at a time),
+and [`examples/perceiving.py`](examples/perceiving.py) (language in, evidence-grounded cognition out).
 
 ## Development
 
