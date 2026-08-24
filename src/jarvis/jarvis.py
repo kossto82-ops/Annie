@@ -66,6 +66,7 @@ class Jarvis:
         actions_store: BeliefRepository | None = None,
         reversibility_store: BeliefRepository | None = None,
         goals_store: BeliefRepository | None = None,
+        subgoals_store: BeliefRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -76,6 +77,7 @@ class Jarvis:
             reversibility_store or InMemoryBeliefStore()
         )
         self._goals: BeliefRepository = goals_store or InMemoryBeliefStore()
+        self._subgoals: BeliefRepository = subgoals_store or InMemoryBeliefStore()
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -87,9 +89,9 @@ class Jarvis:
         """A Jarvis whose whole memory lives on disk under one directory.
 
         Wires every store -- beliefs, episodes, companion model, action learning,
-        reversibility and goal reachability -- to files under ``directory``, so a
-        single call gives full continuity across restarts (Vision §3, §21).
-        Nothing new is persisted; this is composition over the existing JSON stores.
+        reversibility, goal reachability and sub-goal links -- to files under
+        ``directory``, so a single call gives full continuity across restarts
+        (Vision §3, §21). Nothing new is persisted; this composes the JSON stores.
         """
         base = Path(directory)
         return cls(
@@ -99,6 +101,7 @@ class Jarvis:
             actions_store=JsonBeliefStore(base / "actions.json"),
             reversibility_store=JsonBeliefStore(base / "reversibility.json"),
             goals_store=JsonBeliefStore(base / "goals.json"),
+            subgoals_store=JsonBeliefStore(base / "subgoals.json"),
         )
 
     def think(
@@ -239,7 +242,10 @@ class Jarvis:
         if recurring:
             lines.append("What I keep returning to:")
             for goal, count in recurring:
-                lines.append(f"  - {goal} ({count} times){self._reachability_note(goal)}")
+                lines.append(
+                    f"  - {goal} ({count} times)"
+                    f"{self._reachability_note(goal)}{self._progress_note(goal)}"
+                )
 
         episodes = len(self.episodes.history())
         lines.append(
@@ -490,6 +496,55 @@ class Jarvis:
         for event in belief.pull_events():
             self.nervous_system.publish(event)
         self.nervous_system.dispatch()
+        self._record_subgoal_link(parent, child, reached)
+
+    def _record_subgoal_link(self, parent: str, child: str, reached: bool) -> None:
+        """Make the parent→child structure queryable (Vision §26). A bookkeeping
+        belief per link; its own confidence is unused -- what matters is the set of
+        known children and which have been reached at least once.
+        """
+        statement = self._subgoal_statement(parent, child)
+        belief = self._subgoals.get_by_statement(statement) or Belief(statement=statement)
+        outcome = "reached" if reached else "not reached"
+        belief.add_evidence(
+            Evidence(
+                content=f"'{child}' was {outcome}",
+                source=EvidenceSource.DIRECT_OBSERVATION,
+                weight=Confidence(1.0),
+                supports=reached,
+            )
+        )
+        belief.pull_events()  # bookkeeping link -- events are not dispatched
+        self._subgoals.save(belief)
+
+    @staticmethod
+    def _subgoal_statement(parent: str, child: str) -> str:
+        return f"The goal '{child}' is a part of '{parent}'"
+
+    def sub_goals(self, parent: str) -> tuple[str, ...]:
+        """The parts recorded for ``parent`` (Vision §26), in the order first seen."""
+        prefix = "The goal '"
+        suffix = f"' is a part of '{parent}'"
+        return tuple(
+            belief.statement[len(prefix) : -len(suffix)]
+            for belief in self._subgoals.all_beliefs()
+            if belief.statement.endswith(suffix)
+        )
+
+    def goal_progress(self, parent: str) -> tuple[int, int]:
+        """How far along a decomposed goal is, as ``(parts reached, parts known)``
+        (Vision §26, §30). A part counts as reached once it has been reached at
+        least once; truthful about partials -- it is not progress toward "done",
+        just a count over recorded structure.
+        """
+        suffix = f"' is a part of '{parent}'"
+        children = [
+            belief
+            for belief in self._subgoals.all_beliefs()
+            if belief.statement.endswith(suffix)
+        ]
+        reached = sum(1 for belief in children if belief.explain().supporting)
+        return (reached, len(children))
 
     def receive_help(self, goal: Goal, helpful: bool = True) -> Belief:
         """Take in the companion's guidance on a goal and learn from it (Vision §18, §26).
@@ -584,6 +639,13 @@ class Jarvis:
             times = "time" if effort == 1 else "times"
             note += f", and have turned it over {effort} {times}"
         return note
+
+    def _progress_note(self, goal_statement: str) -> str:
+        """A truthful annotation of how many of a goal's known parts are reached."""
+        reached, known = self.goal_progress(goal_statement)
+        if known == 0:
+            return ""
+        return f" ({reached} of {known} parts reached)"
 
     def recommend_action_by_description(self, description: str) -> ActionRecommendation:
         """Recommend a stance for a *remembered* kind of action (Vision §28).

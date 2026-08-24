@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 57)
+Last updated: 2026-08-24 (Increment 58)
 
 ---
 
@@ -735,6 +735,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
   restart. No new store.
 - Gates: ruff clean · pyright strict 0 errors · pytest 308 passed.
 
+### Increment 58 — a goal's parts and how far along it is, made visible ✅ (2026-08-24)
+- Sub-goal links are now queryable: `mark_goal_reached(child)` records the parent→child link in a new
+  `_subgoals` store (a bookkeeping belief per link, template `_subgoal_statement`, parsed back the way
+  `_action_statement`/`_action_description` already do). `jarvis.sub_goals(parent)` lists the recorded
+  parts; `jarvis.goal_progress(parent) -> (reached, known)` counts parts reached at least once over all
+  known parts (Vision §26, §30).
+- `introspect()`'s recurring-goal line appends "(2 of 3 parts reached)" when a goal has known parts, so
+  the decomposition (Increment 57) is finally visible in the self-account, not just felt in the parent's
+  reachability. A goal with no parts carries no annotation.
+- Truthful & continuous: "reached at least once" (a part reached then failed still counts), a count over
+  recorded structure — not progress toward "done". `Jarvis.persistent` now wires a 7th file
+  `subgoals.json`; progress and parts round-trip across a restart.
+- Gates: ruff clean · pyright strict 0 errors · pytest 312 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -847,19 +861,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Introspection shows a goal's parts and how far along the whole is (Vision §26, §29, §30).**
-Increment 57 lets a sub-goal credit its parent's reachability, but nothing surfaces the *structure* —
-`introspect()` and `recurring_goals()` still treat every goal as atomic, so a companion can't see that
-"master recursion" is made of parts or how many are done. The decomposition is recorded but invisible.
-Smallest honest step:
-- Track the parent→children links (they're implicit in the reachability evidence content today; make
-  them queryable, e.g. `jarvis.sub_goals(parent_statement) -> tuple[str, ...]`, or record the link in a
-  small store when `mark_goal_reached` sees a `part_of`). Then add a read-model
-  `jarvis.goal_progress(parent) -> tuple[int, int]` = (parts reached, parts known).
-- In `introspect()`'s recurring-goal line, when a goal has known parts, append "(2 of 3 parts reached)".
-  Read-model only; parts-reached counts distinct children reached at least once, truthful about partials.
-- Behaviour tests: reaching 2 of 3 named sub-goals makes `goal_progress(parent) == (2, 3)` and shows in
-  `introspect()`; a goal with no parts carries no progress annotation.
+**A part it cannot reach becomes curiosity's focus — wonder about the sub-goal, not just the whole
+(Vision §16, §26, §31).** Curiosity fixes on a stuck *parent* goal (Increment 47/50), but now that goals
+have parts, the honest question is often narrower: *which part* is blocking the whole? A parent with 2 of
+3 parts reached is stuck on one specific piece. Smallest honest step:
+- When `feel_curious()` would raise a stuck parent that has recorded parts, prefer to name the specific
+  unreached part: consult `sub_goals(parent)` + `belief_about_goal(child)` and, if there is an unreached
+  part, phrase the impulse about it ("I've reached 2 of 3 parts of X; why can't I reach 'Y'?"). Fall back
+  to the whole-goal phrasing when no part is identifiably unreached. Impulse still carries the parent
+  `goal` so pursuit/effort accounting is unchanged.
+- Keep it truthful: this only sharpens *which* stuck thing is named; the D29 priority order, the
+  give-up-when-exhausted rule (D30), and ask-for-help all stay as they are.
+- Behaviour tests: a parent with one clearly-unreached part yields an impulse naming that part; a parent
+  with no parts keeps the whole-goal phrasing; effort still accrues to the parent.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

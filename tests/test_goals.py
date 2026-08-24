@@ -97,6 +97,51 @@ class TestGoalDecomposition:
         assert after.confidence.value == before.confidence.value
 
 
+class TestGoalProgress:
+    _PARENT = "master recursion"
+    _PARTS = ("write the base case", "handle the recursive step", "test the edge cases")
+
+    def _reach(self, jarvis: Jarvis, part: str, *, reached: bool = True) -> None:
+        jarvis.mark_goal_reached(
+            Goal(statement=part, part_of=self._PARENT), reached=reached
+        )
+
+    def test_sub_goals_and_progress_track_recorded_parts(self) -> None:
+        jarvis = Jarvis()
+        self._reach(jarvis, self._PARTS[0])
+        self._reach(jarvis, self._PARTS[1])
+        self._reach(jarvis, self._PARTS[2], reached=False)
+        assert set(jarvis.sub_goals(self._PARENT)) == set(self._PARTS)
+        assert jarvis.goal_progress(self._PARENT) == (2, 3)
+
+    def test_a_goal_with_no_parts_has_no_progress(self) -> None:
+        jarvis = Jarvis()
+        jarvis.mark_goal_reached(Goal(statement="a plain goal"))
+        assert jarvis.sub_goals("a plain goal") == ()
+        assert jarvis.goal_progress("a plain goal") == (0, 0)
+
+    def test_progress_shows_in_introspection(self) -> None:
+        jarvis = Jarvis()
+        # Make the parent a recurring goal so it appears in the self-account.
+        for question in ("q1", "q2", "q3"):
+            jarvis.think(question, goal=Goal(statement=self._PARENT))
+        self._reach(jarvis, self._PARTS[0])
+        self._reach(jarvis, self._PARTS[1])
+        self._reach(jarvis, self._PARTS[2], reached=False)
+        text = jarvis.introspect()
+        assert "2 of 3 parts reached" in text
+
+    def test_progress_survives_a_restart(self, tmp_path: Path) -> None:
+        first = Jarvis.persistent(tmp_path)
+        self._reach(first, self._PARTS[0])
+        self._reach(first, self._PARTS[1])
+        assert first.goal_progress(self._PARENT) == (2, 2)
+
+        restarted = Jarvis.persistent(tmp_path)
+        assert restarted.goal_progress(self._PARENT) == (2, 2)
+        assert set(restarted.sub_goals(self._PARENT)) == set(self._PARTS[:2])
+
+
 class TestThinkWithAGoal:
     def test_an_episode_without_a_goal_has_none(self) -> None:
         assert Jarvis().think("a question").goal is None
