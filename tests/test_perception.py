@@ -37,6 +37,17 @@ class TestKeywordPerception:
         evidence = KeywordPerception().perceive("this is definitely sound")
         assert evidence[0].context == "perceived via the cue 'definitely'"
 
+    def test_a_multi_cue_observation_yields_one_evidence_per_cue(self) -> None:
+        evidence = KeywordPerception().perceive(
+            "the base case is definitely right but the step is maybe not ready"
+        )
+        assert len(evidence) == 2
+        definitely, maybe = evidence
+        assert definitely.weight.value == 1.0 and definitely.supports is True
+        assert maybe.weight.value == 0.3 and maybe.supports is False
+        assert definitely.context == "perceived via the cue 'definitely'"
+        assert maybe.context == "perceived via the cue 'maybe'"
+
     def test_the_provenance_shows_in_the_belief_narration(self) -> None:
         jarvis = Jarvis()
         episode = jarvis.perceive("the approach is definitely sound")

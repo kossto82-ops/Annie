@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 66)
+Last updated: 2026-08-24 (Increment 67)
 
 ---
 
@@ -848,6 +848,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   cue-less observation still yields nothing.
 - Gates: ruff clean · pyright strict 0 errors · pytest 333 passed.
 
+### Increment 67 — a perceiver that yields several readings from one observation ✅ (2026-08-24)
+- `KeywordPerception` now emits one `Evidence` per recognised cue (in order), each with its own weight,
+  its own polarity from a nearby negation (a ±3-word window via `_negated_near`), and its own cue
+  provenance — so "definitely right but maybe not ready" yields two readings (supporting 1.0 + contradicting
+  0.3) that the belief honestly balances to ~0.43, instead of being flattened to one (Vision §8, §17).
+- Tokenises on words (punctuation-stripped) so cue and negation matching is word-level, not substring;
+  single-cue and cue-less behaviour is unchanged. Subjects are still not parsed — every reading bears on
+  the one belief the episode is about; separating subjects is a smarter (LLM) perceiver's later job.
+- The `PerceptionSource` contract already returned a tuple, so the seam needed no change — only the rule
+  grew richer. Boundary still strict (D31): still just evidence, confidence still derived.
+- Gates: ruff clean · pyright strict 0 errors · pytest 334 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -967,19 +979,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A perceiver that yields more than one piece of evidence from one observation (Vision §8, §17, §32).**
-`KeywordPerception` collapses an observation to a single strongest-cue `Evidence`, so "definitely the base
-case but maybe not the step" is flattened to one reading. The `PerceptionSource` contract already returns
-a *tuple*, so the seam is ready — the rule just doesn't use it. A richer (eventually LLM-backed) perceiver
-should be able to draw several distinct pieces of evidence, possibly about different subjects, from one
-utterance. Smallest honest step:
-- Extend `KeywordPerception` to emit one `Evidence` per recognised cue occurrence (each with its own
-  weight, polarity from the nearest negation, and cue provenance), rather than only the strongest — so a
-  multi-cue observation yields multiple evidences. Keep single-cue and cue-less behaviour identical.
-- Truthful and bounded: still just evidence, still derived confidence; no attempt to parse *subjects*
-  yet (that's the LLM's job later) — every piece still bears on the one belief the episode is about.
-- Behaviour tests: a two-cue observation yields two evidences with the right weights/polarities; a
-  single-cue observation is unchanged; cue-less still yields nothing.
+**Perceive several utterances as an accumulating stream, not one-shot (Vision §3, §8, §21).**
+`perceive`/`perceive_about_companion` each run one observation in isolation. Real perception arrives as a
+stream — a short exchange, several lines — and Jarvis already accumulates belief across episodes (memory,
+Increment 5). The seam should make feeding a *sequence* of observations natural, so a conversation builds a
+belief the way hand-fed evidence already does. Smallest honest step:
+- Add `jarvis.perceive_all(observations, trigger=None, goal=None)` (and/or
+  `perceive_all_about_companion(trait, observations)`): run the `PerceptionSource` over each observation,
+  gather all the evidence, and feed it into a single `think(...)` / into `observe_companion` in turn — so
+  a multi-line exchange grounds one belief from all of it. Same-trigger episodes already reuse one belief
+  (Increment 5), so continuity is free.
+- Keep it truthful: it is still only perception producing evidence; empty/cue-less lines contribute
+  nothing; confidence stays derived over the whole stream.
+- Behaviour tests: three cued utterances build a more-confident belief than one; cue-less lines in the
+  stream are silently skipped; a mixed supporting/contradicting stream balances honestly.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

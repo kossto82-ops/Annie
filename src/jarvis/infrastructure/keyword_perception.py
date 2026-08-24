@@ -32,31 +32,52 @@ _CUES: dict[str, float] = {
 }
 
 # Words that flip a statement's polarity to contradicting.
-_NEGATIONS: frozenset[str] = frozenset({"not", "no", "never", "n't", "cannot"})
+_NEGATIONS: frozenset[str] = frozenset({"not", "no", "never", "cannot"})
+
+# How many words on each side of a cue a negation may sit to flip its polarity.
+_NEGATION_WINDOW = 3
+
+
+def _strip(word: str) -> str:
+    """A bare token: lowercased already, with surrounding punctuation removed."""
+    return word.strip(".,;:!?\"'()[]")
 
 
 class KeywordPerception:
-    """Turns certainty cues in an observation into one piece of evidence."""
+    """Turns certainty cues in an observation into one piece of evidence per cue."""
 
     def perceive(self, observation: str) -> tuple[Evidence, ...]:
         text = observation.strip()
         if not text:
             return ()
-        lowered = text.lower()
-        matched = [(cue, weight) for cue, weight in _CUES.items() if cue in lowered]
-        if not matched:
-            return ()  # nothing recognised -- stay silent (Vision §37)
-        cue, weight = max(matched, key=lambda pair: pair[1])
-        supports = not any(negation in lowered for negation in _NEGATIONS)
-        # Stamp provenance so the weight is auditable, not magic (Vision §8): the
-        # belief can later explain *why* this evidence carries the weight it does.
-        # A perceived companion utterance is taken as their statement.
-        return (
-            Evidence(
-                content=text,
-                source=EvidenceSource.USER_STATEMENT,
-                weight=Confidence(weight),
-                supports=supports,
-                context=f"perceived via the cue '{cue}'",
-            ),
+        words = [_strip(w) for w in text.lower().split()]
+        # One piece of evidence per recognised cue, in the order it appears -- so a
+        # multi-cue observation ("definitely X but maybe not Y") yields several
+        # readings rather than being flattened to one (Vision §8, §17). Subjects are
+        # not parsed here (that is a smarter perceiver's job); every piece still
+        # bears on the one belief the episode is about.
+        evidence: list[Evidence] = []
+        for index, word in enumerate(words):
+            weight = _CUES.get(word)
+            if weight is None:
+                continue
+            evidence.append(
+                Evidence(
+                    content=text,
+                    source=EvidenceSource.USER_STATEMENT,
+                    weight=Confidence(weight),
+                    supports=not self._negated_near(words, index),
+                    # Stamp provenance so the weight is auditable (Vision §8): the
+                    # belief can later explain why this evidence carries this weight.
+                    context=f"perceived via the cue '{word}'",
+                )
+            )
+        return tuple(evidence)
+
+    @staticmethod
+    def _negated_near(words: list[str], index: int) -> bool:
+        """True when a negation sits within a few words of the cue at ``index``."""
+        window = words[max(0, index - _NEGATION_WINDOW) : index + _NEGATION_WINDOW + 1]
+        return any(
+            word in _NEGATIONS or word.endswith("n't") for word in window
         )
