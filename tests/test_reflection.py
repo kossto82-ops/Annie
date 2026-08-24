@@ -238,3 +238,40 @@ class TestReflectCycle:
         assert result.reflection is None
         assert result.learned is None
         assert result.produced_insight is False
+
+
+class TestCuriosityWantsToReflect:
+    def _with_pattern(self) -> Jarvis:
+        jarvis = Jarvis()
+        cause = "the client moved the deadline up"
+        for question in ("is the schedule at risk?", "should we cut scope?"):
+            jarvis.think(question, evidence=[_ev(cause)])
+        return jarvis
+
+    def test_an_unmined_pattern_makes_jarvis_curious_to_reflect(self) -> None:
+        jarvis = self._with_pattern()
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert impulse.reflect_on == "the client moved the deadline up"
+        assert "Reflect on" in impulse.trigger
+
+    def test_an_isolated_web_raises_no_reflect_impulse(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a", evidence=[_ev("observation A")])
+        jarvis.think("b", evidence=[_ev("observation B")])
+        impulse = jarvis.feel_curious()
+        assert impulse is None or impulse.reflect_on is None
+
+    def test_pursuing_the_impulse_runs_the_cycle_and_quiets_it(self) -> None:
+        jarvis = self._with_pattern()
+        impulse = jarvis.feel_curious()
+        assert impulse is not None and impulse.reflect_on is not None
+
+        jarvis.pursue(impulse)
+        # The pattern is now mined into a belief; curiosity no longer wants it.
+        assert any(
+            "is a common cause" in belief.statement
+            for belief in jarvis.beliefs.all_beliefs()
+        )
+        again = jarvis.feel_curious()
+        assert again is None or again.reflect_on is None

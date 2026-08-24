@@ -400,6 +400,21 @@ class Jarvis:
                 prompted_by_belief_id=contested.id,
             )
 
+        # An un-mined load-bearing observation is a pattern in the belief web worth
+        # understanding (Vision §16, §31): several beliefs rest on one observation
+        # and Jarvis has not yet reflected it into an insight. Pursuing this impulse
+        # runs the reflective cycle. Prompted by a pattern in memory, not one belief.
+        unmined = self._unmined_load_bearing()
+        if unmined is not None:
+            return CuriosityImpulse(
+                trigger=f"Reflect on why several of my beliefs rest on: {unmined.observation}",
+                rationale=(
+                    f'"{unmined.observation}" underpins {unmined.load} of my beliefs '
+                    "and I have not yet understood why"
+                ),
+                reflect_on=unmined.observation,
+            )
+
         # A goal Jarvis keeps returning to is worth turning inward on (Vision §26,
         # §31): once self-reliability and companion tension are quiet, the pattern
         # in its own purposes becomes the most interesting unknown. Prompted by a
@@ -643,6 +658,17 @@ class Jarvis:
             learned=learned.statement if learned is not None else None,
         )
 
+    def _unmined_load_bearing(self) -> Reflection | None:
+        """The top load-bearing observation not yet turned into a learned insight."""
+        for finding in self.reflect():
+            if not self._already_mined(finding.observation):
+                return finding
+        return None
+
+    def _already_mined(self, observation: str) -> bool:
+        marker = f'"{observation}" is a common cause'
+        return any(marker in belief.statement for belief in self.beliefs.all_beliefs())
+
     def refute(self, observation: str, belief_statement: str) -> None:
         """Record that a belief would hold *without* an observation (Vision §17, §37):
         a counterexample answering :meth:`challenge`. The belief no longer rests on
@@ -659,8 +685,13 @@ class Jarvis:
         response to the companion; it is marked with a CURIOSITY origin. When the
         impulse concerns a goal, the episode is recorded *toward* that goal (Vision
         §26), so wondering about a stuck goal leaves a trace on the goal itself --
-        this records the reflection, not that the goal was reached.
+        this records the reflection, not that the goal was reached. When the impulse
+        wants to reflect on a load-bearing observation, the reflective cycle is run
+        first (Increment 80) -- so Jarvis pursuing curiosity actually thinks about
+        what it knows.
         """
+        if impulse.reflect_on is not None:
+            self.reflect_cycle()
         goal = Goal(statement=impulse.goal) if impulse.goal is not None else None
         episode = CognitiveEpisode(
             trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY, goal=goal

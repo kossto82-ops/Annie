@@ -25,3 +25,7 @@ class CuriosityImpulse:
     # pursuing it can be recorded *toward* that goal in episodic memory. None for
     # impulses about a self-tendency or the companion.
     goal: str | None = None
+    # The load-bearing observation this impulse wants to reflect on (Increment 80),
+    # when it was raised from an un-mined pattern in the belief web. When set,
+    # pursuing the impulse runs the reflective cycle. None for other impulses.
+    reflect_on: str | None = None

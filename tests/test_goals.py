@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -26,15 +27,18 @@ def _grounded_evidence() -> tuple[Evidence, ...]:
     overconfident -- so the self-model stays quiet.
     """
     base = datetime(2026, 1, 1, tzinfo=UTC)
+    # Unique content per call so distinct-trigger episodes do not incidentally share
+    # an observation (which Reflect would rightly notice as a load-bearing pattern).
+    tag = uuid.uuid4().hex[:8]
     return (
         Evidence(
-            content="a solid reason",
+            content=f"a solid reason {tag}",
             source=EvidenceSource.USER_STATEMENT,
             weight=Confidence(0.9),
             observed_at=base,
         ),
         Evidence(
-            content="a second solid reason later",
+            content=f"a second solid reason later {tag}",
             source=EvidenceSource.USER_STATEMENT,
             weight=Confidence(0.9),
             observed_at=base + timedelta(days=40),

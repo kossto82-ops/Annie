@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 79)
+Last updated: 2026-08-24 (Increment 80)
 
 ---
 
@@ -1027,6 +1027,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
   makes running the cycle a one-liner — the last ⬜ in Track A. The cycle itself is complete and green.
 - Gates: ruff clean · pyright strict 0 errors · pytest 378 passed.
 
+### Increment 80 — curiosity wants to reflect: the cycle becomes self-triggered ✅ (2026-08-24)
+- **Track A complete.** `feel_curious()` gained a slot (after contested-working-belief, before recurring
+  goals — D29 order preserved): an *un-mined* load-bearing observation — one `reflect()` surfaces that has
+  no `"…is a common cause…"` belief yet — raises a `CuriosityImpulse` (`reflect_on` = the observation) to
+  reflect on it (Vision §16, §31). `pursue()` runs `reflect_cycle()` first for such an impulse, so pursuing
+  curiosity actually makes Jarvis think about what it knows.
+- **Self-triggered**: Jarvis now notices *on its own* that several beliefs rest on one observation it has
+  not understood, and wants to reflect — no companion prompt. Once the pattern is mined into a belief it
+  goes quiet (no runaway loop; the learned belief's evidence is distinct, so no new pattern). Verified
+  end-to-end: an unprompted reflect impulse → pursue → common-cause belief learned → curiosity silent.
+- Truthful: only genuinely un-mined patterns raise it; still a recommendation; no LLM. Test-fixture
+  cleanup: `_grounded_evidence` (test_goals) and one test_jarvis case shared evidence *content* across
+  distinct beliefs by accident, which Reflect rightly noticed — made their content unique to restore intent.
+- Gates: ruff clean · pyright strict 0 errors · pytest 381 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1172,7 +1187,12 @@ All prior deferred threads are folded in below so nothing is lost.
 | **Learn** | ✅ done (Incr 78) | `learn_from_reflection()` — a surviving insight becomes a belief; the loop closes |
 | Act | ✅ exists, ▶ WIRE NEXT | graded autonomy / stances — let a learned insight recommend an action |
 | **`reflect_cycle()` — the whole loop in one call** | ✅ done (Incr 79) | runs Connect→…→Learn, returns `ReflectiveCycle` summary |
-| Trigger the cycle autonomously | ▶ NEXT | a curiosity source / scheduled self-reflection that calls `reflect_cycle()` on its own |
+| **Trigger the cycle autonomously** | ✅ done (Incr 80) | `feel_curious()` raises a reflect impulse on an un-mined pattern; `pursue()` runs the cycle |
+
+**Track A (the reflective cycle) is complete** — Remember → Connect → Reflect → Hypothesise → Challenge →
+Learn, self-triggered by curiosity. Everything derived, revisable, auditable, no LLM. Remaining across all
+tracks: wire a learned insight to Act (recommend an action); Track B (LLM adapter, gated); Track C (§15
+energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 
 ### Track B — perception → the LLM adapter (highest external impact, separate)
 - Seam done (Increments 63–68): `PerceptionSource`, streams, provenance, contested-belief resolution.
@@ -1200,18 +1220,19 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Curiosity wants to reflect: an un-mined load-bearing observation raises an impulse (Vision §16, §31).**
-`reflect_cycle()` exists but only runs when the caller asks. The honest bridge to autonomy is to let the
-*curiosity* Jarvis already has notice when it has something worth reflecting on — a load-bearing
-observation it has not yet turned into a learned insight — and raise an impulse whose pursuit runs the
-cycle. Smallest honest step:
-- In `feel_curious()` (a new slot, respecting D29), when `reflect()` surfaces a load-bearing observation
-  that has *not* already been learned (no `"…is a common cause…"` belief for it), raise a `CuriosityImpulse`
-  to reflect on it. `pursue()` (or a small branch) runs `reflect_cycle()` for that impulse.
-- Keep it truthful: only an *un-mined* pattern raises it (once learned, it is quiet — no loop); it stays a
-  recommendation; the existing priority order is preserved. No LLM.
-- Behaviour tests: a fresh load-bearing web makes `feel_curious()` return a reflect impulse; after
-  `reflect_cycle()`/learning, that impulse is no longer raised; an isolated web raises none.
+**A reflective-cycle tour + README: the whole self-triggered loop as a runnable story (Vision §31, §40).**
+Track A is complete but has no runnable example — the six tours all predate it. The completed cycle
+deserves a legible story. Smallest honest step:
+- Add `examples/reflecting.py`: a Jarvis grounds several beliefs on one shared observation (hand-fed or
+  perceived), then `feel_curious()` returns an *unprompted* reflect impulse, `pursue()` runs the cycle,
+  and the tour prints the `reflect()` finding, the brewed hypothesis, the challenge, and the learned
+  belief — then shows curiosity fall silent (the pattern is mined) and, optionally, `refute()` dethroning
+  a hypothesis. Deterministic; runs exit 0 and type-checks.
+- Extend the README with a "Reflect (the cognitive cycle)" group (`connections`, `related_beliefs`,
+  `reflect`, `hypothesise`, `challenge`, `refute`, `learn_from_reflection`, `reflect_cycle`); point the
+  examples list at the new tour. Consolidation only — no behaviour change.
+- Then (following increment) wire a *learned* insight to **Act**: a confident common-cause belief can
+  recommend a graded action (reuse `recommend_action`) — the cycle's output finally reaching behaviour.
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:

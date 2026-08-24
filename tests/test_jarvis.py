@@ -331,7 +331,10 @@ class TestCuriosity:
         for topic in ("a", "b", "c"):
             jarvis.think(
                 f"question about {topic}",
-                evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH + timedelta(days=60))],
+                evidence=[
+                    _ev(0.9, at=_EPOCH, content=f"reason one {topic}"),
+                    _ev(0.9, at=_EPOCH + timedelta(days=60), content=f"reason two {topic}"),
+                ],
             )
         assert jarvis.feel_curious() is None
 
