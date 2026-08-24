@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 45)
+Last updated: 2026-08-24 (Increment 46)
 
 ---
 
@@ -593,6 +593,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
   Verified: reachability confidence rises with reaches, falls with a failure, and survives a restart.
 - Gates: ruff clean · pyright strict 0 errors · pytest 275 passed.
 
+### Increment 46 — introspection distinguishes an unmet goal from a reachable one ✅ (2026-08-24)
+- `introspect()`'s "What I keep returning to:" lines now annotate each recurring goal with what Jarvis
+  has learned about reaching it (Increment 45): "— I have learned I can reach this (confidence 0.58)"
+  when the reachability belief is grounded (≥0.5, mirrors D14), "— I have not reliably reached this yet
+  (confidence …)" when it isn't, and no annotation when no outcome is known (Vision §26, §29, §30).
+- The two goal facets now talk: a goal Jarvis keeps returning to *and* has learned it can reach reads
+  as a different self-fact from one it returns to and keeps failing. Pure read-model over
+  `recurring_goals()` + `belief_about_goal()`; nothing invented, confidence never overstated.
+- Gates: ruff clean · pyright strict 0 errors · pytest 278 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -699,17 +709,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Introspection distinguishes an unmet recurring goal from a reachable one (Vision §26, §29, §30).**
-Increment 44 lists what Jarvis keeps returning to; Increment 45 lets it learn whether a goal is
-reachable — but the two don't yet talk. A goal it keeps returning to *and* has learned it can reach is
-a very different self-fact from one it returns to and keeps failing. Smallest honest step:
-- In `introspect()`'s "What I keep returning to:" section, annotate each recurring goal with its
-  reachability if known: append e.g. "(learned reachable, confidence 0.6)" or "(has not yet reached
-  it)" using `belief_about_goal(goal)`; leave unannotated when no outcome is known. Read-model only.
-- Optionally surface the same on `recurring_goals()` or a small companion method rather than only in the
-  narrated text, so the machine-readable path carries it too.
-- Behaviour tests: a recurring goal marked reached reads as reachable in `introspect()`; a recurring
-  goal marked not-reached reads as unmet; a recurring goal with no outcome carries no annotation.
+**A goal it keeps returning to but cannot reach becomes curiosity's priority (Vision §16, §26, §31).**
+Curiosity already raises a recurring goal (Increment 43), but it treats all recurring goals alike —
+including ones Jarvis has *learned it can reach*, which are the least interesting to wonder about. The
+genuinely interesting unknown is a goal it keeps returning to yet keeps *failing*. Smallest honest step:
+- In `feel_curious()`'s recurring-goal branch, prefer a recurring goal whose `belief_about_goal(...)` is
+  known-and-not-reachable (confidence < 0.5) over one already learned reachable; fall back to the most
+  recurrent when none are known-unreachable. Reword the trigger to name the tension ("Why do I keep
+  returning to X without reaching it?"). Still a recommendation, still pursued only via `pursue()`.
+- Keep D29's priority order intact (self-tendencies → companion tension → recurring purpose); this only
+  refines *which* recurring goal is chosen inside the third slot.
+- Behaviour tests: given two recurring goals, one marked reached and one marked not-reached, curiosity
+  picks the unreached one; with only reachable recurring goals it still raises the top one (no regression).
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

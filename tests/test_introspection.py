@@ -64,3 +64,38 @@ class TestIntrospect:
         jarvis = Jarvis()
         jarvis.think("a plain question")
         assert "keep returning to" not in jarvis.introspect()
+
+    def test_a_reached_recurring_goal_reads_as_reachable(self) -> None:
+        from jarvis.domain.value_objects.goal import Goal
+
+        jarvis = Jarvis()
+        goal = Goal(statement="ship the parser")
+        for question in ("q1", "q2", "q3"):
+            jarvis.think(question, goal=goal)
+        jarvis.mark_goal_reached(goal)
+        jarvis.mark_goal_reached(goal)
+        text = jarvis.introspect()
+        assert "ship the parser (3 times)" in text
+        assert "I have learned I can reach this" in text
+
+    def test_a_failed_recurring_goal_reads_as_unmet(self) -> None:
+        from jarvis.domain.value_objects.goal import Goal
+
+        jarvis = Jarvis()
+        goal = Goal(statement="ship the parser")
+        for question in ("q1", "q2", "q3"):
+            jarvis.think(question, goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        assert "I have not reliably reached this yet" in jarvis.introspect()
+
+    def test_a_recurring_goal_with_no_outcome_carries_no_annotation(self) -> None:
+        from jarvis.domain.value_objects.goal import Goal
+
+        jarvis = Jarvis()
+        goal = Goal(statement="ship the parser")
+        for question in ("q1", "q2", "q3"):
+            jarvis.think(question, goal=goal)
+        line = next(
+            row for row in jarvis.introspect().splitlines() if "ship the parser" in row
+        )
+        assert line.strip() == "- ship the parser (3 times)"

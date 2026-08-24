@@ -184,7 +184,7 @@ class Jarvis:
         if recurring:
             lines.append("What I keep returning to:")
             for goal, count in recurring:
-                lines.append(f"  - {goal} ({count} times)")
+                lines.append(f"  - {goal} ({count} times){self._reachability_note(goal)}")
 
         episodes = len(self.episodes.history())
         lines.append(
@@ -397,6 +397,21 @@ class Jarvis:
     @staticmethod
     def _goal_statement(goal_statement: str) -> str:
         return f"The goal '{goal_statement}' is reachable"
+
+    def _reachability_note(self, goal_statement: str) -> str:
+        """A truthful annotation of what Jarvis has learned about reaching a goal.
+
+        Empty when no outcome is known yet; otherwise it reports learned
+        reachability from the derived confidence -- never asserting more than the
+        evidence supports (mirrors the grounded threshold, D14).
+        """
+        belief = self.belief_about_goal(goal_statement)
+        if belief is None:
+            return ""
+        confidence = belief.confidence.value
+        if confidence >= 0.5:
+            return f" — I have learned I can reach this (confidence {confidence:.2f})"
+        return f" — I have not reliably reached this yet (confidence {confidence:.2f})"
 
     def recommend_action_by_description(self, description: str) -> ActionRecommendation:
         """Recommend a stance for a *remembered* kind of action (Vision §28).
