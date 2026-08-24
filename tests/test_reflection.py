@@ -68,3 +68,52 @@ class TestReflect:
         described = jarvis.reflect()[0].describe()
         assert "the API changed" in described
         assert "load-bearing" in described
+
+
+class TestHypothesise:
+    def test_a_load_bearing_observation_brews_a_hypothesis(self) -> None:
+        jarvis = Jarvis()
+        cause = "the client moved the deadline up"
+        jarvis.think("is the schedule at risk?", evidence=[_ev(cause)])
+        jarvis.think("should we cut scope?", evidence=[_ev(cause)])
+
+        hypotheses = jarvis.hypothesise()
+        assert hypotheses is not None
+        leading = hypotheses.leading()
+        assert leading is not None
+        assert cause in leading.statement
+        assert "common cause" in leading.statement
+        assert leading.confidence.value > 0.0
+
+    def test_the_common_cause_leads_over_the_coincidence_null(self) -> None:
+        jarvis = Jarvis()
+        cause = "the API changed"
+        for question in ("a", "b", "c"):
+            jarvis.think(question, evidence=[_ev(cause)])
+
+        hypotheses = jarvis.hypothesise()
+        assert hypotheses is not None
+        leading = hypotheses.leading()
+        assert leading is not None and "common cause" in leading.statement
+        # Seeded with one piece of evidence per belief resting on the observation.
+        assert len(leading.evidence) == 3
+
+    def test_nothing_load_bearing_yields_no_hypothesis(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a", evidence=[_ev("observation A")])
+        jarvis.think("b", evidence=[_ev("observation B")])
+        assert jarvis.hypothesise() is None
+
+    def test_more_beliefs_on_the_observation_make_a_more_confident_hypothesis(self) -> None:
+        two = Jarvis()
+        two.think("a", evidence=[_ev("X")])
+        two.think("b", evidence=[_ev("X")])
+        three = Jarvis()
+        three.think("a", evidence=[_ev("X")])
+        three.think("b", evidence=[_ev("X")])
+        three.think("c", evidence=[_ev("X")])
+
+        two_leading = two.hypothesise().leading()  # type: ignore[union-attr]
+        three_leading = three.hypothesise().leading()  # type: ignore[union-attr]
+        assert two_leading is not None and three_leading is not None
+        assert three_leading.confidence.value > two_leading.confidence.value

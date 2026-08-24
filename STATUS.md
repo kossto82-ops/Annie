@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 75)
+Last updated: 2026-08-24 (Increment 76)
 
 ---
 
@@ -969,6 +969,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
   belief on it is in doubt at once — the natural input to Challenge (later).
 - Gates: ruff clean · pyright strict 0 errors · pytest 363 passed.
 
+### Increment 76 — Hypothesise: brewing an explanation from reflection ✅ (2026-08-24)
+- **Cycle stage 3** (… → Reflect → **Hypothesise** → Challenge → …). Turns Reflect's *noticing* into a
+  *proposed explanation*: the most load-bearing observation may be a **common cause** of the beliefs
+  resting on it, against the null that it grounds them only by coincidence (Vision §17, §31).
+- `hypothesis_generation.generate_hypotheses(reflections)` builds a `HypothesisSet` (reuses the §17
+  machinery) over the top finding: seeds the common-cause hypothesis with one piece of evidence per
+  belief resting on the observation (so its derived confidence rises with load), and stands the
+  independence/coincidence null beside it with none. `jarvis.hypothesise()` runs it over `reflect()`,
+  draining events (read-model, not dispatched).
+- **Autonomous**: unlike `consider()` (companion-triggered), this brews from Jarvis's own reflection —
+  the first time it forms an explanation of its *own* belief web unprompted. Proposed, never asserted;
+  confidence derived; None when nothing is load-bearing. Verified: 3 beliefs on one observation → a
+  common-cause hypothesis at 0.64 leading over the 0.00 coincidence null. Names what Challenge will test.
+- Gates: ruff clean · pyright strict 0 errors · pytest 367 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1109,8 +1124,8 @@ All prior deferred threads are folded in below so nothing is lost.
 | Remember | ✅ done | episodic + belief + companion + action memory, persistent |
 | **Connect** | ✅ done (Incr 74) | `Connection`, `connections()`, `related_beliefs()` — links by shared evidence |
 | **Reflect** | ✅ done (Incr 75) | `Reflection`, `reflect()` — load-bearing observations across the belief web |
-| **Hypothesise (autonomous)** | ▶ NEXT | reuse `HypothesisSet` (§17) but *brewed from* reflection, not triggered by `consider()` |
-| Challenge | ⬜ | actively seek falsifying evidence for a leading hypothesis (self-adversarial; beyond §11) |
+| **Hypothesise (autonomous)** | ✅ done (Incr 76) | `hypothesise()` — a common-cause `HypothesisSet` brewed from `reflect()` |
+| **Challenge** | ▶ NEXT | actively seek falsifying evidence for the leading hypothesis (self-adversarial; beyond §11) |
 | Learn | ✅ exists | action-outcome learning + self-model behaviour change — wire into the cycle |
 | Act | ✅ exists | graded autonomy / stances — wire into the cycle |
 | Run the whole cycle autonomously | ⬜ | generalise `feel_curious`/`pursue`: Jarvis triggers the cycle on itself |
@@ -1141,20 +1156,20 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Hypothesise (cycle stage 3): brew a hypothesis from a load-bearing observation (Vision §17, §31).**
-Increment 75 lets Jarvis notice that one observation underpins several beliefs. Stage 3 turns that
-*noticing* into a *proposed explanation*: "if these beliefs all rest on X, maybe they share a common
-cause / X explains them." Today `HypothesisSet`/`consider()` exist (§17) but are only triggered by the
-companion; this makes hypotheses **brew from Jarvis's own reflection**. Smallest honest step:
-- `jarvis.hypothesise()` (or `hypotheses()`): from the top `reflect()` finding, form a `Hypothesis`/
-  `HypothesisSet` proposing that the load-bearing observation is the common ground of its beliefs —
-  seeded with the shared evidence, so its confidence is derived like any hypothesis. Return the
-  structured hypothesis set (leading + rivals), or empty when there is nothing load-bearing to explain.
-- Keep it truthful: a hypothesis is *proposed*, never asserted — it reuses the §17 evidence-derived
-  machinery, is revisable, and names what would confirm or refute it (the input to Challenge, stage 4).
-  Pure read-model over reflect(); no LLM.
-- Behaviour tests: a load-bearing observation yields a hypothesis naming it and the beliefs it would
-  explain; no load-bearing observation yields none; the hypothesis carries the shared evidence.
+**Challenge (cycle stage 4): name what would falsify the leading hypothesis (Vision §11, §17, §37).**
+Increment 76 proposes a common-cause hypothesis autonomously; a mind that only *confirms* its own guesses
+is not thinking. Challenge is the self-adversarial step: Jarvis states precisely what evidence would
+*refute* the leading hypothesis, and lowers its standing when that refuting evidence is absent-but-checkable
+or present. Smallest honest step:
+- `jarvis.challenge()` (over the current `hypothesise()`): produce a structured `Challenge`/finding naming
+  the leading hypothesis and a concrete falsifier — e.g. "if any of these beliefs holds *without* the
+  observation, the common cause is wrong" — plus an `EvidenceRequest`-style pointer to what to check.
+  Return None when there is no hypothesis to challenge.
+- Keep it truthful: Challenge does not assert the hypothesis false — it names the test and, if the
+  companion later supplies refuting evidence (`resolve`-style), that evidence flows into the hypothesis
+  set and can dethrone the common cause. Reuse the §17 evidence machinery; no LLM.
+- Behaviour tests: a leading hypothesis yields a challenge naming a concrete falsifier; feeding the
+  falsifier weakens/dethrones the common-cause hypothesis; no hypothesis → no challenge.
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:

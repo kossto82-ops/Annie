@@ -20,10 +20,11 @@ _PUBLIC_METHODS = (
     # Reason
     "think",
     "consider",
-    # Connect / Reflect
+    # Connect / Reflect / Hypothesise
     "connections",
     "related_beliefs",
     "reflect",
+    "hypothesise",
     # Act & learn
     "act",
     "record_outcome",

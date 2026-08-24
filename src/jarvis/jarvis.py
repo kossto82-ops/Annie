@@ -12,6 +12,7 @@ from pathlib import Path
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
+from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
@@ -25,6 +26,7 @@ from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
+from jarvis.domain.services.hypothesis_generation import generate_hypotheses
 from jarvis.domain.services.reflection import find_reflections
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
@@ -529,6 +531,19 @@ class Jarvis:
         observation grounds more than one belief. Feeds autonomous hypotheses.
         """
         return find_reflections(list(self.beliefs.all_beliefs()))
+
+    def hypothesise(self) -> HypothesisSet | None:
+        """Brew a hypothesis from reflection (Vision §17, §31), or None when nothing
+        is load-bearing to explain. Cycle stage three, after Reflect.
+
+        Autonomously proposes that the most load-bearing observation may be a common
+        cause of the beliefs resting on it, against the null that it is coincidence —
+        a competing `HypothesisSet` whose confidence is derived, never asserted.
+        """
+        hypotheses = generate_hypotheses(self.reflect())
+        if hypotheses is not None:
+            hypotheses.pull_events()  # read-model: drain without dispatching
+        return hypotheses
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).
