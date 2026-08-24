@@ -465,7 +465,31 @@ class Jarvis:
         for event in belief.pull_events():
             self.nervous_system.publish(event)
         self.nervous_system.dispatch()
+
+        # Progress on a part is honest evidence about the whole (Vision §12, §26):
+        # reaching a sub-goal credits its parent's reachability -- but softly (a
+        # DIRECT_OBSERVATION, weaker than reaching the whole directly), and the
+        # parent is never "done" because a child is; its reachability stays derived.
+        if goal.part_of is not None:
+            self._credit_parent(goal.part_of, goal.statement, reached)
         return belief
+
+    def _credit_parent(self, parent: str, child: str, reached: bool) -> None:
+        statement = self._goal_statement(parent)
+        belief = self._goals.get_by_statement(statement) or Belief(statement=statement)
+        outcome = "reached" if reached else "not reached"
+        belief.add_evidence(
+            Evidence(
+                content=f"its part '{child}' was {outcome}",
+                source=EvidenceSource.DIRECT_OBSERVATION,
+                weight=Confidence(1.0),
+                supports=reached,
+            )
+        )
+        self._goals.save(belief)
+        for event in belief.pull_events():
+            self.nervous_system.publish(event)
+        self.nervous_system.dispatch()
 
     def receive_help(self, goal: Goal, helpful: bool = True) -> Belief:
         """Take in the companion's guidance on a goal and learn from it (Vision §18, §26).

@@ -52,6 +52,51 @@ class TestGoal:
         assert goal.success_criterion == "I can restate it"
 
 
+class TestGoalDecomposition:
+    def test_a_goal_may_name_a_larger_goal_it_is_part_of(self) -> None:
+        child = Goal(statement="write the base case", part_of="master recursion")
+        assert child.part_of == "master recursion"
+
+    def test_a_goal_cannot_be_part_of_itself(self) -> None:
+        with pytest.raises(ValueError):
+            Goal(statement="x", part_of="x")
+
+    def test_an_empty_parent_is_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            Goal(statement="x", part_of="  ")
+
+    def test_reaching_a_sub_goal_credits_the_parent(self) -> None:
+        jarvis = Jarvis()
+        child = Goal(statement="write the base case", part_of="master recursion")
+        jarvis.mark_goal_reached(child)
+        parent = jarvis.belief_about_goal("master recursion")
+        assert parent is not None and parent.confidence.value > 0.0
+
+    def test_an_unmet_sub_goal_does_not_raise_the_parent(self) -> None:
+        jarvis = Jarvis()
+        child = Goal(statement="write the base case", part_of="master recursion")
+        jarvis.mark_goal_reached(child, reached=False)
+        parent = jarvis.belief_about_goal("master recursion")
+        assert parent is not None and parent.confidence.value == 0.0
+
+    def test_a_parentless_goal_creates_no_parent_belief(self) -> None:
+        jarvis = Jarvis()
+        jarvis.mark_goal_reached(Goal(statement="write the base case"))
+        assert jarvis.belief_about_goal("master recursion") is None
+
+    def test_the_parent_credit_survives_a_restart(self, tmp_path: Path) -> None:
+        child = Goal(statement="write the base case", part_of="master recursion")
+        first = Jarvis.persistent(tmp_path)
+        first.mark_goal_reached(child)
+        before = first.belief_about_goal("master recursion")
+        assert before is not None
+
+        restarted = Jarvis.persistent(tmp_path)
+        after = restarted.belief_about_goal("master recursion")
+        assert after is not None
+        assert after.confidence.value == before.confidence.value
+
+
 class TestThinkWithAGoal:
     def test_an_episode_without_a_goal_has_none(self) -> None:
         assert Jarvis().think("a question").goal is None

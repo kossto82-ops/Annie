@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 56)
+Last updated: 2026-08-24 (Increment 57)
 
 ---
 
@@ -721,6 +721,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
   now lists all six stores. Consolidation only — no behaviour change, all prior tests green.
 - Gates: ruff clean · pyright strict 0 errors · pytest 301 passed.
 
+### Increment 57 — a goal made of parts: decomposition as recorded structure ✅ (2026-08-24)
+- `Goal` gained an optional `part_of: str | None` (the statement of a larger goal it is a part of;
+  validated non-empty and not self-referential). Recorded structure, not a plan — no ordering, no
+  execution (Vision §12, §26).
+- `mark_goal_reached(child)` now, when the child names a parent, also credits the *parent's*
+  reachability belief via `_credit_parent` — but *softly*: a `DIRECT_OBSERVATION` (weaker than reaching
+  the whole directly, an `ACTION_OUTCOME`). Progress on a part is honest evidence about the whole; a
+  parent is never "done" because a child is — its reachability stays derived from all its evidence
+  (verified: three parts reached accrue 0.33 → 0.5 → 0.6, never jumping to certainty).
+- Truthful & backward compatible: an unmet sub-goal contradicts the parent (does not raise it), a
+  parentless goal creates no parent belief, and the parent credit persists in `goals.json` across a
+  restart. No new store.
+- Gates: ruff clean · pyright strict 0 errors · pytest 308 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -833,18 +847,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A goal made of sub-goals: decomposition as recorded structure, not a planner (Vision §12, §26).**
-Every goal so far is atomic — Jarvis returns to "master recursion" as one opaque string. But a real
-purpose usually has parts, and progress on a part is honest evidence about the whole. This is the long-
-deferred "goal decomposition" follow-up, taken as one small, truthful step (NOT a planner/executor):
-- Let a `Goal` optionally name its parent (`part_of: str | None`), or add `jarvis.add_subgoal(parent,
-  child)` recording the link in a small store. Reaching a sub-goal (`mark_goal_reached(child)`) records
-  supporting evidence on the *parent's* reachability too — progress on a part is evidence the whole is
-  reachable, derived and revisable like everything else. No planning, no ordering, no execution.
-- Keep it truthful: the parent is not "done" because a child is; its reachability is still derived from
-  all its evidence. A child with no parent behaves exactly as today (fully backward compatible).
-- Behaviour tests: reaching a sub-goal raises the parent's reachability; an unmet sub-goal does not;
-  a goal with no parent is unchanged; the parent link round-trips if persisted.
+**Introspection shows a goal's parts and how far along the whole is (Vision §26, §29, §30).**
+Increment 57 lets a sub-goal credit its parent's reachability, but nothing surfaces the *structure* —
+`introspect()` and `recurring_goals()` still treat every goal as atomic, so a companion can't see that
+"master recursion" is made of parts or how many are done. The decomposition is recorded but invisible.
+Smallest honest step:
+- Track the parent→children links (they're implicit in the reachability evidence content today; make
+  them queryable, e.g. `jarvis.sub_goals(parent_statement) -> tuple[str, ...]`, or record the link in a
+  small store when `mark_goal_reached` sees a `part_of`). Then add a read-model
+  `jarvis.goal_progress(parent) -> tuple[int, int]` = (parts reached, parts known).
+- In `introspect()`'s recurring-goal line, when a goal has known parts, append "(2 of 3 parts reached)".
+  Read-model only; parts-reached counts distinct children reached at least once, truthful about partials.
+- Behaviour tests: reaching 2 of 3 named sub-goals makes `goal_progress(parent) == (2, 3)` and shows in
+  `introspect()`; a goal with no parts carries no progress annotation.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
