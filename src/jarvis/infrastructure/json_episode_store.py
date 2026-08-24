@@ -31,6 +31,7 @@ def _serialise_record(record: EpisodeRecord) -> dict[str, Any]:
         "conclusion_stability": record.conclusion_stability.value,
         "origin": record.origin.value,
         "kind": record.kind.value,
+        "goal": record.goal,
         "recorded_at": record.recorded_at.isoformat(),
         "record_id": record.record_id,
     }
@@ -47,6 +48,7 @@ def _deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
         conclusion_stability=TemporalStability(data["conclusion_stability"]),
         origin=TriggerOrigin(data["origin"]),
         kind=EpisodeKind(data["kind"]),
+        goal=data.get("goal"),
         recorded_at=datetime.fromisoformat(data["recorded_at"]),
         record_id=data["record_id"],
     )

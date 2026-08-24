@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 40)
+Last updated: 2026-08-24 (Increment 41)
 
 ---
 
@@ -532,6 +532,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Truthful: an episode without a goal has `goal is None` and an unchanged decision string.
 - Gates: ruff clean · pyright strict 0 errors · pytest 258 passed.
 
+### Increment 41 — the goal is remembered: provenance survives in episodic memory ✅ (2026-08-24)
+- Increment 40 gave an episode a `goal`, but `EpisodeRecord` didn't capture it, so the purpose
+  vanished from history. Now `EpisodeRecord` has an optional `goal: str | None` (the goal statement,
+  or None); the executive records it from `episode.goal` when concluding. Provenance is now
+  *remembered*, not just produced (Vision §26 Goal → … → Decision, §21 episodic memory).
+- The JSON episode store (de)serialises `goal`; `_deserialise_record` uses `data.get("goal")` so
+  older episode files without the key load as `None` (backward compatible). Verified: a goal-directed
+  `think(...)` round-trips its goal across a `Jarvis.persistent(dir)` restart.
+- Truthful & narrow: deliberation records (DELIBERATION kind) carry no goal — `consider()` takes none,
+  so they record `None` via the field default. Only companion conclusions attach it today.
+- Gates: ruff clean · pyright strict 0 errors · pytest 260 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -633,14 +645,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Record the goal in episodic memory (Vision §26, §21).** Increment 40 gave an episode a `goal`, but
-`EpisodeRecord` doesn't capture it, so the goal vanishes from history — and §26's provenance
-(`Goal → … → Decision`) should be *remembered*, not only live. Small honest step:
-- Add an optional `goal: str | None` to `EpisodeRecord` (the goal statement, or None); the executive
-  records it from `episode.goal`. Update the JSON episode store to (de)serialise it.
-- Keep it truthful: episodes without a goal store `None`; existing self-observation is unaffected.
-- Behaviour tests: a `think(..., goal=…)` appends a record carrying the goal statement; a goal-less
-  one records `None`; the record round-trips through the JSON store.
+**Notice a recurring goal (Vision §26, §31: "what do I keep returning to?").** The goal now lives in
+episodic memory (Increment 41), so Jarvis can, for the first time, look back over its own purposes.
+Smallest honest step toward goal-aware self-modelling:
+- Add a query over `episodes.history()` that counts how often the *same* goal statement recurs across
+  companion-origin episodes (exact-string match — semantic matching is a deliberate later concern, cf.
+  D17). Expose it read-only, e.g. `jarvis.recurring_goals()` → tuple of `(goal, count)` ordered by
+  count, only goals seen ≥ `_MINIMUM_HISTORY` times (mirror the self-observation floor, D20).
+- Keep it truthful and non-asserting: this is a *count over memory*, not a belief or a plan — it names
+  what Jarvis has returned to, nothing about whether that's good. No new persistence (reads existing
+  records). Goal-less episodes are simply skipped.
+- Behaviour tests: three `think(..., goal=g)` with the same statement surface `(g, 3)`; a one-off goal
+  and goal-less episodes never appear; ordering is by descending count.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

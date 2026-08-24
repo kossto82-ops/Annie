@@ -37,3 +37,16 @@ class TestThinkWithAGoal:
         episode = Jarvis().think("is the module too complex?")
         assert episode.result is not None
         assert "Toward" not in episode.result
+
+
+class TestGoalIsRemembered:
+    def test_a_goal_directed_episode_records_its_goal(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("is the module too complex?", goal=Goal(statement="decide to refactor"))
+        record = jarvis.episodes.history()[-1]
+        assert record.goal == "decide to refactor"
+
+    def test_a_goal_less_episode_records_none(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a plain question")
+        assert jarvis.episodes.history()[-1].goal is None

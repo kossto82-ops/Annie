@@ -44,5 +44,6 @@ class EpisodeRecord:
     conclusion_stability: TemporalStability
     origin: TriggerOrigin
     kind: EpisodeKind
+    goal: str | None = None  # what the episode was toward (Vision §26), if any
     recorded_at: datetime = field(default_factory=_now)
     record_id: str = field(default_factory=lambda: str(uuid.uuid4()))

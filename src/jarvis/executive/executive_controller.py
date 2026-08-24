@@ -334,6 +334,7 @@ class ExecutiveController:
                 conclusion_stability=belief.stability,
                 origin=episode.origin,
                 kind=EpisodeKind.CONCLUSION,
+                goal=episode.goal.statement if episode.goal is not None else None,
             )
         )
 
