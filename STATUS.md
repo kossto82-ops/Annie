@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 54)
+Last updated: 2026-08-24 (Increment 55)
 
 ---
 
@@ -697,6 +697,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   that belief, the ask cools back down. The goal named is still the most stuck one.
 - Gates: ruff clean · pyright strict 0 errors · pytest 300 passed.
 
+### Increment 55 — continuity checkpoint: a warmed relationship survives a restart ✅ (2026-08-24)
+- Verified the companion-helpfulness belief (Increment 53) and the warmed ask (Increment 54) round-trip
+  through `Jarvis.persistent(dir)` — the companion store is already wired to `companion.json`, so no
+  code change was needed; this increment locks the guarantee with a regression test (Vision §3, §5, §21).
+- The test builds the full chain in one persistent process (receive help → confident companion belief;
+  grounded episodes + failure + exhausting pursuits → an exhausted stuck goal), asserts the warm ask,
+  then opens a *fresh* `Jarvis.persistent` on the same directory and asserts the companion belief is
+  still confident, the stuck goal still reconstructs from disk, and `ask_for_help()` is still warm.
+- The relationship Jarvis has built now provably outlasts a process, exactly as its beliefs, episodes,
+  actions, reversibility and goals already do. No new state; a continuity guarantee made explicit.
+- Gates: ruff clean · pyright strict 0 errors · pytest 301 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -809,19 +821,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Persist the companion helpfulness belief so the warmth survives a restart (Vision §3, §5, §21).**
-Increment 54 warms the ask from a confident companion-helpfulness belief — but the companion model store
-is only wired to disk when it was passed in, and the `HELPFUL_COMPANION_TRAIT` belief lives in the same
-`companion` model as every other companion trait. Verify (and, if missing, fix) that the helpfulness
-belief round-trips through `Jarvis.persistent(dir)` so a warmed relationship is not forgotten on
-restart. Smallest honest step:
-- Add a persistence test: with `Jarvis.persistent(tmp)`, receive help twice on a goal, restart, and
-  assert `companion.belief_about(HELPFUL_COMPANION_TRAIT)` is still confident *and* `ask_for_help()` on
-  a fresh stuck goal still uses the warm phrasing after the restart.
-- If it does not survive (e.g. the companion store is not the persistent one, or events aren't flushed),
-  fix the wiring — do not paper over it. Keep it truthful: only what was actually learned persists.
-- This is a continuity checkpoint (Vision §3): the relationship Jarvis has built should outlast a
-  process, exactly as its beliefs, episodes, actions, reversibility and goals already do.
+**A single end-to-end "life story" example + README of the goal→relationship arc (Vision §26, §40).**
+Increments 40–55 built a long, coherent arc — goals recorded, remembered, learned reachable, wondered
+about, given up on, asked for help, help received, the companion learned from, the ask warmed, all
+persistent — but there is no single runnable narrative that walks it, and the README/`examples/` predate
+it (last touched at Increment 32). A reader cannot see the whole story in one place. Smallest honest step:
+- Add `examples/goal_arc.py`: one persistent Jarvis that sets a goal, keeps returning to it, learns it is
+  stuck, exhausts its curiosity, asks for help, receives it, and ends reachable — printing each turn so
+  the arc is legible end-to-end. Verify it runs (exit 0) and type-checks, as `examples/main_loop.py` is.
+- Extend the README "Vocabulary" with the goal/relationship methods added since Increment 40
+  (`think(..., goal=)`, `recurring_goals`, `mark_goal_reached`, `reflection_effort`, `stuck_goals`,
+  `ask_for_help`, `receive_help`), copied from the real signatures (Rule 24). Consolidation only —
+  no behaviour change; every prior test stays green.
+- Behaviour check: the example is import-clean and deterministic (no wall-clock branching); the README
+  method list matches the actual public API.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

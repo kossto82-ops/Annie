@@ -511,3 +511,36 @@ class TestAskPhrasing:
         assert message is not None
         assert "You've helped me get unstuck before" not in message
         assert "on my own — can you help?" in message
+
+
+class TestRelationshipContinuity:
+    @staticmethod
+    def _exhausted_stuck(jarvis: Jarvis, goal: Goal) -> None:
+        jarvis.think("q", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("q", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        for _ in range(3):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None
+            jarvis.pursue(impulse)
+
+    def test_a_warmed_relationship_survives_a_restart(self, tmp_path: Path) -> None:
+        first = Jarvis.persistent(tmp_path)
+        # Earn a confident "companion is helpful" belief, and leave a stuck goal.
+        past = Goal(statement="a past goal")
+        first.receive_help(past)
+        first.receive_help(past)
+        self._exhausted_stuck(first, Goal(statement="the hard goal"))
+        warm_before = first.ask_for_help()
+        assert warm_before is not None
+        assert "You've helped me get unstuck before" in warm_before
+
+        # A fresh process wired to the same directory must remember the warmth.
+        restarted = Jarvis.persistent(tmp_path)
+        belief = restarted.companion.belief_about("is helpful when I am stuck")
+        assert belief is not None and belief.confidence.value >= 0.5
+        warm_after = restarted.ask_for_help()
+        assert warm_after is not None
+        assert "You've helped me get unstuck before" in warm_after
+        assert "the hard goal" in warm_after
