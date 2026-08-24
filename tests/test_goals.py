@@ -142,6 +142,38 @@ class TestGoalProgress:
         assert set(restarted.sub_goals(self._PARENT)) == set(self._PARTS[:2])
 
 
+class TestCuriosityFocusesOnAStuckPart:
+    _PARENT = "master recursion"
+
+    def _stuck_parent(self, jarvis: Jarvis) -> None:
+        for question in ("q1", "q2", "q3"):
+            jarvis.think(question, evidence=_grounded_evidence(), goal=Goal(statement=self._PARENT))
+        jarvis.mark_goal_reached(Goal(statement=self._PARENT), reached=False)
+
+    def test_curiosity_names_the_specific_unreached_part(self) -> None:
+        jarvis = Jarvis()
+        self._stuck_parent(jarvis)
+        jarvis.mark_goal_reached(Goal(statement="write the base case", part_of=self._PARENT))
+        jarvis.mark_goal_reached(
+            Goal(statement="handle the recursive step", part_of=self._PARENT), reached=False
+        )
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert "handle the recursive step" in impulse.trigger
+        assert "1 of 2 parts" in impulse.trigger
+        # Effort still accrues to the parent whole, not the part.
+        assert impulse.goal == self._PARENT
+        jarvis.pursue(impulse)
+        assert jarvis.reflection_effort(self._PARENT) == 1
+
+    def test_a_partless_stuck_goal_keeps_the_whole_goal_phrasing(self) -> None:
+        jarvis = Jarvis()
+        self._stuck_parent(jarvis)
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert impulse.trigger == f"Why do I keep returning to {self._PARENT} without reaching it?"
+
+
 class TestThinkWithAGoal:
     def test_an_episode_without_a_goal_has_none(self) -> None:
         assert Jarvis().think("a question").goal is None

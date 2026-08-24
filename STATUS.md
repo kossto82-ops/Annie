@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 58)
+Last updated: 2026-08-24 (Increment 59)
 
 ---
 
@@ -749,6 +749,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   `subgoals.json`; progress and parts round-trip across a restart.
 - Gates: ruff clean · pyright strict 0 errors · pytest 312 passed.
 
+### Increment 59 — curiosity focuses on the specific part that blocks the whole ✅ (2026-08-24)
+- When `feel_curious()` would raise an open stuck parent that has recorded parts, it now names the
+  specific unreached part instead of the whole: "I've reached 1 of 2 parts of X; why can't I reach
+  'Y'?" (Vision §16, §26, §31). `_first_unreached_part(parent)` finds the first part with no supporting
+  evidence (consistent with `goal_progress`); falls back to the whole-goal phrasing when no part is
+  identifiably unreached.
+- The impulse still carries the **parent** `goal`, so pursuit and reflection-effort accounting accrue to
+  the whole exactly as before — only *which stuck thing is named* sharpens. D29 priority, D30 give-up,
+  and ask-for-help are all untouched.
+- Gates: ruff clean · pyright strict 0 errors · pytest 314 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -861,19 +872,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A part it cannot reach becomes curiosity's focus — wonder about the sub-goal, not just the whole
-(Vision §16, §26, §31).** Curiosity fixes on a stuck *parent* goal (Increment 47/50), but now that goals
-have parts, the honest question is often narrower: *which part* is blocking the whole? A parent with 2 of
-3 parts reached is stuck on one specific piece. Smallest honest step:
-- When `feel_curious()` would raise a stuck parent that has recorded parts, prefer to name the specific
-  unreached part: consult `sub_goals(parent)` + `belief_about_goal(child)` and, if there is an unreached
-  part, phrase the impulse about it ("I've reached 2 of 3 parts of X; why can't I reach 'Y'?"). Fall back
-  to the whole-goal phrasing when no part is identifiably unreached. Impulse still carries the parent
-  `goal` so pursuit/effort accounting is unchanged.
-- Keep it truthful: this only sharpens *which* stuck thing is named; the D29 priority order, the
-  give-up-when-exhausted rule (D30), and ask-for-help all stay as they are.
-- Behaviour tests: a parent with one clearly-unreached part yields an impulse naming that part; a parent
-  with no parts keeps the whole-goal phrasing; effort still accrues to the parent.
+**Asking for help names the blocking part too (Vision §18, §26, §37).** Curiosity now points at the
+specific stuck part (Increment 59), but `ask_for_help()` still asks about the whole goal — so when Jarvis
+finally turns to the companion, it asks the vaguer question ("help with X") instead of the sharp, useful
+one ("I'm stuck on part 'Y' of X"). The narrower the ask, the more actionable the help. Smallest honest
+step:
+- In `ask_for_help()`, when the most-stuck goal has an identifiable unreached part (`_first_unreached_part`),
+  name it in the request ("I keep returning to X; I've reached N of M parts but can't get past 'Y' — can
+  you help?"), keeping the warm/neutral variants from Increments 51/54. Fall back to the whole-goal
+  wording when there is no such part. Still only asks; asserts nothing, takes no action.
+- Truthful: the part named is one genuinely unreached (same predicate curiosity uses), and `receive_help`
+  can still be recorded against the whole goal (helping the part helps the whole — leave the credit path
+  as is unless a part-level `receive_help` proves needed).
+- Behaviour tests: a stuck goal with an unreached part makes `ask_for_help()` name that part; a partless
+  stuck goal keeps the current wording; the warm variant still triggers when the companion is proven helpful.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

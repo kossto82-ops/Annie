@@ -328,6 +328,22 @@ class Jarvis:
             # is count-ordered, so the first such goal is also the most recurrent.
             for goal, count in recurring:
                 if self._is_open_stuck_goal(goal):
+                    # If the stuck whole has parts, the honest question is narrower:
+                    # which specific part is blocking it? (Vision §26). The impulse
+                    # still carries the parent goal, so effort accrues to the whole.
+                    part = self._first_unreached_part(goal)
+                    if part is not None:
+                        reached, known = self.goal_progress(goal)
+                        return CuriosityImpulse(
+                            trigger=(
+                                f"I've reached {reached} of {known} parts of {goal}; "
+                                f"why can't I reach '{part}'?"
+                            ),
+                            rationale=(
+                                f'the part "{part}" of goal "{goal}" is still unreached'
+                            ),
+                            goal=goal,
+                        )
                     return CuriosityImpulse(
                         trigger=f"Why do I keep returning to {goal} without reaching it?",
                         rationale=(
@@ -530,6 +546,19 @@ class Jarvis:
             for belief in self._subgoals.all_beliefs()
             if belief.statement.endswith(suffix)
         )
+
+    def _first_unreached_part(self, parent: str) -> str | None:
+        """The first recorded part of ``parent`` never yet reached, or None.
+
+        Consistent with :meth:`goal_progress`: a part counts as reached once it has
+        any supporting evidence, so an unreached part is one with none.
+        """
+        prefix = "The goal '"
+        suffix = f"' is a part of '{parent}'"
+        for belief in self._subgoals.all_beliefs():
+            if belief.statement.endswith(suffix) and not belief.explain().supporting:
+                return belief.statement[len(prefix) : -len(suffix)]
+        return None
 
     def goal_progress(self, parent: str) -> tuple[int, int]:
         """How far along a decomposed goal is, as ``(parts reached, parts known)``
