@@ -62,6 +62,10 @@ _MAX_GOAL_REFLECTIONS = 3
 # The companion trait Jarvis learns about from help it received on a stuck goal.
 HELPFUL_COMPANION_TRAIT = "is helpful when I am stuck"
 
+# A reflective hypothesis is adopted as a belief only once it leads this confidently
+# (mirrors the grounded threshold, D14) and has survived challenge.
+_INSIGHT_CONFIDENCE = 0.5
+
 
 class Jarvis:
     """A long-term cognitive companion (first vertical slice)."""
@@ -579,6 +583,41 @@ class Jarvis:
             falsifier=falsifier,
             beliefs=finding.beliefs,
         )
+
+    def learn_from_reflection(self) -> Belief | None:
+        """Adopt a reflective insight that survived challenge as a belief (Vision §20,
+        §31) — cycle stage five, where the loop closes on itself. Returns the adopted
+        belief, or None when nothing has earned it.
+
+        When `hypothesise()` still leads with a common-cause explanation confidently
+        (i.e. it was not dethroned by `refute`), Jarvis reasons a new belief stating
+        that common cause, grounded in the same evidence. That belief enters the
+        beliefs store like any conclusion — ordinary, derived, revisable — so the
+        next Connect/Reflect can build on it, and it can itself be challenged later.
+        """
+        hypotheses = self.hypothesise()
+        if hypotheses is None:
+            return None
+        leading = hypotheses.leading()
+        if (
+            leading is None
+            or "common cause" not in leading.statement
+            or leading.confidence.value < _INSIGHT_CONFIDENCE
+        ):
+            return None
+        finding = self.reflect()[0]
+        trigger = (
+            f'"{finding.observation}" is a common cause behind several of my beliefs'
+        )
+        evidence = [
+            Evidence(
+                content=f"a belief rests on it: {statement}",
+                source=EvidenceSource.SYSTEM_OBSERVATION,
+                weight=Confidence(1.0),
+            )
+            for statement in finding.beliefs
+        ]
+        return self.think(trigger, evidence=evidence).working_belief
 
     def refute(self, observation: str, belief_statement: str) -> None:
         """Record that a belief would hold *without* an observation (Vision §17, §37):

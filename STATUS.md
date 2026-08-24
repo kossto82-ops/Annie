@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 77)
+Last updated: 2026-08-24 (Increment 78)
 
 ---
 
@@ -1000,6 +1000,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
   (Limitation: refutations are in-memory this increment — not yet persisted across restart.)
 - Gates: ruff clean · pyright strict 0 errors · pytest 371 passed.
 
+### Increment 78 — Learn: a surviving insight becomes a belief, and the loop closes ✅ (2026-08-24)
+- **Cycle stage 5** (… → Challenge → **Learn** → Act). `jarvis.learn_from_reflection()` adopts a
+  reflective insight that survived challenge: when `hypothesise()` still leads with a common-cause
+  explanation confidently (≥ `_INSIGHT_CONFIDENCE` 0.5, i.e. not dethroned by `refute`), Jarvis `think(...)`s
+  a new belief stating that common cause, grounded in the same per-belief evidence (Vision §20, §31).
+- **The loop closes on itself.** The adopted belief enters the beliefs store like any conclusion —
+  ordinary, derived, revisable — so the next Connect/Reflect/Hypothesise/Challenge can build on it, and it
+  can itself be challenged later. Verified: 3 beliefs on one observation → Jarvis discovers their common
+  cause and adopts it as a 4th belief (0.64); a dethroned or absent hypothesis learns nothing.
+- Truthful: it adopts only what survived the self-adversarial step; no fabrication; the new belief's
+  evidence content is distinct from the original observation, so it does not spuriously re-merge into the
+  same cluster (no runaway feedback). The cycle Remember→Connect→Reflect→Hypothesise→Challenge→Learn is
+  now a genuine loop; Act (graded autonomy, already built) wires in next.
+- Gates: ruff clean · pyright strict 0 errors · pytest 375 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1142,8 +1157,9 @@ All prior deferred threads are folded in below so nothing is lost.
 | **Reflect** | ✅ done (Incr 75) | `Reflection`, `reflect()` — load-bearing observations across the belief web |
 | **Hypothesise (autonomous)** | ✅ done (Incr 76) | `hypothesise()` — a common-cause `HypothesisSet` brewed from `reflect()` |
 | **Challenge** | ✅ done (Incr 77) | `challenge()` names the falsifier; `refute()` dethrones by removing what it explained |
-| Learn / Act | ✅ exist, ▶ WIRE NEXT | action-outcome learning, self-model, graded autonomy — connect them to the cycle's output |
-| Run the whole cycle autonomously | ⬜ | generalise `feel_curious`/`pursue`: Jarvis triggers Connect→…→Challenge on itself |
+| **Learn** | ✅ done (Incr 78) | `learn_from_reflection()` — a surviving insight becomes a belief; the loop closes |
+| Act | ✅ exists, ▶ WIRE NEXT | graded autonomy / stances — let a learned insight recommend an action |
+| Run the whole cycle autonomously | ⬜ | one `reflect_cycle()` (or curiosity source) that runs Connect→…→Learn on itself |
 
 ### Track B — perception → the LLM adapter (highest external impact, separate)
 - Seam done (Increments 63–68): `PerceptionSource`, streams, provenance, contested-belief resolution.
@@ -1171,20 +1187,21 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Learn (cycle stage 5): a hypothesis that survives challenge becomes a belief — the loop closes (Vision
-§20, §31).** Stages 1–4 run (Connect → Reflect → Hypothesise → Challenge). Nothing yet *keeps* the result:
-a common-cause hypothesis that leads confidently and has not been refuted is a genuine insight Jarvis
-should adopt, so the next Connect/Reflect can build on it — making the cycle recursive (its output becomes
-new input). Smallest honest step:
-- `jarvis.learn_from_reflection()` (or fold into a single `jarvis.reflect_and_learn()`): when
-  `hypothesise()` has a leading common-cause hypothesis above a confidence bar *and* `challenge()` has not
-  been refuted, `think(...)` a new belief stating the common cause, grounded in the same evidence — so it
-  enters the beliefs store like any conclusion, revisable, derived. Returns the adopted belief or None.
-- Keep it truthful: it adopts only what survived challenge; a refuted/absent hypothesis learns nothing.
-  The new belief is ordinary — it can itself be connected, reflected on, and challenged later (the loop
-  eating its own tail, honestly). No LLM.
-- Behaviour tests: a surviving confident hypothesis is adopted as a belief naming the common cause; a
-  refuted one is not; the adopted belief then appears in `beliefs`/`connections`.
+**Run the whole cycle in one call — `reflect_cycle()` (Vision §31, §19).** Every stage exists
+(Connect→Reflect→Hypothesise→Challenge→Learn) but the caller must invoke them one by one. The natural
+capstone is a single method that runs the cycle end-to-end and reports what it did, so Jarvis "thinking
+about what it knows" is one honest action — and the seam for later triggering it autonomously. Smallest
+honest step:
+- `jarvis.reflect_cycle()` → a structured result: the top reflection, the hypothesis it brewed, the
+  challenge it raised, and the belief it learned (or None at each stage it stopped). It calls the existing
+  stage methods in order; it does not re-implement them. Returns a `ReflectiveCycle`/summary VO.
+- Keep it truthful: it only *reports* what the derived stages produced; no new epistemics. If nothing is
+  load-bearing, it returns an empty result honestly. This is the "one action" a future autonomous trigger
+  (a curiosity source, or a scheduled self-reflection) will call — not built yet, but the method makes it
+  a one-liner when we get there.
+- Behaviour tests: on a belief web with a load-bearing observation, `reflect_cycle()` returns a result
+  whose reflection/hypothesis/challenge/learned are all populated and consistent; on an isolated web it
+  returns an empty result; after it runs, the learned belief is in the web.
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:

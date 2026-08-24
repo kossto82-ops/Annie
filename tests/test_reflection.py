@@ -159,3 +159,41 @@ class TestChallenge:
         assert jarvis.reflect() == ()
         assert jarvis.hypothesise() is None
         assert jarvis.challenge() is None
+
+
+class TestLearnFromReflection:
+    def _with_hypothesis(self) -> Jarvis:
+        jarvis = Jarvis()
+        cause = "the client moved the deadline up"
+        for question in ("is the schedule at risk?", "should we cut scope?", "is morale ok?"):
+            jarvis.think(question, evidence=[_ev(cause)])
+        return jarvis
+
+    def test_a_surviving_hypothesis_is_adopted_as_a_belief(self) -> None:
+        jarvis = self._with_hypothesis()
+        belief = jarvis.learn_from_reflection()
+        assert belief is not None
+        assert "the client moved the deadline up" in belief.statement
+        assert "common cause" in belief.statement
+        assert belief.confidence.value >= 0.5
+
+    def test_the_adopted_belief_enters_the_belief_web(self) -> None:
+        jarvis = self._with_hypothesis()
+        before = len(list(jarvis.beliefs.all_beliefs()))
+        jarvis.learn_from_reflection()
+        after = list(jarvis.beliefs.all_beliefs())
+        assert len(after) == before + 1
+        assert any("common cause" in b.statement for b in after)
+
+    def test_a_dethroned_hypothesis_is_not_learned(self) -> None:
+        jarvis = self._with_hypothesis()
+        observation = "the client moved the deadline up"
+        jarvis.refute(observation, "Working conclusion about: is morale ok?")
+        jarvis.refute(observation, "Working conclusion about: should we cut scope?")
+        assert jarvis.learn_from_reflection() is None
+
+    def test_nothing_load_bearing_learns_nothing(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a", evidence=[_ev("observation A")])
+        jarvis.think("b", evidence=[_ev("observation B")])
+        assert jarvis.learn_from_reflection() is None

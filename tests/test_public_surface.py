@@ -27,6 +27,7 @@ _PUBLIC_METHODS = (
     "hypothesise",
     "challenge",
     "refute",
+    "learn_from_reflection",
     # Act & learn
     "act",
     "record_outcome",
