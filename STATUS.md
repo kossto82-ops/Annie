@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 65)
+Last updated: 2026-08-24 (Increment 66)
 
 ---
 
@@ -836,6 +836,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   only — no behaviour change, all prior tests green.
 - Gates: ruff clean · pyright strict 0 errors · pytest 331 passed.
 
+### Increment 66 — perception carries its provenance: auditable, not magic ✅ (2026-08-24)
+- `KeywordPerception` now stamps the recognised cue into the `Evidence.context` it makes ("perceived via
+  the cue 'definitely'"), and `narrate()` surfaces context on every evidence line ("… (user statement;
+  perceived via the cue 'definitely')") via a shared `_render_evidence` helper. So a belief can explain
+  *why* its perceived evidence carries the weight it does — perception becomes auditable (Vision §8, §9).
+- Boundary unchanged (D31): still just evidence, confidence still derived. This makes the future
+  LLM-adapter's contract explicit — a perceiver must report calibrated weight *and* provenance, never a
+  decision. Reuses the existing `Evidence.context` field; no new type, no new state.
+- Verified: perceived evidence carries a cue-naming context, it shows in the belief narration, and a
+  cue-less observation still yields nothing.
+- Gates: ruff clean · pyright strict 0 errors · pytest 333 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -955,19 +967,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Perception carries its own confidence — an observation's certainty should shape evidence weight, and
-the seam should let a perceiver report how sure it is (Vision §8, §9, §32).** `KeywordPerception` already
-varies weight by cue ("definitely" 1.0 vs "maybe" 0.3), but nothing downstream can see or reason about
-*how the perceiver arrived at that* — the seam returns bare `Evidence`. Before an LLM perceiver arrives,
-make the seam honest about perceiver uncertainty. Smallest honest step:
-- Have the perceiver stamp provenance/uncertainty into the `Evidence` it makes (e.g. set `Evidence.context`
-  to the recognised cue or a short "perceived via <rule>" note), so `explain()`/`narrate()` show *why*
-  the evidence carries the weight it does — perception becomes auditable, not magic. No new type; reuse
-  the existing `context` field.
-- Keep the boundary strict: still just evidence; confidence still derived. This makes the future
-  LLM-adapter's job explicit — it must report calibrated weight + provenance, never a decision.
-- Behaviour tests: perceived evidence carries a non-empty `context` naming the cue; `narrate()` surfaces
-  it; a cue-less observation still yields nothing.
+**A perceiver that yields more than one piece of evidence from one observation (Vision §8, §17, §32).**
+`KeywordPerception` collapses an observation to a single strongest-cue `Evidence`, so "definitely the base
+case but maybe not the step" is flattened to one reading. The `PerceptionSource` contract already returns
+a *tuple*, so the seam is ready — the rule just doesn't use it. A richer (eventually LLM-backed) perceiver
+should be able to draw several distinct pieces of evidence, possibly about different subjects, from one
+utterance. Smallest honest step:
+- Extend `KeywordPerception` to emit one `Evidence` per recognised cue occurrence (each with its own
+  weight, polarity from the nearest negation, and cue provenance), rather than only the strongest — so a
+  multi-cue observation yields multiple evidences. Keep single-cue and cue-less behaviour identical.
+- Truthful and bounded: still just evidence, still derived confidence; no attempt to parse *subjects*
+  yet (that's the LLM's job later) — every piece still bears on the one belief the episode is about.
+- Behaviour tests: a two-cue observation yields two evidences with the right weights/polarities; a
+  single-cue observation is unchanged; cue-less still yields nothing.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

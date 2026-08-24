@@ -89,6 +89,17 @@ def _readable_source(source: EvidenceSource) -> str:
     return source.value.replace("_", " ")
 
 
+def _render_evidence(evidence: Evidence) -> str:
+    """One evidence line for narration: its content, source, and -- when present --
+    its provenance context (e.g. how a perceiver arrived at it), so the weight is
+    auditable rather than magic (Vision §8).
+    """
+    base = f"{evidence.content} ({_readable_source(evidence.source)}"
+    if evidence.context:
+        base += f"; {evidence.context}"
+    return base + ")"
+
+
 @dataclass(frozen=True, slots=True)
 class BeliefExplanation:
     """The reconstructed provenance of a belief (Vision §8, §26).
@@ -136,15 +147,10 @@ class BeliefExplanation:
             strongest = sorted(
                 self.supporting, key=lambda e: e.weight.value, reverse=True
             )[:3]
-            reasons = "; ".join(
-                f"{e.content} ({_readable_source(e.source)})" for e in strongest
-            )
+            reasons = "; ".join(_render_evidence(e) for e in strongest)
             parts.append(f"I believe this because: {reasons}.")
         if self.contradicting:
-            against = "; ".join(
-                f"{e.content} ({_readable_source(e.source)})"
-                for e in self.contradicting[:3]
-            )
+            against = "; ".join(_render_evidence(e) for e in self.contradicting[:3])
             parts.append(f"But some evidence contradicts it: {against}. I may be wrong.")
 
         if confidence < 0.5:

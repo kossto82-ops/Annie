@@ -33,6 +33,17 @@ class TestKeywordPerception:
     def test_an_empty_observation_is_not_perceived(self) -> None:
         assert KeywordPerception().perceive("   ") == ()
 
+    def test_perceived_evidence_stamps_the_cue_as_provenance(self) -> None:
+        evidence = KeywordPerception().perceive("this is definitely sound")
+        assert evidence[0].context == "perceived via the cue 'definitely'"
+
+    def test_the_provenance_shows_in_the_belief_narration(self) -> None:
+        jarvis = Jarvis()
+        episode = jarvis.perceive("the approach is definitely sound")
+        explanation = episode.explain()
+        assert explanation is not None
+        assert "perceived via the cue 'definitely'" in explanation.narrate()
+
 
 class TestJarvisPerceive:
     def test_a_cue_bearing_observation_grounds_a_belief(self) -> None:

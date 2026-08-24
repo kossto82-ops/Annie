@@ -43,16 +43,20 @@ class KeywordPerception:
         if not text:
             return ()
         lowered = text.lower()
-        cues = [weight for cue, weight in _CUES.items() if cue in lowered]
-        if not cues:
+        matched = [(cue, weight) for cue, weight in _CUES.items() if cue in lowered]
+        if not matched:
             return ()  # nothing recognised -- stay silent (Vision §37)
+        cue, weight = max(matched, key=lambda pair: pair[1])
         supports = not any(negation in lowered for negation in _NEGATIONS)
-        # A perceived companion utterance is taken as their statement (Vision §8).
+        # Stamp provenance so the weight is auditable, not magic (Vision §8): the
+        # belief can later explain *why* this evidence carries the weight it does.
+        # A perceived companion utterance is taken as their statement.
         return (
             Evidence(
                 content=text,
                 source=EvidenceSource.USER_STATEMENT,
-                weight=Confidence(max(cues)),
+                weight=Confidence(weight),
                 supports=supports,
+                context=f"perceived via the cue '{cue}'",
             ),
         )
