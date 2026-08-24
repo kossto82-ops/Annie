@@ -68,10 +68,10 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 
 **Construct**
 - `Jarvis()` — ephemeral (in-memory).
-- `Jarvis.persistent(directory)` — all memory (beliefs, episodes, companion, actions) on disk under one dir.
+- `Jarvis.persistent(directory)` — all memory (beliefs, episodes, companion, actions, reversibility, goals) on disk under one dir.
 
 **Perceive & reason**
-- `think(trigger, evidence=())` — run a cognitive episode toward one grounded conclusion; returns the episode.
+- `think(trigger, evidence=(), goal=None)` — run a cognitive episode toward one grounded conclusion, optionally *toward* a `Goal`; returns the episode.
 - `consider(observation, options)` — weigh competing explanations (`{statement: [evidence, ...]}`); returns a `Deliberation`.
 
 **Act & learn**
@@ -92,11 +92,20 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `explain_companion(trait)` — why it believes that (evidence, confidence, "I may be wrong"), or "no view yet".
 - `companion.belief_about(trait)` / `companion.beliefs()` / `companion.summarise()`.
 
+**Goals & relationship**
+- `recurring_goals()` — the goals it keeps returning to, as `(goal, count)` (most-returned-to first).
+- `mark_goal_reached(goal, reached=True)` — learn whether a goal of this kind is reachable; `belief_about_goal(goal)` reads it back.
+- `reflection_effort(goal_statement)` — how many times it has wondered about a goal on its own initiative.
+- `stuck_goals()` — goals it has given up wondering about alone (learned unreachable *and* reflected on to exhaustion).
+- `ask_for_help()` — a spoken request for help with the most stuck goal (warmer once the companion has proven helpful), or None.
+- `receive_help(goal, helpful=True)` — take the companion's guidance in as evidence; it can lift a stuck goal and teaches that the companion is helpful.
+
 **Memory & provenance**
 - `episodes.history()` — past episodes (conclusions and deliberations).
 - `trace_of(episode)` / `trace(correlation_id)` — the ordered event trace of one act of cognition.
 
-A runnable end-to-end tour lives in [`examples/main_loop.py`](examples/main_loop.py).
+Runnable end-to-end tours live in [`examples/main_loop.py`](examples/main_loop.py) (the core loop) and
+[`examples/goal_arc.py`](examples/goal_arc.py) (the goal → stuck → ask-for-help → help-received arc).
 
 ## Development
 

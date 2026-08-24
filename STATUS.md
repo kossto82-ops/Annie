@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 55)
+Last updated: 2026-08-24 (Increment 56)
 
 ---
 
@@ -709,6 +709,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   actions, reversibility and goals already do. No new state; a continuity guarantee made explicit.
 - Gates: ruff clean · pyright strict 0 errors · pytest 301 passed.
 
+### Increment 56 — the goal arc, end to end: a runnable story + README ✅ (2026-08-24)
+- New `examples/goal_arc.py`: one persistent Jarvis walks the whole Increment 40-55 arc — take on a goal,
+  keep returning to it, learn it is stuck, wonder about it to exhaustion, ask for help, receive it, end
+  reachable, and (on a fresh stuck goal) show the ask warmed once the companion has proven helpful —
+  printing each turn. Deterministic (fixed evidence timestamps, no wall-clock branching); runs exit 0
+  and type-checks clean (Vision §26, §40).
+- README "Vocabulary" extended with the goal/relationship surface added since Increment 40
+  (`think(..., goal=)`, `recurring_goals`, `mark_goal_reached`/`belief_about_goal`, `reflection_effort`,
+  `stuck_goals`, `ask_for_help`, `receive_help`), copied from the real signatures (Rule 24); `persistent`
+  now lists all six stores. Consolidation only — no behaviour change, all prior tests green.
+- Gates: ruff clean · pyright strict 0 errors · pytest 301 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -821,22 +833,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A single end-to-end "life story" example + README of the goal→relationship arc (Vision §26, §40).**
-Increments 40–55 built a long, coherent arc — goals recorded, remembered, learned reachable, wondered
-about, given up on, asked for help, help received, the companion learned from, the ask warmed, all
-persistent — but there is no single runnable narrative that walks it, and the README/`examples/` predate
-it (last touched at Increment 32). A reader cannot see the whole story in one place. Smallest honest step:
-- Add `examples/goal_arc.py`: one persistent Jarvis that sets a goal, keeps returning to it, learns it is
-  stuck, exhausts its curiosity, asks for help, receives it, and ends reachable — printing each turn so
-  the arc is legible end-to-end. Verify it runs (exit 0) and type-checks, as `examples/main_loop.py` is.
-- Extend the README "Vocabulary" with the goal/relationship methods added since Increment 40
-  (`think(..., goal=)`, `recurring_goals`, `mark_goal_reached`, `reflection_effort`, `stuck_goals`,
-  `ask_for_help`, `receive_help`), copied from the real signatures (Rule 24). Consolidation only —
-  no behaviour change; every prior test stays green.
-- Behaviour check: the example is import-clean and deterministic (no wall-clock branching); the README
-  method list matches the actual public API.
+**A goal made of sub-goals: decomposition as recorded structure, not a planner (Vision §12, §26).**
+Every goal so far is atomic — Jarvis returns to "master recursion" as one opaque string. But a real
+purpose usually has parts, and progress on a part is honest evidence about the whole. This is the long-
+deferred "goal decomposition" follow-up, taken as one small, truthful step (NOT a planner/executor):
+- Let a `Goal` optionally name its parent (`part_of: str | None`), or add `jarvis.add_subgoal(parent,
+  child)` recording the link in a small store. Reaching a sub-goal (`mark_goal_reached(child)`) records
+  supporting evidence on the *parent's* reachability too — progress on a part is evidence the whole is
+  reachable, derived and revisable like everything else. No planning, no ordering, no execution.
+- Keep it truthful: the parent is not "done" because a child is; its reachability is still derived from
+  all its evidence. A child with no parent behaves exactly as today (fully backward compatible).
+- Behaviour tests: reaching a sub-goal raises the parent's reachability; an unmet sub-goal does not;
+  a goal with no parent is unchanged; the parent link round-trips if persisted.
 
-*(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
+*(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
 semantic trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
 
