@@ -455,6 +455,35 @@ class Jarvis:
         self.nervous_system.dispatch()
         return belief
 
+    def receive_help(self, goal: Goal, helpful: bool = True) -> Belief:
+        """Take in the companion's guidance on a goal and learn from it (Vision §18, §26).
+
+        Closes the ask→answer→learn loop opened by :meth:`ask_for_help`: the
+        companion's guidance becomes strong-provenance evidence (a `USER_STATEMENT`,
+        the highest source weight) on the goal's reachability belief. Genuinely
+        helpful guidance can, over time, lift a goal Jarvis had given up on above
+        the reachable threshold and so clear the suppression. Help is *evidence*,
+        not a guarantee: an unhelpful answer contradicts, and reachability stays
+        derived, never set.
+        """
+        statement = self._goal_statement(goal.statement)
+        belief = self._goals.get_by_statement(statement) or Belief(statement=statement)
+        outcome = "helped" if helpful else "did not help"
+        belief.add_evidence(
+            Evidence(
+                content=f"the companion's guidance on '{goal.statement}' {outcome}",
+                source=EvidenceSource.USER_STATEMENT,
+                weight=Confidence(1.0),
+                supports=helpful,
+                context=goal.success_criterion,
+            )
+        )
+        self._goals.save(belief)
+        for event in belief.pull_events():
+            self.nervous_system.publish(event)
+        self.nervous_system.dispatch()
+        return belief
+
     def belief_about_goal(self, goal: Goal | str) -> Belief | None:
         """What Jarvis has learned about whether a goal of this kind is reachable,
         or None if it has never been told an outcome for it (Vision §26).

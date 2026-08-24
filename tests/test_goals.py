@@ -408,3 +408,44 @@ class TestAskingForHelp:
             jarvis.mark_goal_reached(goal)
         assert jarvis.stuck_goals() == ()
         assert jarvis.ask_for_help() is None
+
+
+class TestReceivingHelp:
+    @staticmethod
+    def _exhausted_stuck(jarvis: Jarvis, goal: Goal) -> None:
+        jarvis.think("q", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("q", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        for _ in range(3):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None
+            jarvis.pursue(impulse)
+
+    def test_help_is_recorded_with_companion_provenance(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="master recursion")
+        belief = jarvis.receive_help(goal)
+        assert belief.confidence.value > 0.0
+        assert "companion" in belief.explain().narrate()
+
+    def test_sustained_help_lifts_a_stuck_goal_and_ends_the_asking(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="master recursion")
+        self._exhausted_stuck(jarvis, goal)
+        assert jarvis.stuck_goals() == ("master recursion",)
+
+        # One answer is not proof; sustained helpful guidance lifts it.
+        jarvis.receive_help(goal)
+        jarvis.receive_help(goal)
+        assert jarvis.stuck_goals() == ()
+        assert jarvis.ask_for_help() is None
+
+    def test_unhelpful_guidance_does_not_lift_a_stuck_goal(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="master recursion")
+        self._exhausted_stuck(jarvis, goal)
+        jarvis.receive_help(goal, helpful=False)
+        jarvis.receive_help(goal, helpful=False)
+        assert jarvis.stuck_goals() == ("master recursion",)
+        assert jarvis.ask_for_help() is not None

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 51)
+Last updated: 2026-08-24 (Increment 52)
 
 ---
 
@@ -662,6 +662,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   goal later learned reachable drops out of both `stuck_goals()` and `ask_for_help()`. Verified.
 - Gates: ruff clean · pyright strict 0 errors · pytest 292 passed.
 
+### Increment 52 — companion help moves reachability: closing the ask→answer→learn loop ✅ (2026-08-24)
+- `jarvis.receive_help(goal, helpful=True)` takes the companion's guidance in as strong-provenance
+  evidence (`USER_STATEMENT`, the highest source weight) on the goal's reachability belief, closing the
+  loop `ask_for_help` opened (Vision §18, §26, §20). Genuinely helpful guidance can lift a goal Jarvis
+  had given up on above the reachable threshold and so clear the suppression; the companion appears as
+  the source in `explain().narrate()`.
+- Truthful: help is evidence, not a guarantee. One answer is not proof (an exhausted stuck goal carries
+  a prior failure, so a single help reaches only ~0.37; two lift it to ~0.54); `helpful=False` records a
+  contradiction and does not lift it. Reachability stays derived, never set.
+- Reuses the goals store and belief machinery — no new state, no persistence beyond the existing
+  `goals.json`. Verified: sustained help clears `stuck_goals()`/`ask_for_help()`, unhelpful does not.
+- Gates: ruff clean · pyright strict 0 errors · pytest 295 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -774,20 +787,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Companion help on a stuck goal actually moves its reachability (Vision §18, §26, §20).** Jarvis now
-asks for help on a stuck goal (Increment 51), but there is no way for the companion's answer to come
-back in — the loop dangles. When the companion offers guidance, that should count as evidence that
-changes what Jarvis has learned. Smallest honest step:
-- Add `jarvis.receive_help(goal, helpful=True)` (or fold into `mark_goal_reached`'s sibling): the
-  companion's guidance becomes `USER_STATEMENT`-sourced evidence on the goal's reachability belief —
-  strong provenance (weight 1.0, source factor 1.0), so a genuinely helpful answer can lift a stuck
-  goal above the threshold and clear the suppression, closing the ask→answer→learn loop.
-- Keep it truthful: help is evidence, not a guarantee — an unhelpful answer (`helpful=False`) is
-  recorded as contradicting, and reachability is still *derived*, never set. Distinguish the source in
-  the evidence content so provenance is visible in `explain()`.
-- Behaviour tests: `receive_help` on an exhausted stuck goal raises its reachability and removes it
-  from `stuck_goals()`/`ask_for_help()`; `helpful=False` does not; the reachability belief's evidence
-  records the companion as the source.
+**Gratitude that is evidence, not manners: help that worked strengthens the companion model (Vision §5,
+§18, §20).** Increment 52 lets the companion's help move a goal's reachability — but that same helpful
+act says something about the *companion* too, and Jarvis's model of them never hears it. When guidance
+genuinely helps, that is evidence the companion is helpful/reliable; Jarvis should learn it. Smallest
+honest step:
+- In `receive_help(goal, helpful=True)`, also record a companion observation (via the existing
+  `observe_companion`/`_record_companion` path) on a trait like "is helpful when I am stuck" — ordinary
+  `Belief` about the companion, confidence derived, revisable. `helpful=False` records the contradicting
+  side, exactly as companion contradiction already works (Increment 35).
+- Keep the two learnings separate and truthful: goal reachability (about the goal) and companion
+  helpfulness (about the companion) are different beliefs from the same act; neither is asserted, both
+  are derived. This is not politeness — it is provenance-grounded relationship learning.
+- Behaviour tests: helpful guidance makes `companion.belief_about("...helpful...")` confident and shows
+  in `introspect()`/`explain_companion(...)`; unhelpful guidance weakens it; a goal with no help leaves
+  the companion model untouched.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
