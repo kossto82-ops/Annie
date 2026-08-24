@@ -111,3 +111,47 @@ class TestPerceiveAboutCompanion:
         result = jarvis.perceive_about_companion(self._TRAIT, "the weather is nice today")
         assert result is None
         assert jarvis.companion.belief_about(self._TRAIT) is None
+
+
+class TestPerceiveStream:
+    def test_more_utterances_build_more_confidence(self) -> None:
+        one = Jarvis().perceive_all(["definitely a"], trigger="the plan")
+        many = Jarvis().perceive_all(
+            ["definitely a", "definitely b", "definitely c"], trigger="the plan"
+        )
+        one_belief = one.working_belief
+        many_belief = many.working_belief
+        assert one_belief is not None and many_belief is not None
+        assert many_belief.confidence.value > one_belief.confidence.value
+
+    def test_cue_less_lines_in_the_stream_are_skipped(self) -> None:
+        episode = Jarvis().perceive_all(
+            ["definitely a", "the weather is nice", "definitely b"], trigger="the plan"
+        )
+        belief = episode.working_belief
+        assert belief is not None
+        # Only the two cued lines became evidence.
+        assert len(belief.explain().supporting) == 2
+
+    def test_a_mixed_stream_balances_honestly(self) -> None:
+        episode = Jarvis().perceive_all(
+            ["definitely sound", "definitely not sound"], trigger="the plan"
+        )
+        belief = episode.working_belief
+        assert belief is not None
+        explanation = belief.explain()
+        assert explanation.supporting and explanation.contradicting
+
+    def test_an_empty_stream_concludes_honestly(self) -> None:
+        episode = Jarvis().perceive_all([], trigger="the plan")
+        assert episode.result is not None
+        assert "Insufficient evidence" in episode.result
+
+    def test_a_stream_about_the_companion_accumulates(self) -> None:
+        jarvis = Jarvis()
+        belief = jarvis.perceive_all_about_companion(
+            "prefers simplicity",
+            ["you definitely prefer simplicity", "you clearly prefer simplicity"],
+        )
+        assert belief is not None
+        assert len(belief.explain().supporting) == 2

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 67)
+Last updated: 2026-08-24 (Increment 68)
 
 ---
 
@@ -860,6 +860,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   grew richer. Boundary still strict (D31): still just evidence, confidence still derived.
 - Gates: ruff clean · pyright strict 0 errors · pytest 334 passed.
 
+### Increment 68 — perceiving a stream: a short exchange grounds one belief ✅ (2026-08-24)
+- `jarvis.perceive_all(observations, trigger=None, goal=None)` runs the `PerceptionSource` over each line
+  of a stream, gathers all the evidence, and reasons over it in one `think(...)` — so a multi-line
+  exchange grounds a single belief, weaker/contradicting lines pulling against stronger ones (Vision §3,
+  §8). Cue-less lines contribute nothing; the trigger defaults to the first observation; an empty stream
+  concludes honestly insufficient (§37).
+- `jarvis.perceive_all_about_companion(trait, observations)` folds a stream about the companion into the
+  lasting model, accumulating across lines. Verified: more cued utterances build more confidence, cue-less
+  lines are skipped, and a mixed supporting/contradicting stream balances honestly (~0.59 on 2:1).
+- Continuity is free (Increment 5): same-trigger perception reuses one belief. Boundary still strict
+  (D31) — still only evidence, confidence still derived over the whole stream.
+- Gates: ruff clean · pyright strict 0 errors · pytest 339 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -979,20 +992,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Perceive several utterances as an accumulating stream, not one-shot (Vision §3, §8, §21).**
-`perceive`/`perceive_about_companion` each run one observation in isolation. Real perception arrives as a
-stream — a short exchange, several lines — and Jarvis already accumulates belief across episodes (memory,
-Increment 5). The seam should make feeding a *sequence* of observations natural, so a conversation builds a
-belief the way hand-fed evidence already does. Smallest honest step:
-- Add `jarvis.perceive_all(observations, trigger=None, goal=None)` (and/or
-  `perceive_all_about_companion(trait, observations)`): run the `PerceptionSource` over each observation,
-  gather all the evidence, and feed it into a single `think(...)` / into `observe_companion` in turn — so
-  a multi-line exchange grounds one belief from all of it. Same-trigger episodes already reuse one belief
-  (Increment 5), so continuity is free.
-- Keep it truthful: it is still only perception producing evidence; empty/cue-less lines contribute
-  nothing; confidence stays derived over the whole stream.
-- Behaviour tests: three cued utterances build a more-confident belief than one; cue-less lines in the
-  stream are silently skipped; a mixed supporting/contradicting stream balances honestly.
+**A conversation tour + README: a whole exchange becomes a grounded, revisable belief (Vision §3, §40).**
+Increments 63–68 built perception up to streams, but no runnable story shows a *conversation* landing as
+cognition — the examples still perceive single lines or hand-build evidence. Smallest honest step:
+- Add `examples/conversation.py`: one persistent Jarvis is fed a short multi-line exchange via
+  `perceive_all(...)` (mixed supporting/contradicting/cue-less lines) that grounds one belief, plus a
+  stream about the companion via `perceive_all_about_companion(...)`, printing the conclusion, the
+  narrated provenance, and the companion belief. Then a *second* exchange the next "session" (same
+  persistent dir) shows the belief strengthening across a restart — perception + continuity together.
+  Deterministic; runs exit 0 and type-checks.
+- Extend the README "Perceive" group with `perceive_all`/`perceive_all_about_companion`; point the
+  examples list at the new tour. Consolidation only — no behaviour change.
+- Behaviour check: the example is import-clean and deterministic; the README lists the stream methods.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

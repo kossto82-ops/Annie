@@ -137,6 +137,40 @@ class Jarvis:
         evidence = self._perception.perceive(observation)
         return self.think(trigger or observation, evidence=evidence, goal=goal)
 
+    def perceive_all(
+        self,
+        observations: Iterable[str],
+        trigger: str | None = None,
+        goal: Goal | None = None,
+    ) -> CognitiveEpisode:
+        """Perceive a stream of observations and reason over all of it at once
+        (Vision §3, §8): a short exchange grounds one belief from everything it
+        yields, weaker or contradicting lines pulling against stronger ones.
+
+        Each observation is turned into evidence by the `PerceptionSource`; lines it
+        makes nothing of contribute nothing. The trigger defaults to the first
+        observation.
+        """
+        seen = list(observations)
+        evidence = tuple(
+            piece for observation in seen for piece in self._perception.perceive(observation)
+        )
+        resolved = trigger if trigger is not None else (seen[0] if seen else "")
+        return self.think(resolved, evidence=evidence, goal=goal)
+
+    def perceive_all_about_companion(
+        self, trait: str, observations: Iterable[str]
+    ) -> Belief | None:
+        """Perceive a stream of observations about the companion, folding each into
+        the lasting model of them (Vision §5, §3), or None if nothing is perceived.
+        """
+        belief: Belief | None = None
+        for observation in observations:
+            perceived = self.perceive_about_companion(trait, observation)
+            if perceived is not None:
+                belief = perceived
+        return belief
+
     def observe_self(self) -> Belief | None:
         """Look back over past episodes and form a belief about Jarvis's own
         tendencies (Vision §6, §31), or None if there is too little history.
