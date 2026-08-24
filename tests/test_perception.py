@@ -175,3 +175,43 @@ class TestPerceivedContradictionRaisesCuriosity:
             trigger="is the base case right?",
         )
         assert jarvis.feel_curious() is None
+
+
+class TestAskingAboutAContestedTopic:
+    _TOPIC = "is the base case right?"
+
+    def _contested(self) -> Jarvis:
+        jarvis = Jarvis()
+        jarvis.perceive_all(
+            ["the base case is definitely right", "the base case is definitely not right"],
+            trigger=self._TOPIC,
+        )
+        return jarvis
+
+    def test_ask_about_voices_both_sides_of_a_contested_topic(self) -> None:
+        jarvis = self._contested()
+        message = jarvis.ask_about(self._TOPIC)
+        assert message is not None
+        assert self._TOPIC in message
+        assert "which is it?" in message
+
+    def test_ask_about_a_clean_topic_is_silent(self) -> None:
+        jarvis = Jarvis()
+        jarvis.perceive_all(
+            ["the base case is definitely right", "the base case is clearly right"],
+            trigger=self._TOPIC,
+        )
+        assert jarvis.ask_about(self._TOPIC) is None
+
+    def test_ask_about_an_unknown_topic_is_silent(self) -> None:
+        assert Jarvis().ask_about("something never discussed") is None
+
+    def test_guidance_resolves_the_tension(self) -> None:
+        jarvis = self._contested()
+        assert jarvis.feel_curious() is not None  # curious while contested
+
+        belief = jarvis.resolve(self._TOPIC, "yes, the base case is correct")
+        assert belief is not None and belief.confidence.value >= 0.5
+        # No longer a live tension: neither curious nor asking about it.
+        assert jarvis.feel_curious() is None
+        assert jarvis.ask_about(self._TOPIC) is None

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 70)
+Last updated: 2026-08-24 (Increment 71)
 
 ---
 
@@ -897,6 +897,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
   check is transparent to them. Boundary unchanged — recommendation only, confidence still derived.
 - Gates: ruff clean · pyright strict 0 errors · pytest 341 passed.
 
+### Increment 71 — asking the companion to settle a contested belief, and resolving it ✅ (2026-08-24)
+- `jarvis.ask_about(topic)` voices a genuine tension — when the working belief for `topic` is contested,
+  it names both sides it has heard and asks which holds ("I have heard both X and not-X — which is it?"),
+  or stays silent otherwise. `jarvis.resolve(topic, guidance, supports=True)` feeds the companion's answer
+  as `USER_STATEMENT` evidence into that working belief, tipping it — derived, never set (Vision §18, §37).
+- "Contested" is now a *live tension*: both supporting and contradicting evidence **and** confidence
+  below the grounded threshold (`_is_contested`, shared by the curiosity check and `ask_about`). So enough
+  guidance moves a contested belief past 0.5 and it is no longer contested — closing the loop
+  hear-contradiction → curious → ask → resolve. Verified end-to-end; Increment-70 behaviour preserved
+  (a 1:1 perceived belief sits at 0.33 < 0.5, still contested).
+- Boundary held: `resolve` only adds evidence; confidence is re-derived. Reuses the beliefs store and
+  the executive's `working_statement` (no format duplication).
+- Gates: ruff clean · pyright strict 0 errors · pytest 345 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1018,19 +1032,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Pursuing a contested-belief curiosity asks the companion to settle it (Vision §16, §18, §37).**
-Increment 70 makes Jarvis curious about a contested working belief, and `pursue()` runs a self-directed
-episode — but with no new evidence, that episode just re-concludes "still contested". A tension Jarvis
-cannot resolve alone is exactly what asking the companion is for (Increments 51–52), but `ask_for_help`
-today only covers stuck *goals*. Smallest honest step:
-- Extend the help path (or add `jarvis.ask_about(topic)` / let `ask_for_help` also surface a contested
-  belief) so Jarvis can voice the tension: "I've heard both that X and that not-X — which is it?", naming
-  the contested topic and, from the belief's provenance, the conflicting evidence. Still only asks.
-- Let `receive_help`-style guidance on that topic feed `USER_STATEMENT` evidence into the *working
-  belief* (via `think(topic, evidence=…)` or a small `resolve(topic, …)`), so a companion's answer can
-  tip a contested belief toward one side — derived, revisable, never set.
-- Behaviour tests: a contested belief makes the ask voice both sides; guidance resolves it (confidence
-  moves and it is no longer contested / no longer curious); a clean belief is unaffected.
+**A perceived-reasoning tour: hear a contradiction, ask, resolve — end to end (Vision §18, §40).**
+Increments 70–71 completed a full epistemic-social loop (contested perception → curiosity → ask → resolve),
+but no runnable story shows it — the perception examples stop at grounding a belief. Smallest honest step:
+- Add `examples/resolving.py` (or extend `conversation.py`): a Jarvis perceives a self-contradicting
+  exchange that grounds a contested belief, `feel_curious()` surfaces the tension, `ask_about(topic)`
+  voices both sides, the companion answers, `resolve(topic, …)` tips it, and a final `ask_about`/
+  `feel_curious` shows the tension gone — printing each turn. Deterministic; runs exit 0 and type-checks.
+- Extend the README with `ask_about`/`resolve` (a "Resolve tension" line under Perceive or a new group);
+  point the examples list at the new tour. Consolidation only — no behaviour change.
+- Behaviour check: the example is import-clean and deterministic; the README lists the new methods.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

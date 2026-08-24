@@ -37,7 +37,7 @@ from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
-from jarvis.executive.executive_controller import ExecutiveController
+from jarvis.executive.executive_controller import ExecutiveController, working_statement
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
@@ -433,15 +433,68 @@ class Jarvis:
                     )
         return None
 
-    def _contested_working_belief(self) -> Belief | None:
-        """A belief Jarvis has reasoned to that carries both supporting and
-        contradicting evidence -- a live tension worth resolving (Vision §18).
+    @staticmethod
+    def _is_contested(belief: Belief) -> bool:
+        """True when a belief carries both supporting and contradicting evidence
+        *and* still leans neither way (confidence below the grounded threshold) --
+        a genuine live tension, not a belief that merely records an old doubt while
+        clearly settled (Vision §18). Strong enough guidance later resolves it.
         """
+        explanation = belief.explain()
+        return bool(
+            explanation.supporting
+            and explanation.contradicting
+            and belief.confidence.value < 0.5
+        )
+
+    def _contested_working_belief(self) -> Belief | None:
+        """A working belief that is a live tension worth resolving (Vision §18)."""
         for belief in self.beliefs.all_beliefs():
-            explanation = belief.explain()
-            if explanation.supporting and explanation.contradicting:
+            if self._is_contested(belief):
                 return belief
         return None
+
+    def ask_about(self, topic: str) -> str | None:
+        """Voice an unresolved tension so the companion can settle it (Vision §18,
+        §37), or None when Jarvis holds no contested belief about ``topic``.
+
+        When what Jarvis has concluded about ``topic`` is genuinely contested, it
+        names both sides it has heard and asks which holds -- it only asks; it
+        asserts nothing. Feed the answer back with :meth:`resolve`.
+        """
+        belief = self.beliefs.get_by_statement(working_statement(topic))
+        if belief is None or not self._is_contested(belief):
+            return None
+        explanation = belief.explain()
+        for_it = explanation.supporting[0].content
+        against_it = explanation.contradicting[0].content
+        return (
+            f'About "{topic}", I have heard both "{for_it}" and "{against_it}" — '
+            "which is it?"
+        )
+
+    def resolve(self, topic: str, guidance: str, supports: bool = True) -> Belief | None:
+        """Take the companion's guidance on a contested topic as evidence (Vision §18,
+        §20), tipping the working belief toward one side -- derived, never set.
+
+        The guidance becomes a strong-provenance (`USER_STATEMENT`) piece of evidence
+        on the belief for ``topic``; enough of it can move a contested belief past
+        the grounded threshold so it is no longer a live tension. Returns the updated
+        working belief.
+        """
+        episode = self.think(
+            topic,
+            evidence=[
+                Evidence(
+                    content=guidance,
+                    source=EvidenceSource.USER_STATEMENT,
+                    weight=Confidence(1.0),
+                    supports=supports,
+                    context="companion guidance on a contested topic",
+                )
+            ],
+        )
+        return episode.working_belief
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).
