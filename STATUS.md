@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 74)
+Last updated: 2026-08-24 (Increment 75)
 
 ---
 
@@ -954,6 +954,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
   This is the raw material Reflect/Hypothesise (next increments) will work on.
 - Gates: ruff clean · pyright strict 0 errors · pytest 358 passed.
 
+### Increment 75 — Reflect: noticing a load-bearing observation ✅ (2026-08-24)
+- **Cycle stage 2** (Remember → Connect → **Reflect** → Hypothesise → …). Where Connect links two beliefs
+  that share an observation, Reflect looks across the whole web and names a *pattern*: an observation that
+  is **load-bearing** — one piece of evidence that two or more beliefs all rest on (Vision §19, §31).
+- `Reflection` VO (observation + the beliefs it grounds + `load` + `describe()`); domain service
+  `reflection.find_reflections(beliefs)` groups beliefs by shared evidence content and surfaces each
+  observation grounding ≥2 beliefs, most load-bearing first. `jarvis.reflect()` runs it over the beliefs
+  store. This is the genuine review the executive's §19 placeholder never did.
+- Purely derived — it *notices*, never concludes: a finding is a structured pointer to the shared
+  observation and the beliefs under it, asserting nothing. Empty when no observation grounds >1 belief.
+  Verified: "the client moved the deadline up" surfaces as load-bearing for 3 beliefs; a one-off does not.
+  Feeds autonomous Hypothesise (stage 3). Why it matters: if a load-bearing observation is wrong, every
+  belief on it is in doubt at once — the natural input to Challenge (later).
+- Gates: ruff clean · pyright strict 0 errors · pytest 363 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1093,8 +1108,8 @@ All prior deferred threads are folded in below so nothing is lost.
 |---|---|---|
 | Remember | ✅ done | episodic + belief + companion + action memory, persistent |
 | **Connect** | ✅ done (Incr 74) | `Connection`, `connections()`, `related_beliefs()` — links by shared evidence |
-| **Reflect** | ▶ NEXT | replace the §19 placeholder: notice patterns across connected clusters → structured findings |
-| Hypothesise (autonomous) | ⬜ | reuse `HypothesisSet` (§17) but *brewed from* reflection, not triggered by `consider()` |
+| **Reflect** | ✅ done (Incr 75) | `Reflection`, `reflect()` — load-bearing observations across the belief web |
+| **Hypothesise (autonomous)** | ▶ NEXT | reuse `HypothesisSet` (§17) but *brewed from* reflection, not triggered by `consider()` |
 | Challenge | ⬜ | actively seek falsifying evidence for a leading hypothesis (self-adversarial; beyond §11) |
 | Learn | ✅ exists | action-outcome learning + self-model behaviour change — wire into the cycle |
 | Act | ✅ exists | graded autonomy / stances — wire into the cycle |
@@ -1126,19 +1141,20 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Reflect (cycle stage 2): notice a pattern across connected beliefs (Vision §19, §31).** Increment 74
-gave Jarvis connections (beliefs resting on the same evidence); §19 reflection is still a placeholder, so
-nothing yet *looks at* those clusters and draws anything from them. Reflect is where the raw material
-becomes an observation about itself. Smallest honest step:
-- A domain service `reflect(connections, beliefs)` that turns a cluster (a piece of evidence that
-  grounds ≥2 beliefs, or a group of mutually-connected beliefs) into a derived observation — e.g. "one
-  observation is load-bearing for several of my beliefs" — surfaced as `jarvis.reflect()` returning
-  structured findings (not free text). Every finding traces to real connections; empty when none.
-- Keep it truthful and non-asserting: reflection *notices*, it does not conclude — a finding is a
-  pointer to a cluster, its shared evidence, and the beliefs it underpins. No LLM; pure read-model over
-  Increment 74's connections. This becomes the input to autonomous Hypothesise (stage 3).
-- Behaviour tests: a shared observation grounding two beliefs yields a finding naming that evidence and
-  both beliefs; isolated beliefs yield nothing; the strongest/most-load-bearing cluster comes first.
+**Hypothesise (cycle stage 3): brew a hypothesis from a load-bearing observation (Vision §17, §31).**
+Increment 75 lets Jarvis notice that one observation underpins several beliefs. Stage 3 turns that
+*noticing* into a *proposed explanation*: "if these beliefs all rest on X, maybe they share a common
+cause / X explains them." Today `HypothesisSet`/`consider()` exist (§17) but are only triggered by the
+companion; this makes hypotheses **brew from Jarvis's own reflection**. Smallest honest step:
+- `jarvis.hypothesise()` (or `hypotheses()`): from the top `reflect()` finding, form a `Hypothesis`/
+  `HypothesisSet` proposing that the load-bearing observation is the common ground of its beliefs —
+  seeded with the shared evidence, so its confidence is derived like any hypothesis. Return the
+  structured hypothesis set (leading + rivals), or empty when there is nothing load-bearing to explain.
+- Keep it truthful: a hypothesis is *proposed*, never asserted — it reuses the §17 evidence-derived
+  machinery, is revisable, and names what would confirm or refute it (the input to Challenge, stage 4).
+  Pure read-model over reflect(); no LLM.
+- Behaviour tests: a load-bearing observation yields a hypothesis naming it and the beliefs it would
+  explain; no load-bearing observation yields none; the hypothesis carries the shared evidence.
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:

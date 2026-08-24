@@ -25,6 +25,7 @@ from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
+from jarvis.domain.services.reflection import find_reflections
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
@@ -38,6 +39,7 @@ from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
+from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
 from jarvis.executive.executive_controller import ExecutiveController, working_statement
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
@@ -517,6 +519,16 @@ class Jarvis:
             for connection in self.connections()
             if connection.involves(statement)
         )
+
+    def reflect(self) -> tuple[Reflection, ...]:
+        """Look across the belief web and notice load-bearing observations — a
+        single piece of evidence that several beliefs rest on (Vision §19, §31),
+        most load-bearing first. Cycle stage two, after Connect.
+
+        A pure read-model: it *notices*, it does not conclude. Empty when no
+        observation grounds more than one belief. Feeds autonomous hypotheses.
+        """
+        return find_reflections(list(self.beliefs.all_beliefs()))
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).
