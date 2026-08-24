@@ -22,6 +22,7 @@ from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.curiosity import wonder
+from jarvis.domain.services.goal_reflection import recurring_goals
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
@@ -123,6 +124,16 @@ class Jarvis:
         (Vision §31), or None if it has judged too few kinds of action.
         """
         return observe_prediction_accuracy(self.actions.all_beliefs())
+
+    def recurring_goals(self) -> tuple[tuple[str, int], ...]:
+        """The goals Jarvis keeps returning to, from its episodic memory
+        (Vision §26, §31), as ``(goal, count)`` pairs ordered by descending count.
+
+        A plain count over remembered purposes -- not a belief, not a plan. It
+        names what Jarvis has come back to often enough to be a pattern, saying
+        nothing about whether pursuing it is wise. Empty when nothing recurs.
+        """
+        return recurring_goals(self.episodes.history())
 
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 41)
+Last updated: 2026-08-24 (Increment 42)
 
 ---
 
@@ -544,6 +544,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
   so they record `None` via the field default. Only companion conclusions attach it today.
 - Gates: ruff clean · pyright strict 0 errors · pytest 260 passed.
 
+### Increment 42 — noticing a recurring goal: the first look back over its own purposes ✅ (2026-08-24)
+- New domain service `goal_reflection.recurring_goals(history, *, minimum=3)` — a **count over episodic
+  memory**, not a belief or a plan (Vision §26, §31 "what do I keep returning to?"). Counts goal
+  statements across **companion-origin** episodes that carried a goal; returns `(goal, count)` pairs
+  ordered by descending count (ties keep first-seen order), limited to goals seen ≥ `minimum`.
+- `jarvis.recurring_goals()` exposes it read-only over `episodes.history()`. Because the goal now lives
+  in episodic memory (Increment 41), Jarvis can, for the first time, look back over its own purposes.
+- Truthful & non-asserting: it names what Jarvis has returned to — nothing about whether that is wise;
+  judgement is a later, separate step. Reads existing records only (no new persistence). Curiosity
+  (self-directed) episodes and goal-less ones are skipped. Exact-string match on the statement (D17
+  simplification; semantic clustering deferred). `_MINIMUM_RECURRENCE = 3` mirrors the self-observation
+  history floor (D20) so both read-models demand comparable evidence before naming a pattern.
+- Gates: ruff clean · pyright strict 0 errors · pytest 265 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -645,18 +659,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Notice a recurring goal (Vision §26, §31: "what do I keep returning to?").** The goal now lives in
-episodic memory (Increment 41), so Jarvis can, for the first time, look back over its own purposes.
-Smallest honest step toward goal-aware self-modelling:
-- Add a query over `episodes.history()` that counts how often the *same* goal statement recurs across
-  companion-origin episodes (exact-string match — semantic matching is a deliberate later concern, cf.
-  D17). Expose it read-only, e.g. `jarvis.recurring_goals()` → tuple of `(goal, count)` ordered by
-  count, only goals seen ≥ `_MINIMUM_HISTORY` times (mirror the self-observation floor, D20).
-- Keep it truthful and non-asserting: this is a *count over memory*, not a belief or a plan — it names
-  what Jarvis has returned to, nothing about whether that's good. No new persistence (reads existing
-  records). Goal-less episodes are simply skipped.
-- Behaviour tests: three `think(..., goal=g)` with the same statement surface `(g, 3)`; a one-off goal
-  and goal-less episodes never appear; ordering is by descending count.
+**A recurring goal becomes curiosity (Vision §16, §26, §31).** Jarvis can now *see* the goals it keeps
+returning to (Increment 42); the next honest step is to let that recognition *move* it — the same
+pattern already used for self-tendencies (Increment 22) and companion contradictions (Increment 36),
+where a recognised signal raises a `CuriosityImpulse`. Smallest step:
+- In `feel_curious()`, after the existing self-model and companion-contradiction checks, if
+  `recurring_goals()` surfaces a goal, raise a `CuriosityImpulse` to wonder about that goal (e.g.
+  trigger "why do I keep returning to: {goal}?"). It recommends reflection, performs nothing (§28).
+- Keep the established priority order truthful: self-tendencies first (they are about Jarvis's own
+  reliability), then companion tension, then recurring purpose — only raise the goal impulse when the
+  earlier ones are quiet. A companion with no recurring goals → no goal impulse.
+- Behaviour tests: after three same-goal companion episodes, `feel_curious()` (when self-model and
+  companion are healthy) returns an impulse naming that goal; with no recurring goal it does not.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
