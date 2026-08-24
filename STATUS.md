@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 71)
+Last updated: 2026-08-24 (Increment 72)
 
 ---
 
@@ -911,6 +911,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
   the executive's `working_statement` (no format duplication).
 - Gates: ruff clean · pyright strict 0 errors · pytest 345 passed.
 
+### Increment 72 — a resolving tour + README: hear → curious → ask → resolve ✅ (2026-08-24)
+- New `examples/resolving.py`: Jarvis perceives a self-contradicting exchange (grounds a contested belief
+  at 0.33), the tension makes it curious, `ask_about(topic)` voices both sides it heard, the companion
+  answers, `resolve(topic, …)` folds that in and tips the belief to 0.5, and a final `feel_curious`/
+  `ask_about` shows the tension gone — printing each turn (Vision §18, §40). Deterministic, runs exit 0,
+  type-checks.
+- README "Perceive" group gains `ask_about`/`resolve`; the examples list now points at all six tours.
+  Consolidation only — no behaviour change, all prior tests green.
+- Gates: ruff clean · pyright strict 0 errors · pytest 345 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1032,16 +1042,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A perceived-reasoning tour: hear a contradiction, ask, resolve — end to end (Vision §18, §40).**
-Increments 70–71 completed a full epistemic-social loop (contested perception → curiosity → ask → resolve),
-but no runnable story shows it — the perception examples stop at grounding a belief. Smallest honest step:
-- Add `examples/resolving.py` (or extend `conversation.py`): a Jarvis perceives a self-contradicting
-  exchange that grounds a contested belief, `feel_curious()` surfaces the tension, `ask_about(topic)`
-  voices both sides, the companion answers, `resolve(topic, …)` tips it, and a final `ask_about`/
-  `feel_curious` shows the tension gone — printing each turn. Deterministic; runs exit 0 and type-checks.
-- Extend the README with `ask_about`/`resolve` (a "Resolve tension" line under Perceive or a new group);
-  point the examples list at the new tour. Consolidation only — no behaviour change.
-- Behaviour check: the example is import-clean and deterministic; the README lists the new methods.
+**Consolidation checkpoint: a state-of-the-system pass over STATUS/README/vocabulary (Vision §40, §42).**
+Seventy-two increments in, the surface is large (perceive/reason/act/goals/relationship). Before opening
+the next big vision area (e.g. §15 cognitive energy, or the real §32 LLM adapter), do a short, honest
+audit increment — no new behaviour, just make the map match the territory. Smallest honest step:
+- Re-read the README Vocabulary against the actual public methods on `Jarvis` (grep the `def`s); fix any
+  drift, dead entries, or missing ones. Confirm the six example tours all still run (exit 0) and
+  type-check. Verify STATUS's "What works today" / architecture map still describes reality.
+- Optionally add a tiny `tests/test_public_surface.py` that asserts the key public methods exist and are
+  callable (a guard against silent signature drift), or a smoke test that imports and runs each example's
+  `main()` under a captured stdout so examples can't rot.
+- Truthful bookkeeping only — every prior test stays green; no vision behaviour changes. Then pick the
+  next big area deliberately (LLM adapter behind `PerceptionSource`, or §15 energy).
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

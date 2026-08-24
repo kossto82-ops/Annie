@@ -74,6 +74,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `perceive(observation, trigger=None, goal=None)` — turn a raw observation into evidence (via the injected `PerceptionSource`) and reason over it; unknown input yields honest silence.
 - `perceive_all(observations, trigger=None, goal=None)` — perceive a whole stream at once; a multi-line exchange grounds one belief from all of it.
 - `perceive_about_companion(trait, observation)` / `perceive_all_about_companion(trait, observations)` — perceive utterance(s) about the companion and fold them into the lasting companion model.
+- `ask_about(topic)` / `resolve(topic, guidance, supports=True)` — voice a contested belief ("I've heard both X and not-X — which is it?") and fold the companion's answer back in as evidence.
 - `Jarvis(perception=…)` — inject any `PerceptionSource` (a dumb keyword rule by default; an LLM-backed perceiver is a drop-in behind the same Protocol).
 
 **Reason**
@@ -115,7 +116,8 @@ Runnable end-to-end tours live in [`examples/main_loop.py`](examples/main_loop.p
 [`examples/goal_arc.py`](examples/goal_arc.py) (the goal → stuck → ask-for-help → help-received arc),
 [`examples/goal_parts.py`](examples/goal_parts.py) (a goal made of parts, worked one blocker at a time),
 [`examples/perceiving.py`](examples/perceiving.py) (language in, evidence-grounded cognition out),
-and [`examples/conversation.py`](examples/conversation.py) (a multi-line exchange grounds a belief that strengthens across a restart).
+[`examples/conversation.py`](examples/conversation.py) (a multi-line exchange grounds a belief that strengthens across a restart),
+and [`examples/resolving.py`](examples/resolving.py) (hear a contradiction → get curious → ask → resolve).
 
 ## Development
 
