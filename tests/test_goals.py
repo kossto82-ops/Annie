@@ -449,3 +449,30 @@ class TestReceivingHelp:
         jarvis.receive_help(goal, helpful=False)
         assert jarvis.stuck_goals() == ("master recursion",)
         assert jarvis.ask_for_help() is not None
+
+    def test_helpful_guidance_teaches_that_the_companion_is_helpful(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="master recursion")
+        jarvis.receive_help(goal)
+        belief = jarvis.companion.belief_about("is helpful when I am stuck")
+        assert belief is not None and belief.confidence.value > 0.0
+        assert "is helpful when I am stuck" in jarvis.introspect()
+
+    def test_unhelpful_guidance_weakens_the_companion_helpfulness_belief(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="master recursion")
+        jarvis.receive_help(goal)
+        jarvis.receive_help(goal)
+        strong = jarvis.companion.belief_about("is helpful when I am stuck")
+        assert strong is not None
+        high = strong.confidence.value
+
+        jarvis.receive_help(goal, helpful=False)
+        weakened = jarvis.companion.belief_about("is helpful when I am stuck")
+        assert weakened is not None
+        assert weakened.confidence.value < high
+
+    def test_a_goal_with_no_help_leaves_the_companion_model_untouched(self) -> None:
+        jarvis = Jarvis()
+        jarvis.mark_goal_reached(Goal(statement="master recursion"), reached=False)
+        assert jarvis.companion.belief_about("is helpful when I am stuck") is None

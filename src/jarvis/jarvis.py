@@ -50,6 +50,9 @@ from jarvis.observability.episode_trace import EpisodeTrace
 # right now", not "never" -- reaching the goal or a fresh recurrence resurfaces it.
 _MAX_GOAL_REFLECTIONS = 3
 
+# The companion trait Jarvis learns about from help it received on a stuck goal.
+HELPFUL_COMPANION_TRAIT = "is helpful when I am stuck"
+
 
 class Jarvis:
     """A long-term cognitive companion (first vertical slice)."""
@@ -482,6 +485,21 @@ class Jarvis:
         for event in belief.pull_events():
             self.nervous_system.publish(event)
         self.nervous_system.dispatch()
+
+        # The same act says something about the companion, not only the goal: help
+        # that worked is evidence they are helpful when Jarvis is stuck (Vision §5,
+        # §20). A distinct, revisable belief about the companion -- provenance-
+        # grounded relationship learning, not programmed gratitude. Unhelpful
+        # guidance contradicts it, exactly as any companion contradiction does.
+        self._record_companion(
+            HELPFUL_COMPANION_TRAIT,
+            Evidence(
+                content=f"the companion's guidance on '{goal.statement}' {outcome}",
+                source=EvidenceSource.USER_STATEMENT,
+                weight=Confidence(1.0),
+                supports=helpful,
+            ),
+        )
         return belief
 
     def belief_about_goal(self, goal: Goal | str) -> Belief | None:

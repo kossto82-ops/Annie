@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 52)
+Last updated: 2026-08-24 (Increment 53)
 
 ---
 
@@ -675,6 +675,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   `goals.json`. Verified: sustained help clears `stuck_goals()`/`ask_for_help()`, unhelpful does not.
 - Gates: ruff clean · pyright strict 0 errors · pytest 295 passed.
 
+### Increment 53 — help that worked strengthens the companion model ✅ (2026-08-24)
+- `receive_help(goal, helpful=…)` now also records a companion observation on the trait
+  `HELPFUL_COMPANION_TRAIT` ("is helpful when I am stuck") via the existing `_record_companion` path —
+  an ordinary, derived, revisable belief about the companion (Vision §5, §20). One helpful act now
+  teaches two independent things: the goal is more reachable (about the goal) *and* the companion is
+  helpful (about the companion). `helpful=False` contradicts the companion belief, exactly as any
+  companion contradiction does (Increment 35).
+- Not programmed gratitude — provenance-grounded relationship learning: the companion appears as the
+  `USER_STATEMENT` source in `explain_companion(...)`/`introspect()`, confidence is derived, and a goal
+  reached without any companion help leaves the companion model untouched.
+- Gates: ruff clean · pyright strict 0 errors · pytest 298 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -787,21 +799,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Gratitude that is evidence, not manners: help that worked strengthens the companion model (Vision §5,
-§18, §20).** Increment 52 lets the companion's help move a goal's reachability — but that same helpful
-act says something about the *companion* too, and Jarvis's model of them never hears it. When guidance
-genuinely helps, that is evidence the companion is helpful/reliable; Jarvis should learn it. Smallest
-honest step:
-- In `receive_help(goal, helpful=True)`, also record a companion observation (via the existing
-  `observe_companion`/`_record_companion` path) on a trait like "is helpful when I am stuck" — ordinary
-  `Belief` about the companion, confidence derived, revisable. `helpful=False` records the contradicting
-  side, exactly as companion contradiction already works (Increment 35).
-- Keep the two learnings separate and truthful: goal reachability (about the goal) and companion
-  helpfulness (about the companion) are different beliefs from the same act; neither is asserted, both
-  are derived. This is not politeness — it is provenance-grounded relationship learning.
-- Behaviour tests: helpful guidance makes `companion.belief_about("...helpful...")` confident and shows
-  in `introspect()`/`explain_companion(...)`; unhelpful guidance weakens it; a goal with no help leaves
-  the companion model untouched.
+**When Jarvis is stuck, whom does it turn to? Let a helpful companion sharpen the ask (Vision §5, §18,
+§37).** Jarvis now learns the companion is helpful when it is stuck (Increment 53), but `ask_for_help()`
+does not use that belief — it asks into the void the same way regardless of what it has learned about
+who actually helps. The relationship model should shape the request. Smallest honest step:
+- Have `ask_for_help()` consult `companion.belief_about(HELPFUL_COMPANION_TRAIT)`: when Jarvis
+  confidently believes the companion helps when it is stuck, warm the request ("You've helped me get
+  unstuck before — I keep returning to X but haven't found how to reach it; can you help again?");
+  otherwise keep the current neutral phrasing. Wording only — still just asks, asserts nothing.
+- Keep it truthful: the warmer phrasing is earned from real evidence (a confident, derived companion
+  belief), never assumed. No confidence in that belief → neutral ask. Reversible: if the companion
+  belief later weakens (unhelpful guidance), the ask cools back down.
+- Behaviour tests: after sustained helpful guidance, `ask_for_help()` on a new stuck goal uses the
+  warmer phrasing; with no/low companion-helpfulness belief it uses the neutral phrasing; the goal named
+  is still the most stuck one.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
