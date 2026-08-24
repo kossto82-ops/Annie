@@ -57,3 +57,35 @@ class TestJarvisPerceive:
         episode = jarvis.perceive("the approach is definitely sound")
         assert episode.result is not None
         assert "Insufficient evidence" in episode.result
+
+
+class TestPerceiveAboutCompanion:
+    _TRAIT = "prefers simplicity"
+
+    def test_a_perceived_observation_builds_a_companion_belief(self) -> None:
+        jarvis = Jarvis()
+        belief = jarvis.perceive_about_companion(
+            self._TRAIT, "you definitely prefer simplicity"
+        )
+        assert belief is not None and belief.confidence.value >= 0.5
+        assert jarvis.companion.belief_about(self._TRAIT) is belief
+        assert self._TRAIT in jarvis.explain_companion(self._TRAIT)
+
+    def test_a_perceived_denial_contradicts_the_belief(self) -> None:
+        jarvis = Jarvis()
+        jarvis.perceive_about_companion(self._TRAIT, "you definitely prefer simplicity")
+        jarvis.perceive_about_companion(self._TRAIT, "you definitely prefer simplicity")
+        strong = jarvis.companion.belief_about(self._TRAIT)
+        assert strong is not None
+        high = strong.confidence.value
+
+        jarvis.perceive_about_companion(self._TRAIT, "you definitely do not prefer simplicity")
+        weakened = jarvis.companion.belief_about(self._TRAIT)
+        assert weakened is not None
+        assert weakened.confidence.value < high
+
+    def test_an_unperceived_observation_leaves_the_model_untouched(self) -> None:
+        jarvis = Jarvis()
+        result = jarvis.perceive_about_companion(self._TRAIT, "the weather is nice today")
+        assert result is None
+        assert jarvis.companion.belief_about(self._TRAIT) is None

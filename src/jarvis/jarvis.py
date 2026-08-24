@@ -795,6 +795,21 @@ class Jarvis:
         belief, _ = self._record_companion(trait, evidence)
         return belief
 
+    def perceive_about_companion(self, trait: str, observation: str) -> Belief | None:
+        """Perceive an observation about the companion and let it shape the lasting
+        model of them (Vision §5, §32), or None if nothing is perceived.
+
+        Bridges perception (Increment 63) to the companion model: the observation is
+        turned into evidence by the `PerceptionSource`, and each piece is folded into
+        the derived, revisable belief about ``trait`` -- so perceived praise builds it
+        and a perceived denial contradicts it, exactly like hand-built evidence. An
+        observation the source makes nothing of leaves the model untouched (§37).
+        """
+        belief: Belief | None = None
+        for piece in self._perception.perceive(observation):
+            belief = self.observe_companion(trait, piece)
+        return belief
+
     def acknowledge_companion(self, trait: str, evidence: Evidence) -> str:
         """Record an observation and acknowledge it in conversation (Vision §18).
 

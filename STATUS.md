@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 63)
+Last updated: 2026-08-24 (Increment 64)
 
 ---
 
@@ -812,6 +812,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   perception gap (the ~20–30% assessment's biggest missing piece).
 - Gates: ruff clean · pyright strict 0 errors · pytest 328 passed.
 
+### Increment 64 — perceived utterances shape the companion model ✅ (2026-08-24)
+- `jarvis.perceive_about_companion(trait, observation)` bridges the Increment-63 perception seam to the
+  companion model (Increment 13): the observation is turned into evidence by the `PerceptionSource`, and
+  each piece is folded into `observe_companion(trait, …)` — so perceived praise builds a derived,
+  revisable companion belief and a perceived (cued) denial contradicts it, exactly like hand-built
+  evidence (Vision §5, §32). Returns the belief, or None when nothing is perceived.
+- The lasting relationship knowledge now grows from language, not only from hand-constructed `Evidence`.
+  Verified: cued praise raises the belief (0.66), a cued denial contradicts it (→0.49), and a cue-less
+  observation leaves the model untouched (honest silence, §37).
+- Boundary still strict (D31): perception only makes evidence; the companion model still derives
+  confidence and can be contradicted. No new state, no persistence beyond the existing companion store.
+- Gates: ruff clean · pyright strict 0 errors · pytest 331 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -931,21 +944,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Perceived companion utterances update the companion model, not just a one-off belief (Vision §5, §32).**
-Increment 63 turns an observation into evidence for a `think(...)` episode, but the evidence evaporates
-after the episode — perceiving "you clearly prefer simplicity" grounds a momentary belief and then
-forgets it. A companion utterance about the companion should feed the *companion model* (Increment 13),
-which is where lasting relationship knowledge lives. Smallest honest step:
-- Add `jarvis.perceive_about_companion(trait, observation)` (or let `perceive` route to the companion
-  model when given a trait): run the `PerceptionSource` on the observation, and feed each resulting
-  `Evidence` into `observe_companion(trait, …)` — so perceived praise/contradiction accretes into a
-  derived, revisable companion belief exactly like hand-built evidence does.
-- Keep the boundary strict: perception still only makes evidence; the companion model still derives
-  confidence and can be contradicted. An observation the source makes nothing of leaves the model
-  untouched (honest silence).
-- Behaviour tests: a cue-bearing observation about a trait makes `companion.belief_about(trait)`
-  confident and shows in `explain_companion`; a negated cue contradicts it; an unperceived observation
-  changes nothing.
+**A perception example, end to end: language in, cognition out (Vision §32, §40).**
+Increments 63–64 opened the perception seam and wired it to the companion model, but there is no runnable
+story showing it — the three example tours all still hand-build `Evidence`. The single best artifact for
+"Jarvis can now take language" is missing. Smallest honest step:
+- Add `examples/perceiving.py`: one Jarvis that `perceive(...)`s a few utterances (a grounding cue, a
+  cue-less line that stays silent, a negated cue) and `perceive_about_companion(trait, …)`s a couple of
+  observations, printing the episode conclusion / companion belief each turn so the seam is legible. Show
+  that a smarter perceiver is a drop-in by injecting a tiny custom `PerceptionSource`. Deterministic;
+  runs exit 0 and type-checks.
+- Extend the README Vocabulary with `perceive`/`perceive_about_companion` and a one-line "Perceive"
+  group; point the examples list at the new tour. Consolidation only — no behaviour change.
+- Behaviour check: the example is import-clean and deterministic; the README lists the new methods.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
