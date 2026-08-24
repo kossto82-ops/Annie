@@ -56,6 +56,7 @@ class Jarvis:
         companion_store: BeliefRepository | None = None,
         actions_store: BeliefRepository | None = None,
         reversibility_store: BeliefRepository | None = None,
+        goals_store: BeliefRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -65,6 +66,7 @@ class Jarvis:
         self._reversibility: BeliefRepository = (
             reversibility_store or InMemoryBeliefStore()
         )
+        self._goals: BeliefRepository = goals_store or InMemoryBeliefStore()
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -75,10 +77,10 @@ class Jarvis:
     def persistent(cls, directory: str | Path) -> Jarvis:
         """A Jarvis whose whole memory lives on disk under one directory.
 
-        Wires all four stores -- beliefs, episodes, companion model and action
-        learning -- to files under ``directory``, so a single call gives full
-        continuity across restarts (Vision §3, §21). Nothing new is persisted;
-        this is composition over the existing JSON stores.
+        Wires every store -- beliefs, episodes, companion model, action learning,
+        reversibility and goal reachability -- to files under ``directory``, so a
+        single call gives full continuity across restarts (Vision §3, §21).
+        Nothing new is persisted; this is composition over the existing JSON stores.
         """
         base = Path(directory)
         return cls(
@@ -87,6 +89,7 @@ class Jarvis:
             companion_store=JsonBeliefStore(base / "companion.json"),
             actions_store=JsonBeliefStore(base / "actions.json"),
             reversibility_store=JsonBeliefStore(base / "reversibility.json"),
+            goals_store=JsonBeliefStore(base / "goals.json"),
         )
 
     def think(
@@ -355,6 +358,45 @@ class Jarvis:
     def belief_about_action(self, description: str) -> Belief | None:
         """What Jarvis believes about how actions of this kind turn out."""
         return self.actions.get_by_statement(self._action_statement(description))
+
+    def mark_goal_reached(self, goal: Goal, reached: bool = True) -> Belief:
+        """Record that a goal was (or was not) reached, and learn from it (Vision §26, §27).
+
+        The companion asserts the outcome -- Jarvis does not evaluate the goal's
+        ``success_criterion`` itself yet. The outcome becomes evidence for a belief
+        that goals of this kind are *reachable*, so repeated successes build
+        confidence and repeated failures erode it (derived, revisable, exactly like
+        action-outcome learning). Reaching it also supplies the criterion, if any,
+        as context.
+        """
+        statement = self._goal_statement(goal.statement)
+        belief = self._goals.get_by_statement(statement) or Belief(statement=statement)
+        outcome = "reached" if reached else "not reached"
+        belief.add_evidence(
+            Evidence(
+                content=f"goal '{goal.statement}' was {outcome}",
+                source=EvidenceSource.ACTION_OUTCOME,
+                weight=Confidence(1.0),
+                supports=reached,
+                context=goal.success_criterion,
+            )
+        )
+        self._goals.save(belief)
+        for event in belief.pull_events():
+            self.nervous_system.publish(event)
+        self.nervous_system.dispatch()
+        return belief
+
+    def belief_about_goal(self, goal: Goal | str) -> Belief | None:
+        """What Jarvis has learned about whether a goal of this kind is reachable,
+        or None if it has never been told an outcome for it (Vision §26).
+        """
+        statement = goal.statement if isinstance(goal, Goal) else goal
+        return self._goals.get_by_statement(self._goal_statement(statement))
+
+    @staticmethod
+    def _goal_statement(goal_statement: str) -> str:
+        return f"The goal '{goal_statement}' is reachable"
 
     def recommend_action_by_description(self, description: str) -> ActionRecommendation:
         """Recommend a stance for a *remembered* kind of action (Vision §28).

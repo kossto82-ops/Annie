@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 44)
+Last updated: 2026-08-24 (Increment 45)
 
 ---
 
@@ -582,6 +582,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   Jarvis has returned to, and how often.
 - Gates: ruff clean · pyright strict 0 errors · pytest 270 passed.
 
+### Increment 45 — a goal can be reached: learning whether purposes are attainable ✅ (2026-08-24)
+- `jarvis.mark_goal_reached(goal, reached=True)` records the outcome as evidence for a belief
+  "The goal 'X' is reachable" in a new `goals` store — reused the action-outcome learning shape
+  (Increment 25): reaches support, failures contradict, confidence derived and revisable (Vision §26,
+  §27, §20). The goal's `success_criterion` (previously stored but never read) rides along as evidence
+  context. The companion asserts the outcome; Jarvis does not evaluate the criterion itself yet.
+- `jarvis.belief_about_goal(goal | statement)` queries it (None until an outcome is known).
+  `Jarvis(goals_store=…)` is injectable; `Jarvis.persistent(dir)` now wires a 6th file `goals.json`.
+  Verified: reachability confidence rises with reaches, falls with a failure, and survives a restart.
+- Gates: ruff clean · pyright strict 0 errors · pytest 275 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -688,18 +699,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A goal reached vs. a goal still open — did pursuing it change anything? (Vision §26, §27, §20).**
-Jarvis records goals, remembers them, and is moved by the recurring ones — but it never notices whether
-a goal was *met*. `Goal` already carries an optional `success_criterion` that is stored and never read.
-Smallest honest step toward goal-aware learning:
-- Add a way for the companion to tell Jarvis a goal was reached, e.g. `jarvis.mark_goal_reached(goal)` →
-  records `Evidence(ACTION_OUTCOME-like)` into a belief "The goal 'X' is reachable" in a small store,
-  exactly as action-outcome learning already works (Increment 25) — reachability is derived, revisable.
-- Then `recurring_goals()`/introspection can distinguish "still returning to (unmet)" from a goal it has
-  learned it can reach. Keep it truthful: no criterion evaluation logic yet (the companion asserts the
-  outcome); Jarvis only records and derives confidence.
-- Behaviour tests: marking a goal reached forms/strengthens a "reachable" belief; an unmet recurring
-  goal stays absent from that store; the belief round-trips if the store is persistent.
+**Introspection distinguishes an unmet recurring goal from a reachable one (Vision §26, §29, §30).**
+Increment 44 lists what Jarvis keeps returning to; Increment 45 lets it learn whether a goal is
+reachable — but the two don't yet talk. A goal it keeps returning to *and* has learned it can reach is
+a very different self-fact from one it returns to and keeps failing. Smallest honest step:
+- In `introspect()`'s "What I keep returning to:" section, annotate each recurring goal with its
+  reachability if known: append e.g. "(learned reachable, confidence 0.6)" or "(has not yet reached
+  it)" using `belief_about_goal(goal)`; leave unannotated when no outcome is known. Read-model only.
+- Optionally surface the same on `recurring_goals()` or a small companion method rather than only in the
+  narrated text, so the machine-readable path carries it too.
+- Behaviour tests: a recurring goal marked reached reads as reachable in `introspect()`; a recurring
+  goal marked not-reached reads as unmet; a recurring goal with no outcome carries no annotation.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

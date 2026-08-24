@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -132,6 +133,52 @@ class TestRecurringGoalsService:
 
         history = [record(TriggerOrigin.CURIOSITY) for _ in range(4)]
         assert recurring_goals(history) == ()
+
+
+class TestGoalReachability:
+    def test_marking_a_goal_reached_forms_a_reachable_belief(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="ship the parser")
+        assert jarvis.belief_about_goal(goal) is None
+        belief = jarvis.mark_goal_reached(goal)
+        assert belief.confidence.value > 0.0
+        assert jarvis.belief_about_goal(goal) is belief
+
+    def test_repeated_reaches_build_confidence_failures_erode_it(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="ship the parser")
+        jarvis.mark_goal_reached(goal)
+        jarvis.mark_goal_reached(goal)
+        confident = jarvis.belief_about_goal(goal)
+        assert confident is not None
+        high = confident.confidence.value
+
+        jarvis.mark_goal_reached(goal, reached=False)
+        lowered = jarvis.belief_about_goal(goal)
+        assert lowered is not None
+        assert lowered.confidence.value < high
+
+    def test_an_unmarked_goal_has_no_reachability_belief(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a question", goal=Goal(statement="never marked"))
+        assert jarvis.belief_about_goal("never marked") is None
+
+    def test_belief_about_goal_accepts_a_statement_string(self) -> None:
+        jarvis = Jarvis()
+        jarvis.mark_goal_reached(Goal(statement="ship the parser"))
+        assert jarvis.belief_about_goal("ship the parser") is not None
+
+    def test_reachability_survives_a_restart(self, tmp_path: Path) -> None:
+        goal = Goal(statement="ship the parser")
+        first = Jarvis.persistent(tmp_path)
+        first.mark_goal_reached(goal)
+        before = first.belief_about_goal(goal)
+        assert before is not None
+
+        restarted = Jarvis.persistent(tmp_path)
+        after = restarted.belief_about_goal(goal)
+        assert after is not None
+        assert after.confidence.value == before.confidence.value
 
 
 class TestRecurringGoalBecomesCuriosity:
