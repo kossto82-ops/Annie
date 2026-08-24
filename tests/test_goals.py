@@ -634,6 +634,35 @@ class TestReceivingHelp:
         jarvis.mark_goal_reached(Goal(statement="master recursion"), reached=False)
         assert jarvis.companion.belief_about("is helpful when I am stuck") is None
 
+    def test_help_advances_the_blocking_part(self) -> None:
+        jarvis = Jarvis()
+        parent = Goal(statement="master recursion")
+        jarvis.mark_goal_reached(Goal(statement="write the base case", part_of=parent.statement))
+        jarvis.mark_goal_reached(
+            Goal(statement="handle the recursive step", part_of=parent.statement), reached=False
+        )
+        assert jarvis.goal_progress(parent.statement) == (1, 2)
+
+        jarvis.receive_help(parent)
+        # The named blocker now counts as reached; nothing else is unreached.
+        assert jarvis.goal_progress(parent.statement) == (2, 2)
+
+    def test_unhelpful_guidance_does_not_advance_a_part(self) -> None:
+        jarvis = Jarvis()
+        parent = Goal(statement="master recursion")
+        jarvis.mark_goal_reached(
+            Goal(statement="handle the recursive step", part_of=parent.statement), reached=False
+        )
+        jarvis.receive_help(parent, helpful=False)
+        assert jarvis.goal_progress(parent.statement) == (0, 1)
+
+    def test_help_on_a_partless_goal_is_unchanged(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="master recursion")
+        jarvis.receive_help(goal)
+        assert jarvis.sub_goals(goal.statement) == ()
+        assert jarvis.goal_progress(goal.statement) == (0, 0)
+
 
 class TestAskPhrasing:
     @staticmethod

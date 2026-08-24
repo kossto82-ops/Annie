@@ -622,7 +622,35 @@ class Jarvis:
                 supports=helpful,
             ),
         )
+
+        # If the ask named a specific blocking part (Increment 60), helpful guidance
+        # got Jarvis past *that* part: credit the part directly (Vision §26), so it
+        # stops being the unreached blocker. Only on real help, and only the one
+        # part that was actually named -- nothing is asserted "done".
+        if helpful:
+            part = self._first_unreached_part(goal.statement)
+            if part is not None:
+                self._credit_helped_part(goal.statement, part)
         return belief
+
+    def _credit_helped_part(self, parent: str, part: str) -> None:
+        statement = self._goal_statement(part)
+        belief = self._goals.get_by_statement(statement) or Belief(statement=statement)
+        belief.add_evidence(
+            Evidence(
+                content=f"the companion's guidance helped reach the part '{part}'",
+                source=EvidenceSource.USER_STATEMENT,
+                weight=Confidence(1.0),
+                supports=True,
+            )
+        )
+        self._goals.save(belief)
+        for event in belief.pull_events():
+            self.nervous_system.publish(event)
+        self.nervous_system.dispatch()
+        # The link now counts as reached, so goal_progress advances and the part is
+        # no longer the blocker curiosity/ask fixate on.
+        self._record_subgoal_link(parent, part, True)
 
     def belief_about_goal(self, goal: Goal | str) -> Belief | None:
         """What Jarvis has learned about whether a goal of this kind is reachable,

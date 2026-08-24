@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 60)
+Last updated: 2026-08-24 (Increment 61)
 
 ---
 
@@ -771,6 +771,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   whole).
 - Gates: ruff clean · pyright strict 0 errors · pytest 316 passed.
 
+### Increment 61 — help received on a blocking part credits that part directly ✅ (2026-08-24)
+- `receive_help(goal, helpful=True)` now, when the goal has an identifiable unreached part (the same
+  `_first_unreached_part` the ask named in Increment 60), credits *that part* too via
+  `_credit_helped_part`: a `USER_STATEMENT` reach on the child's own reachability belief plus a reached
+  entry on the sub-goal link, so the helped part stops being the blocker (Vision §18, §26, §20).
+- `goal_progress` advances (e.g. 1/3 → 2/3) and `_first_unreached_part` moves on to the next part, so
+  curiosity and the ask automatically retarget the *new* blocker. Verified end-to-end: help advances the
+  part and, because the companion just proved helpful, the next ask is warm and names the next part.
+- Truthful & narrow: only real help (`helpful=True`) advances a part, only the one part actually named,
+  nothing asserted "done" (the parent's reachability stays derived, credited softly as before). A
+  part-less goal is unchanged; unhelpful guidance advances nothing.
+- Gates: ruff clean · pyright strict 0 errors · pytest 319 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -883,20 +896,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Help received on a blocking part credits that part directly, not only the whole (Vision §18, §26, §20).**
-Increments 59–60 sharpened curiosity and the ask down to the specific blocking part, but `receive_help`
-still only moves the *parent* goal's reachability — so the part Jarvis actually got unstuck on never
-records that it became reachable, and `goal_progress`/`_first_unreached_part` keep pointing at it forever.
+**The whole goal-arc example shows decomposition too (Vision §26, §40).** `examples/goal_arc.py`
+(Increment 56) predates the parts machinery (Increments 57–61), so the runnable story still walks an
+atomic goal — a reader can't see decomposition, per-part curiosity, the part-named ask, or help
+advancing one part at a time. The best single artifact for understanding the system is now stale.
 Smallest honest step:
-- Let `receive_help` accept an optional `part` (defaulting to none) — or, when the goal has a single
-  clearly-blocking unreached part, credit that part's reachability too (record a reach on the sub-goal
-  link + the child's own reachability), so a part helped past its block stops being "unreached".
-- Keep it truthful and derived: help on a part is evidence the *part* is reachable (and, via the existing
-  parent-credit path, softly the whole); nothing is asserted "done". A part-less goal behaves exactly as
-  today.
-- Behaviour tests: receiving help on a goal whose blocking part is named advances `goal_progress`
-  (the part counts as reached) and makes `_first_unreached_part` move on / return None; a whole-goal help
-  with no parts is unchanged.
+- Extend (or add a second example) so one persistent Jarvis takes on a goal *made of parts*, reaches
+  some, gets stuck on one, wonders about that specific part, asks for help naming it, receives help that
+  advances exactly that part, and shows `goal_progress` climbing 1/3 → 2/3 → 3/3 — printing each turn.
+  Verify it runs (exit 0) and type-checks.
+- Consolidation only — no behaviour change; every prior test stays green. Optionally add the new
+  goal/parts methods (`sub_goals`, `goal_progress`) to the README Vocabulary if not already listed.
+- Behaviour check: the example is deterministic (fixed timestamps) and import-clean.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
