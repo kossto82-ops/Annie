@@ -173,6 +173,41 @@ class TestCuriosityFocusesOnAStuckPart:
         assert impulse is not None
         assert impulse.trigger == f"Why do I keep returning to {self._PARENT} without reaching it?"
 
+    def _exhaust_to_ask(self, jarvis: Jarvis) -> None:
+        for _ in range(3):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None
+            jarvis.pursue(impulse)
+
+    def test_ask_for_help_names_the_blocking_part(self) -> None:
+        jarvis = Jarvis()
+        self._stuck_parent(jarvis)
+        jarvis.mark_goal_reached(Goal(statement="write the base case", part_of=self._PARENT))
+        jarvis.mark_goal_reached(
+            Goal(statement="handle the recursive step", part_of=self._PARENT), reached=False
+        )
+        self._exhaust_to_ask(jarvis)
+        message = jarvis.ask_for_help()
+        assert message is not None
+        assert "handle the recursive step" in message
+        assert "1 of 2 parts" in message
+        assert "can you help?" in message
+
+    def test_the_warm_variant_still_triggers_with_a_named_part(self) -> None:
+        jarvis = Jarvis()
+        # Earn a confident "companion is helpful" belief on an unrelated goal.
+        jarvis.receive_help(Goal(statement="a past goal"))
+        jarvis.receive_help(Goal(statement="a past goal"))
+        self._stuck_parent(jarvis)
+        jarvis.mark_goal_reached(
+            Goal(statement="handle the recursive step", part_of=self._PARENT), reached=False
+        )
+        self._exhaust_to_ask(jarvis)
+        message = jarvis.ask_for_help()
+        assert message is not None
+        assert "You've helped me get unstuck before" in message
+        assert "handle the recursive step" in message
+
 
 class TestThinkWithAGoal:
     def test_an_episode_without_a_goal_has_none(self) -> None:

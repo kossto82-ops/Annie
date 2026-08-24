@@ -182,19 +182,24 @@ class Jarvis:
         if not stuck:
             return None
         goal = stuck[0]
+        # The narrower the ask, the more actionable the help: if the stuck whole has
+        # an identifiable blocking part, name it rather than the vague whole (§26).
+        part = self._first_unreached_part(goal)
+        if part is not None:
+            reached, known = self.goal_progress(goal)
+            detail = (
+                f"I keep returning to {goal} — I've reached {reached} of {known} parts "
+                f"but can't get past '{part}'"
+            )
+        else:
+            detail = f"I keep returning to {goal} but haven't found how to reach it"
         # The relationship shapes the request: if Jarvis has confidently learned
         # this companion helps when it is stuck, the ask is warmer -- earned from
         # real evidence, not assumed (Vision §5, §18). Otherwise it stays neutral.
         helpful = self.companion.belief_about(HELPFUL_COMPANION_TRAIT)
         if helpful is not None and helpful.confidence.value >= 0.5:
-            return (
-                f"You've helped me get unstuck before — I keep returning to {goal} "
-                "but haven't found how to reach it; can you help again?"
-            )
-        return (
-            f"I keep returning to {goal} but haven't found how to reach it "
-            "on my own — can you help?"
-        )
+            return f"You've helped me get unstuck before — {detail}; can you help again?"
+        return f"{detail} on my own — can you help?"
 
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition

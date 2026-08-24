@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 59)
+Last updated: 2026-08-24 (Increment 60)
 
 ---
 
@@ -760,6 +760,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   and ask-for-help are all untouched.
 - Gates: ruff clean · pyright strict 0 errors · pytest 314 passed.
 
+### Increment 60 — asking for help names the blocking part ✅ (2026-08-24)
+- `ask_for_help()` now names the specific unreached part when the most-stuck goal has one ("I keep
+  returning to X — I've reached 1 of 2 parts but can't get past 'Y' …"), the same `_first_unreached_part`
+  predicate curiosity uses (Increment 59). Falls back to the whole-goal wording when there is no such
+  part (Vision §18, §26, §37). The narrower the ask, the more actionable the help.
+- The warm/neutral variants (Increments 51/54) are preserved and composed with the part detail: a
+  proven-helpful companion still gets the warmer opener, now with the precise blocker named. Still only
+  asks — asserts nothing, takes no action; `receive_help` remains whole-goal (helping the part helps the
+  whole).
+- Gates: ruff clean · pyright strict 0 errors · pytest 316 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -872,20 +883,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Asking for help names the blocking part too (Vision §18, §26, §37).** Curiosity now points at the
-specific stuck part (Increment 59), but `ask_for_help()` still asks about the whole goal — so when Jarvis
-finally turns to the companion, it asks the vaguer question ("help with X") instead of the sharp, useful
-one ("I'm stuck on part 'Y' of X"). The narrower the ask, the more actionable the help. Smallest honest
-step:
-- In `ask_for_help()`, when the most-stuck goal has an identifiable unreached part (`_first_unreached_part`),
-  name it in the request ("I keep returning to X; I've reached N of M parts but can't get past 'Y' — can
-  you help?"), keeping the warm/neutral variants from Increments 51/54. Fall back to the whole-goal
-  wording when there is no such part. Still only asks; asserts nothing, takes no action.
-- Truthful: the part named is one genuinely unreached (same predicate curiosity uses), and `receive_help`
-  can still be recorded against the whole goal (helping the part helps the whole — leave the credit path
-  as is unless a part-level `receive_help` proves needed).
-- Behaviour tests: a stuck goal with an unreached part makes `ask_for_help()` name that part; a partless
-  stuck goal keeps the current wording; the warm variant still triggers when the companion is proven helpful.
+**Help received on a blocking part credits that part directly, not only the whole (Vision §18, §26, §20).**
+Increments 59–60 sharpened curiosity and the ask down to the specific blocking part, but `receive_help`
+still only moves the *parent* goal's reachability — so the part Jarvis actually got unstuck on never
+records that it became reachable, and `goal_progress`/`_first_unreached_part` keep pointing at it forever.
+Smallest honest step:
+- Let `receive_help` accept an optional `part` (defaulting to none) — or, when the goal has a single
+  clearly-blocking unreached part, credit that part's reachability too (record a reach on the sub-goal
+  link + the child's own reachability), so a part helped past its block stops being "unreached".
+- Keep it truthful and derived: help on a part is evidence the *part* is reachable (and, via the existing
+  parent-credit path, softly the whole); nothing is asserted "done". A part-less goal behaves exactly as
+  today.
+- Behaviour tests: receiving help on a goal whose blocking part is named advances `goal_progress`
+  (the part counts as reached) and makes `_first_unreached_part` move on / return None; a whole-goal help
+  with no parts is unchanged.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
