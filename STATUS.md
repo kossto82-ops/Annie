@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 61)
+Last updated: 2026-08-24 (Increment 62)
 
 ---
 
@@ -784,6 +784,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   part-less goal is unchanged; unhelpful guidance advances nothing.
 - Gates: ruff clean · pyright strict 0 errors · pytest 319 passed.
 
+### Increment 62 — the decomposition arc, end to end: a runnable story + README ✅ (2026-08-24)
+- New `examples/goal_parts.py`: one persistent Jarvis takes on a goal made of parts (one already done),
+  curiosity fixes on the *specific* blocking part, the ask names it, and each `receive_help` advances
+  exactly that part — `goal_progress` climbing 1/3 → 2/3 → 3/3 while the ask retargets the next blocker
+  and warms as the companion proves helpful. Deterministic (fixed timestamps), runs exit 0, type-checks
+  (Vision §26, §40). A truthful touch it surfaces: 3/3 parts reached yet the whole still reads "not
+  reliably reached" because it was directly marked unreached — parts done ≠ whole done (§26).
+- README "Vocabulary" extended with `sub_goals`/`goal_progress`, `part_of`, the part-naming ask and the
+  part-advancing help; the examples list now points at all three tours. Consolidation only — no behaviour
+  change, all prior tests green.
+- Gates: ruff clean · pyright strict 0 errors · pytest 319 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -896,18 +908,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**The whole goal-arc example shows decomposition too (Vision §26, §40).** `examples/goal_arc.py`
-(Increment 56) predates the parts machinery (Increments 57–61), so the runnable story still walks an
-atomic goal — a reader can't see decomposition, per-part curiosity, the part-named ask, or help
-advancing one part at a time. The best single artifact for understanding the system is now stale.
-Smallest honest step:
-- Extend (or add a second example) so one persistent Jarvis takes on a goal *made of parts*, reaches
-  some, gets stuck on one, wonders about that specific part, asks for help naming it, receives help that
-  advances exactly that part, and shows `goal_progress` climbing 1/3 → 2/3 → 3/3 — printing each turn.
-  Verify it runs (exit 0) and type-checks.
-- Consolidation only — no behaviour change; every prior test stays green. Optionally add the new
-  goal/parts methods (`sub_goals`, `goal_progress`) to the README Vocabulary if not already listed.
-- Behaviour check: the example is deterministic (fixed timestamps) and import-clean.
+**The first perception bridge: a tiny NL→Evidence adapter behind a Protocol (Vision §32, §8, §35).**
+The honest gap (see the ~20–30% assessment): Jarvis cannot perceive anything on its own — every
+`Evidence` is hand-built. §32 says an LLM is a *replaceable capability provider* that translates the
+world into evidence, never the thing that decides. The smallest truthful first step is the seam, not the
+LLM: define a `PerceptionSource` Protocol (domain) that turns a raw observation (e.g. a companion
+utterance) into one or more `Evidence` objects, plus a trivial rule-based implementation in
+infrastructure (keyword/heuristic — NO LLM yet), so a later LLM-backed adapter drops in without touching
+the core. Smallest honest step:
+- `PerceptionSource` Protocol: `perceive(observation: str) -> tuple[Evidence, ...]`. A `KeywordPerception`
+  impl in infrastructure maps simple cues to evidence (source `EXTERNAL_SOURCE`/`USER_STATEMENT`, weight
+  from cue strength). `jarvis.perceive(observation)` runs it and feeds the evidence into a `think(...)`.
+- Keep the boundary strict (§38): the adapter only *produces evidence*; confidence is still derived, the
+  executive still decides. The rule impl is deliberately dumb — its job is to prove the seam, not to be
+  smart. Document that the LLM adapter is a future drop-in behind the same Protocol.
+- Behaviour tests: a cue-bearing observation yields evidence that grounds a belief; an empty or unknown
+  observation yields no evidence (honest silence, §37); the Protocol is satisfied by the rule impl.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

@@ -94,18 +94,20 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 
 **Goals & relationship**
 - `recurring_goals()` — the goals it keeps returning to, as `(goal, count)` (most-returned-to first).
-- `mark_goal_reached(goal, reached=True)` — learn whether a goal of this kind is reachable; `belief_about_goal(goal)` reads it back.
+- `mark_goal_reached(goal, reached=True)` — learn whether a goal of this kind is reachable; `belief_about_goal(goal)` reads it back. A `Goal` may name a larger goal it is `part_of`.
+- `sub_goals(parent)` / `goal_progress(parent)` — a decomposed goal's recorded parts and `(parts reached, parts known)`.
 - `reflection_effort(goal_statement)` — how many times it has wondered about a goal on its own initiative.
 - `stuck_goals()` — goals it has given up wondering about alone (learned unreachable *and* reflected on to exhaustion).
-- `ask_for_help()` — a spoken request for help with the most stuck goal (warmer once the companion has proven helpful), or None.
-- `receive_help(goal, helpful=True)` — take the companion's guidance in as evidence; it can lift a stuck goal and teaches that the companion is helpful.
+- `ask_for_help()` — a spoken request for help with the most stuck goal, naming the blocking part (warmer once the companion has proven helpful), or None.
+- `receive_help(goal, helpful=True)` — take the companion's guidance in as evidence; it can lift a stuck goal, advance its blocking part, and teaches that the companion is helpful.
 
 **Memory & provenance**
 - `episodes.history()` — past episodes (conclusions and deliberations).
 - `trace_of(episode)` / `trace(correlation_id)` — the ordered event trace of one act of cognition.
 
-Runnable end-to-end tours live in [`examples/main_loop.py`](examples/main_loop.py) (the core loop) and
-[`examples/goal_arc.py`](examples/goal_arc.py) (the goal → stuck → ask-for-help → help-received arc).
+Runnable end-to-end tours live in [`examples/main_loop.py`](examples/main_loop.py) (the core loop),
+[`examples/goal_arc.py`](examples/goal_arc.py) (the goal → stuck → ask-for-help → help-received arc), and
+[`examples/goal_parts.py`](examples/goal_parts.py) (a goal made of parts, worked one blocker at a time).
 
 ## Development
 
