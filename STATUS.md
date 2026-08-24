@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 62)
+Last updated: 2026-08-24 (Increment 63)
 
 ---
 
@@ -796,6 +796,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
   change, all prior tests green.
 - Gates: ruff clean · pyright strict 0 errors · pytest 319 passed.
 
+### Increment 63 — the first perception seam: raw observation → evidence ✅ (2026-08-24)
+- New `PerceptionSource` Protocol (`domain/perception/`) — `perceive(observation: str) -> tuple[Evidence,
+  ...]` — the boundary named in Vision §32: a capability provider *produces evidence* from the world but
+  never decides. A deliberately dumb `KeywordPerception` (infrastructure, **NO LLM**) recognises a few
+  certainty cues ("definitely" → weight 1.0, "maybe" → 0.3), flips polarity on a negation word, and turns
+  the observation into one `USER_STATEMENT` evidence; an observation with no recognised cue produces
+  nothing (honest silence, Vision §37).
+- `jarvis.perceive(observation, trigger=None, goal=None)` runs the injected source and feeds the evidence
+  into `think(...)`. `Jarvis(perception=…)` is injectable, so an LLM-backed perceiver drops in behind the
+  same Protocol without touching the cognitive core (Vision §38). Verified end-to-end: a cue grounds a
+  belief, a negated cue yields an honest insufficient conclusion, and unknown text stays silent. See D31.
+- Boundary held strictly: the adapter only makes evidence; confidence is still derived, the executive
+  still decides. This is the seam, not the intelligence — the first, smallest step toward closing the
+  perception gap (the ~20–30% assessment's biggest missing piece).
+- Gates: ruff clean · pyright strict 0 errors · pytest 328 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -903,27 +919,33 @@ with belief + episode events dispatched through the NervousSystem at each step.
   is reversible ("not right now"): learning the goal is reachable (or a future fresh-recurrence rule)
   lifts the suppression. Threshold lives in `jarvis.py`; chosen to match the self-observation history
   floor (3) so "enough evidence to act" is consistent across the system.
+- **D31** Perception is a `PerceptionSource` Protocol (domain) whose implementations live in
+  infrastructure; it only *produces `Evidence`* (Vision §32/§38). The cognitive core never calls an LLM
+  or any capability provider directly — everything reaches cognition as evidence, confidence stays
+  derived, the executive stays the decider. A perceiver that makes nothing of an observation returns `()`
+  (honest silence, §37), never a fabricated reading. The default `KeywordPerception` is intentionally
+  dumb; a smarter (e.g. LLM-backed) perceiver is a drop-in behind the same Protocol and must not require
+  any change to the domain/executive.
 
 ---
 
 ## Next increment (recommended, not yet started)
 
-**The first perception bridge: a tiny NL→Evidence adapter behind a Protocol (Vision §32, §8, §35).**
-The honest gap (see the ~20–30% assessment): Jarvis cannot perceive anything on its own — every
-`Evidence` is hand-built. §32 says an LLM is a *replaceable capability provider* that translates the
-world into evidence, never the thing that decides. The smallest truthful first step is the seam, not the
-LLM: define a `PerceptionSource` Protocol (domain) that turns a raw observation (e.g. a companion
-utterance) into one or more `Evidence` objects, plus a trivial rule-based implementation in
-infrastructure (keyword/heuristic — NO LLM yet), so a later LLM-backed adapter drops in without touching
-the core. Smallest honest step:
-- `PerceptionSource` Protocol: `perceive(observation: str) -> tuple[Evidence, ...]`. A `KeywordPerception`
-  impl in infrastructure maps simple cues to evidence (source `EXTERNAL_SOURCE`/`USER_STATEMENT`, weight
-  from cue strength). `jarvis.perceive(observation)` runs it and feeds the evidence into a `think(...)`.
-- Keep the boundary strict (§38): the adapter only *produces evidence*; confidence is still derived, the
-  executive still decides. The rule impl is deliberately dumb — its job is to prove the seam, not to be
-  smart. Document that the LLM adapter is a future drop-in behind the same Protocol.
-- Behaviour tests: a cue-bearing observation yields evidence that grounds a belief; an empty or unknown
-  observation yields no evidence (honest silence, §37); the Protocol is satisfied by the rule impl.
+**Perceived companion utterances update the companion model, not just a one-off belief (Vision §5, §32).**
+Increment 63 turns an observation into evidence for a `think(...)` episode, but the evidence evaporates
+after the episode — perceiving "you clearly prefer simplicity" grounds a momentary belief and then
+forgets it. A companion utterance about the companion should feed the *companion model* (Increment 13),
+which is where lasting relationship knowledge lives. Smallest honest step:
+- Add `jarvis.perceive_about_companion(trait, observation)` (or let `perceive` route to the companion
+  model when given a trait): run the `PerceptionSource` on the observation, and feed each resulting
+  `Evidence` into `observe_companion(trait, …)` — so perceived praise/contradiction accretes into a
+  derived, revisable companion belief exactly like hand-built evidence does.
+- Keep the boundary strict: perception still only makes evidence; the companion model still derives
+  confidence and can be contradicted. An observation the source makes nothing of leaves the model
+  untouched (honest silence).
+- Behaviour tests: a cue-bearing observation about a trait makes `companion.belief_about(trait)`
+  confident and shows in `explain_companion`; a negated cue contradicts it; an unperceived observation
+  changes nothing.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

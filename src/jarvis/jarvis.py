@@ -18,6 +18,7 @@ from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.belief_events import ContradictionDetected
 from jarvis.domain.events.domain_event import CognitiveEvent
+from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
@@ -41,6 +42,7 @@ from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
+from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace
 
@@ -67,6 +69,7 @@ class Jarvis:
         reversibility_store: BeliefRepository | None = None,
         goals_store: BeliefRepository | None = None,
         subgoals_store: BeliefRepository | None = None,
+        perception: PerceptionSource | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -78,6 +81,7 @@ class Jarvis:
         )
         self._goals: BeliefRepository = goals_store or InMemoryBeliefStore()
         self._subgoals: BeliefRepository = subgoals_store or InMemoryBeliefStore()
+        self._perception: PerceptionSource = perception or KeywordPerception()
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -118,6 +122,20 @@ class Jarvis:
         """
         episode = CognitiveEpisode(trigger=trigger, goal=goal)
         return self._executive.run(episode, evidence)
+
+    def perceive(
+        self, observation: str, trigger: str | None = None, goal: Goal | None = None
+    ) -> CognitiveEpisode:
+        """Perceive a raw observation and reason over what it yields (Vision §32, §8).
+
+        The observation is turned into evidence by the injected `PerceptionSource`
+        (a dumb rule by default; a smarter perceiver drops in behind the same
+        Protocol without touching the core, Vision §38), then reasoned over exactly
+        like hand-supplied evidence. When the source makes nothing of it, the
+        episode honestly concludes there is insufficient evidence (Vision §37).
+        """
+        evidence = self._perception.perceive(observation)
+        return self.think(trigger or observation, evidence=evidence, goal=goal)
 
     def observe_self(self) -> Belief | None:
         """Look back over past episodes and form a belief about Jarvis's own
