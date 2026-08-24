@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 73)
+Last updated: 2026-08-24 (Increment 74)
 
 ---
 
@@ -941,6 +941,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   energy/cost budgeting (§15).
 - Gates: ruff clean · pyright strict 0 errors · pytest 353 passed.
 
+### Increment 74 — Connect: beliefs linked by shared evidence ✅ (2026-08-24)
+- **First stage of the reflective cycle** (Remember → **Connect** → Reflect → Hypothesise → Challenge →
+  Learn → Act), built *inside* Jarvis as its own capability, not a wrapper (Vision §1/§38 respected; D32).
+  Beliefs were islands (exact-trigger keyed, D17); now `Connection` (a VO) records that two beliefs
+  *rest on the same observation* — they share evidence by content (Vision §4, §31).
+- `association.find_connections(beliefs)` (domain service) derives every pair sharing ≥1 evidence content,
+  strongest (most shared) first; a belief grounded in no evidence connects to nothing. `jarvis.connections()`
+  runs it over the beliefs store; `jarvis.related_beliefs(trigger)` filters to one belief's links.
+- Purely derived, stores nothing, asserts nothing — `strength` is just the count of shared observations.
+  Semantic association (same *subject* without literal shared evidence) is a deliberate later, richer step.
+  This is the raw material Reflect/Hypothesise (next increments) will work on.
+- Gates: ruff clean · pyright strict 0 errors · pytest 358 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1057,28 +1070,34 @@ with belief + episode events dispatched through the NervousSystem at each step.
   (honest silence, §37), never a fabricated reading. The default `KeywordPerception` is intentionally
   dumb; a smarter (e.g. LLM-backed) perceiver is a drop-in behind the same Protocol and must not require
   any change to the domain/executive.
+- **D32** The reflective cycle (Remember → Connect → Reflect → Hypothesise → Challenge → Learn → Act) is
+  built **inside** Jarvis — its own autonomous reflective mode, driven by the same episodes / NervousSystem
+  / epistemology — NOT a separate orchestration layer that calls Jarvis's methods. A wrapper would be the
+  "autonomous agent framework / prompt orchestration" the vision explicitly forbids (§1) and would break
+  the core-architecture principle (§38). Each stage is evidence-grounded, derived, revisable, auditable,
+  and involves no LLM deciding — that (not the loop shape, which is standard) is what makes it novel.
+  Build order: Connect (Increment 74) → Reflect → autonomous Hypothesise → Challenge → wire Learn/Act.
 
 ---
 
 ## Next increment (recommended, not yet started)
 
-**Open §15 — cognitive energy: an episode has a cost, and attention should respect it (Vision §15, §14).**
-Chosen deliberately over the §32 LLM adapter for now: the LLM adapter introduces network/secrets/a
-dependency and deserves its own explicit design discussion, whereas §15 is self-contained, stays
-stdlib-only, and deepens the existing attention machinery (Increment 33's FULL/BRIEF). Smallest honest
-first step (a seam, not a full economy):
-- Model a per-episode *cost*: FULL attention costs more than BRIEF (a plain integer/`CognitiveCost` VO on
-  the episode, derived from attention + whether it sought evidence). Accumulate spent energy on `Jarvis`
-  and expose it read-only (`jarvis.energy_spent()` or in `state_summary`). No budget enforcement yet —
-  just make cost *visible and honest* first, the way perception started as a dumb seam.
-- Keep it truthful: cost is a recorded consequence of real work done, not a fabricated meter; BRIEF
-  episodes (already the cheap path, Increment 33/34) cost less, reinforcing why attention routing exists.
-- Behaviour tests: a FULL episode records more cost than a BRIEF one; total spent accumulates across
-  episodes; a fresh Jarvis has zero. (Later increments: a budget that makes attention *choose* BRIEF
-  under load — the actual §15 economy.)
+**Reflect (cycle stage 2): notice a pattern across connected beliefs (Vision §19, §31).** Increment 74
+gave Jarvis connections (beliefs resting on the same evidence); §19 reflection is still a placeholder, so
+nothing yet *looks at* those clusters and draws anything from them. Reflect is where the raw material
+becomes an observation about itself. Smallest honest step:
+- A domain service `reflect(connections, beliefs)` that turns a cluster (a piece of evidence that
+  grounds ≥2 beliefs, or a group of mutually-connected beliefs) into a derived observation — e.g. "one
+  observation is load-bearing for several of my beliefs" — surfaced as `jarvis.reflect()` returning
+  structured findings (not free text). Every finding traces to real connections; empty when none.
+- Keep it truthful and non-asserting: reflection *notices*, it does not conclude — a finding is a
+  pointer to a cluster, its shared evidence, and the beliefs it underpins. No LLM; pure read-model over
+  Increment 74's connections. This becomes the input to autonomous Hypothesise (stage 3).
+- Behaviour tests: a shared observation grounding two beliefs yields a finding naming that evidence and
+  both beliefs; isolated beliefs yield nothing; the strongest/most-load-bearing cluster comes first.
 
-*(When ready for the §32 LLM adapter instead, that is a separate track needing an API/secret decision —
- flag it and we design it explicitly. Deferred, natural follow-ups: cognitive-energy budget enforcement;
+*(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
+ and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
 semantic trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
 

@@ -22,6 +22,7 @@ from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
+from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
 from jarvis.domain.services.self_observation import (
@@ -32,6 +33,7 @@ from jarvis.domain.services.self_observation import (
 from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
@@ -495,6 +497,26 @@ class Jarvis:
             ],
         )
         return episode.working_belief
+
+    def connections(self) -> tuple[Connection, ...]:
+        """Beliefs that rest on the same evidence, linked (Vision §4, §31) — the
+        first step beyond isolated memory, strongest connection first.
+
+        Purely derived from shared evidence; stores nothing, asserts nothing. This
+        is the raw material the reflective cycle's later stages work on.
+        """
+        return find_connections(list(self.beliefs.all_beliefs()))
+
+    def related_beliefs(self, trigger: str) -> tuple[Connection, ...]:
+        """The connections involving the belief Jarvis holds about ``trigger`` —
+        what else it believes that rests on the same evidence (Vision §4).
+        """
+        statement = working_statement(trigger)
+        return tuple(
+            connection
+            for connection in self.connections()
+            if connection.involves(statement)
+        )
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).
