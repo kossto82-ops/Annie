@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 49)
+Last updated: 2026-08-24 (Increment 50)
 
 ---
 
@@ -637,6 +637,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   are not counted as reflection effort (they are the recurrence side, not the self-directed side).
 - Gates: ruff clean · pyright strict 0 errors · pytest 286 passed.
 
+### Increment 50 — knowing when to stop: giving up on a stuck goal (for now) ✅ (2026-08-24)
+- `feel_curious()`'s recurring-goal branch now suppresses a goal it has turned over to exhaustion
+  without progress: an "open stuck" goal (learned unreachable, confidence < 0.5) is only raised while
+  `reflection_effort()` < `_MAX_GOAL_REFLECTIONS` (=3). Once exhausted it yields to a less-wrestled
+  stuck goal; if it is the only one, curiosity moves on (returns None or an earlier source)
+  (Vision §16, §28, §37). See D30.
+- Reversible "not right now", never "never": the fallback also skips exhausted stuck goals, but reaching
+  the goal later (`mark_goal_reached` → reachability ≥ 0.5, no longer stuck) or — by design — a fresh
+  recurrence clears the suppression and the goal can surface again. Verified end-to-end.
+- Pure selection policy over existing read-models (`recurring_goals` + `belief_about_goal` +
+  `reflection_effort`); no belief asserted, no new state, no persistence.
+- Gates: ruff clean · pyright strict 0 errors · pytest 289 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -738,25 +751,30 @@ with belief + episode events dispatched through the NervousSystem at each step.
   (3) recurring goals (a pattern in its own purposes). Later sources fire only when earlier ones are
   quiet. Rationale: a companion should first be honest about its own weaknesses before turning its
   attention outward or inward on purpose. Order is settled; new sources slot in with an explicit rank.
+- **D30** Within slot (3), curiosity gives up on a stuck goal once `reflection_effort >=
+  _MAX_GOAL_REFLECTIONS` (=3) while reachability is still < 0.5 — it stops re-raising a door it has
+  pushed enough. This is a *selection policy*, not a belief: nothing is asserted about the goal, and it
+  is reversible ("not right now"): learning the goal is reachable (or a future fresh-recurrence rule)
+  lifts the suppression. Threshold lives in `jarvis.py`; chosen to match the self-observation history
+  floor (3) so "enough evidence to act" is consistent across the system.
 
 ---
 
 ## Next increment (recommended, not yet started)
 
-**Give up wondering about a goal once it has been wrestled with enough without progress (Vision §16,
-§28, §37).** Curiosity now keeps re-raising the same unreached goal every time `feel_curious()` is
-called, forever — even after Jarvis has turned it over many times with no reachability gain. An honest
-companion knows when to stop banging on a stuck door. Smallest honest step:
-- In `feel_curious()`'s unreached-goal selection, skip a goal whose `reflection_effort()` already meets
-  a threshold (e.g. `_MAX_GOAL_REFLECTIONS = 3`) while its reachability is still low — it has been
-  wondered about enough for now. Prefer a less-wrestled unreached goal; fall back through the branch as
-  before when all are exhausted (so a brand-new stuck goal is still raised).
-- Keep it truthful and reversible: this is "not right now", not "never" — if `mark_goal_reached` later
-  moves reachability, or a fresh recurrence outweighs the effort, the goal can surface again. No belief
-  asserted; it is a selection policy, documented as a decision.
-- Behaviour tests: a goal reflected on ≥ threshold with low reachability is no longer raised while a
-  less-reflected unreached goal exists; with only an over-reflected goal, curiosity moves on (returns
-  None or the next source); reaching the goal clears the suppression.
+**Ask the companion for help with a goal Jarvis has given up wondering about alone (Vision §16, §18,
+§37).** Increment 50 lets curiosity fall silent on a goal it has wrestled with enough without progress —
+but silence is not the whole honest response. A companion that has exhausted its own reflection on a
+stuck goal should *say so and ask*, rather than simply dropping it. Smallest honest step:
+- Add a read-model `jarvis.stuck_goals() -> tuple[str, ...]` (or a single "most stuck") listing goals
+  that are learned-unreachable *and* reflected on to exhaustion — the ones curiosity has given up on
+  alone. Pure selection over the existing predicates (`_is_exhausted_stuck_goal`); no new state.
+- Surface it as a spoken line, e.g. `jarvis.ask_for_help()` returning a message naming the most stuck
+  goal ("I keep returning to X but haven't found how to reach it — can you help?"), or None when there
+  is none. This is the companion turning outward *after* honest self-effort (mirrors §18 contradiction
+  → dialogue). It asks; it asserts nothing and takes no action.
+- Behaviour tests: an exhausted stuck goal appears in `stuck_goals()` and drives `ask_for_help()`; a
+  goal still under the effort threshold does not; a reached goal drops out of both.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

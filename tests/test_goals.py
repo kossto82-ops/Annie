@@ -294,3 +294,70 @@ class TestReflectionEffort:
         for _ in range(3):
             jarvis.think("q", goal=goal)
         assert jarvis.reflection_effort("companion goal") == 0
+
+
+class TestGivingUpOnAStuckGoal:
+    @staticmethod
+    def _with_two_stuck_goals() -> Jarvis:
+        jarvis = Jarvis()
+        alpha = Goal(statement="alpha")
+        beta = Goal(statement="beta")
+        # One grounded belief (shared trigger) keeps the self-model quiet; both
+        # goals recur equally and are both learned unreachable.
+        jarvis.think("q", evidence=_grounded_evidence(), goal=alpha)
+        for _ in range(2):
+            jarvis.think("q", goal=alpha)
+        for _ in range(3):
+            jarvis.think("q", goal=beta)
+        jarvis.mark_goal_reached(alpha, reached=False)
+        jarvis.mark_goal_reached(beta, reached=False)
+        return jarvis
+
+    def test_an_exhausted_stuck_goal_yields_to_a_less_wrestled_one(self) -> None:
+        jarvis = self._with_two_stuck_goals()
+        # Wonder about alpha (first by recurrence) until it is exhausted.
+        for _ in range(3):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None and impulse.goal == "alpha"
+            jarvis.pursue(impulse)
+        assert jarvis.reflection_effort("alpha") == 3
+
+        # Alpha is now wondered-out; curiosity turns to the less-wrestled beta.
+        nxt = jarvis.feel_curious()
+        assert nxt is not None and nxt.goal == "beta"
+
+    def _exhaust(self, jarvis: Jarvis, goal: str) -> None:
+        for _ in range(3):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None and impulse.goal == goal
+            jarvis.pursue(impulse)
+
+    def test_curiosity_moves_on_when_the_only_stuck_goal_is_exhausted(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="the hard goal")
+        jarvis.think("q", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("q", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        self._exhaust(jarvis, "the hard goal")
+        # Turned over enough, no progress, nothing else to wonder about.
+        assert jarvis.feel_curious() is None
+
+    def test_reaching_a_goal_clears_the_suppression(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="the hard goal")
+        jarvis.think("q", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("q", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        self._exhaust(jarvis, "the hard goal")
+        assert jarvis.feel_curious() is None  # suppressed
+
+        # Learning it is reachable clears the suppression: it may surface again.
+        # (Enough reaches to outweigh the earlier failure and cross the threshold.)
+        for _ in range(4):
+            jarvis.mark_goal_reached(goal)
+        reachable = jarvis.belief_about_goal(goal)
+        assert reachable is not None and reachable.confidence.value >= 0.5
+        revived = jarvis.feel_curious()
+        assert revived is not None and revived.goal == "the hard goal"

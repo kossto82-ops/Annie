@@ -44,6 +44,12 @@ from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace
 
+# Once Jarvis has turned an unreached goal over this many times without its
+# reachability improving, it stops wondering about it *for now* (Vision §16, §28):
+# an honest companion knows when to stop banging on a stuck door. This is "not
+# right now", not "never" -- reaching the goal or a fresh recurrence resurfaces it.
+_MAX_GOAL_REFLECTIONS = 3
+
 
 class Jarvis:
     """A long-term cognitive companion (first vertical slice)."""
@@ -271,11 +277,11 @@ class Jarvis:
         if recurring:
             # Sharpest tension first: a goal it keeps returning to yet has learned
             # it keeps *failing* to reach is more worth wondering about than one it
-            # already knows it can reach. `recurring` is ordered by count, so the
-            # first unreached one is also the most recurrent among the unreached.
+            # already knows it can reach -- but only while it has not already been
+            # turned over to exhaustion (a stuck door worth one more push). `recurring`
+            # is count-ordered, so the first such goal is also the most recurrent.
             for goal, count in recurring:
-                belief = self.belief_about_goal(goal)
-                if belief is not None and belief.confidence.value < 0.5:
+                if self._is_open_stuck_goal(goal):
                     return CuriosityImpulse(
                         trigger=f"Why do I keep returning to {goal} without reaching it?",
                         rationale=(
@@ -284,12 +290,15 @@ class Jarvis:
                         ),
                         goal=goal,
                     )
-            goal, count = recurring[0]
-            return CuriosityImpulse(
-                trigger=f"Why do I keep returning to: {goal}?",
-                rationale=f'I have pursued the goal "{goal}" {count} times',
-                goal=goal,
-            )
+            # Fallback: the most recurrent goal that is not an exhausted stuck goal
+            # (a reachable or as-yet-unjudged recurring purpose still bears wondering).
+            for goal, count in recurring:
+                if not self._is_exhausted_stuck_goal(goal):
+                    return CuriosityImpulse(
+                        trigger=f"Why do I keep returning to: {goal}?",
+                        rationale=f'I have pursued the goal "{goal}" {count} times',
+                        goal=goal,
+                    )
         return None
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
@@ -428,6 +437,25 @@ class Jarvis:
     @staticmethod
     def _goal_statement(goal_statement: str) -> str:
         return f"The goal '{goal_statement}' is reachable"
+
+    def _is_stuck_goal(self, goal_statement: str) -> bool:
+        """True when Jarvis has *learned* this goal is not reliably reachable."""
+        belief = self.belief_about_goal(goal_statement)
+        return belief is not None and belief.confidence.value < 0.5
+
+    def _is_open_stuck_goal(self, goal_statement: str) -> bool:
+        """A stuck goal still worth wondering about: not yet turned over to exhaustion."""
+        return (
+            self._is_stuck_goal(goal_statement)
+            and self.reflection_effort(goal_statement) < _MAX_GOAL_REFLECTIONS
+        )
+
+    def _is_exhausted_stuck_goal(self, goal_statement: str) -> bool:
+        """A stuck goal wondered about enough for now (suppressed until something changes)."""
+        return (
+            self._is_stuck_goal(goal_statement)
+            and self.reflection_effort(goal_statement) >= _MAX_GOAL_REFLECTIONS
+        )
 
     def _reachability_note(self, goal_statement: str) -> str:
         """A truthful annotation of what Jarvis has learned about reaching a goal.
