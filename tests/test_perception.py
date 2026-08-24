@@ -155,3 +155,23 @@ class TestPerceiveStream:
         )
         assert belief is not None
         assert len(belief.explain().supporting) == 2
+
+
+class TestPerceivedContradictionRaisesCuriosity:
+    def test_a_contested_perceived_belief_makes_jarvis_curious(self) -> None:
+        jarvis = Jarvis()
+        jarvis.perceive_all(
+            ["the base case is definitely right", "the base case is definitely not right"],
+            trigger="is the base case right?",
+        )
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert "is the base case right?" in impulse.trigger
+
+    def test_a_purely_supporting_perceived_belief_does_not(self) -> None:
+        jarvis = Jarvis()
+        jarvis.perceive_all(
+            ["the base case is definitely right", "the base case is clearly right"],
+            trigger="is the base case right?",
+        )
+        assert jarvis.feel_curious() is None

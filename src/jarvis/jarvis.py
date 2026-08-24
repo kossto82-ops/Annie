@@ -372,6 +372,19 @@ class Jarvis:
                     prompted_by_belief_id=belief.id,
                 )
 
+        # A belief Jarvis has reasoned to that is *contested* -- carrying both
+        # supporting and contradicting evidence, e.g. from a mixed thing it perceived
+        # (Vision §18, §32) -- is a live tension worth resolving, just like a contested
+        # companion belief. The belief persists in the beliefs store under its trigger.
+        contested = self._contested_working_belief()
+        if contested is not None:
+            topic = contested.statement.removeprefix("Working conclusion about: ")
+            return CuriosityImpulse(
+                trigger=f"Resolve the tension in what I concluded about: {topic}",
+                rationale=f'what I concluded about "{topic}" is contested by my evidence',
+                prompted_by_belief_id=contested.id,
+            )
+
         # A goal Jarvis keeps returning to is worth turning inward on (Vision §26,
         # §31): once self-reliability and companion tension are quiet, the pattern
         # in its own purposes becomes the most interesting unknown. Prompted by a
@@ -418,6 +431,16 @@ class Jarvis:
                         rationale=f'I have pursued the goal "{goal}" {count} times',
                         goal=goal,
                     )
+        return None
+
+    def _contested_working_belief(self) -> Belief | None:
+        """A belief Jarvis has reasoned to that carries both supporting and
+        contradicting evidence -- a live tension worth resolving (Vision §18).
+        """
+        for belief in self.beliefs.all_beliefs():
+            explanation = belief.explain()
+            if explanation.supporting and explanation.contradicting:
+                return belief
         return None
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:

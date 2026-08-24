@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 69)
+Last updated: 2026-08-24 (Increment 70)
 
 ---
 
@@ -884,6 +884,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   points at all five tours. Consolidation only — no behaviour change, all prior tests green.
 - Gates: ruff clean · pyright strict 0 errors · pytest 339 passed.
 
+### Increment 70 — a perceived contradiction raises curiosity ✅ (2026-08-24)
+- `feel_curious()` gained a fourth source (after self-tendencies and companion tension, before recurring
+  goals — respecting D29): a *contested working belief* — one in the beliefs store carrying both
+  supporting and contradicting evidence, e.g. from a mixed thing Jarvis perceived — raises an impulse to
+  resolve the tension ("Resolve the tension in what I concluded about: X"), reusing the contested-belief
+  curiosity shape (Increment 36) (Vision §16, §18, §32). `_contested_working_belief()` finds it.
+- Perceived contradiction now *moves* Jarvis: a mixed exchange grounds a tentative belief and the tension
+  pulls it to investigate; a purely-supporting exchange does not. The belief persists under its trigger,
+  so the impulse survives the episode; `pursue()` runs it as a CURIOSITY episode. Verified end-to-end.
+- No regressions: existing curiosity tests use support-only working beliefs (not contested), so the new
+  check is transparent to them. Boundary unchanged — recommendation only, confidence still derived.
+- Gates: ruff clean · pyright strict 0 errors · pytest 341 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -982,9 +995,11 @@ with belief + episode events dispatched through the NervousSystem at each step.
   prior USER_STATEMENT-based tests/behaviour are unchanged; other sources scale down.
 - **D29** `feel_curious()` checks curiosity sources in a fixed priority: (1) self-tendencies
   (own reliability, strongest weakness first), (2) contested companion beliefs (tension to resolve),
-  (3) recurring goals (a pattern in its own purposes). Later sources fire only when earlier ones are
-  quiet. Rationale: a companion should first be honest about its own weaknesses before turning its
-  attention outward or inward on purpose. Order is settled; new sources slot in with an explicit rank.
+  (3) contested *working* beliefs — something reasoned/perceived that carries both supporting and
+  contradicting evidence (Increment 70), (4) recurring goals (a pattern in its own purposes). Later
+  sources fire only when earlier ones are quiet. Rationale: a companion should first be honest about its
+  own weaknesses, then resolve tensions about the companion and about what it has concluded, before
+  turning to its own purposes. Order is settled; new sources slot in with an explicit rank.
 - **D30** Within slot (3), curiosity gives up on a stuck goal once `reflection_effort >=
   _MAX_GOAL_REFLECTIONS` (=3) while reachability is still < 0.5 — it stops re-raising a door it has
   pushed enough. This is a *selection policy*, not a belief: nothing is asserted about the goal, and it
@@ -1003,20 +1018,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Perception can raise curiosity: a perceived contradiction is worth investigating (Vision §16, §18, §32).**
-A perceived exchange can carry both supporting and contradicting readings (Increment 67–68) — a belief
-that is genuinely *contested* by what Jarvis just heard. Contested beliefs are exactly what curiosity
-already fixes on for the companion model (Increment 36); perceived contested beliefs deserve the same.
-Right now a mixed perception grounds a tentative belief and then nothing pulls Jarvis to resolve it.
-Smallest honest step:
-- After `perceive_all(...)` grounds a working belief that has *both* supporting and contradicting
-  evidence, let `feel_curious()` (or a dedicated check) surface an impulse to investigate that tension
-  — reusing the contested-belief curiosity shape. The belief lives in the beliefs store (same trigger),
-  so it is queryable after the episode.
-- Keep it truthful: only a genuinely contested perceived belief raises it; a clean supporting stream
-  does not; still a recommendation, pursued only via `pursue()`. Respect the D29 priority order.
-- Behaviour tests: a mixed perceived exchange makes `feel_curious()` return an impulse naming the
-  contested topic; a purely supporting exchange does not.
+**Pursuing a contested-belief curiosity asks the companion to settle it (Vision §16, §18, §37).**
+Increment 70 makes Jarvis curious about a contested working belief, and `pursue()` runs a self-directed
+episode — but with no new evidence, that episode just re-concludes "still contested". A tension Jarvis
+cannot resolve alone is exactly what asking the companion is for (Increments 51–52), but `ask_for_help`
+today only covers stuck *goals*. Smallest honest step:
+- Extend the help path (or add `jarvis.ask_about(topic)` / let `ask_for_help` also surface a contested
+  belief) so Jarvis can voice the tension: "I've heard both that X and that not-X — which is it?", naming
+  the contested topic and, from the belief's provenance, the conflicting evidence. Still only asks.
+- Let `receive_help`-style guidance on that topic feed `USER_STATEMENT` evidence into the *working
+  belief* (via `think(topic, evidence=…)` or a small `resolve(topic, …)`), so a companion's answer can
+  tip a contested belief toward one side — derived, revisable, never set.
+- Behaviour tests: a contested belief makes the ask voice both sides; guidance resolves it (confidence
+  moves and it is no longer contested / no longer curious); a clean belief is unaffected.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
