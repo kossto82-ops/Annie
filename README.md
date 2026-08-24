@@ -93,6 +93,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `feel_curious()` — an impulse to reduce the most confident weakness, or None.
 - `pursue(impulse)` — run the self-triggered corrective episode.
 - `introspect()` — a plain-language account of who it is, from real state.
+- `state_summary()` — a compact, immutable snapshot of everything it currently holds.
 
 **Model of its companion**
 - `observe_companion(trait, evidence)` — evolve a belief about the companion.

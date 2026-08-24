@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 72)
+Last updated: 2026-08-24 (Increment 73)
 
 ---
 
@@ -98,9 +98,16 @@ src/jarvis/
     value_objects/evidence_request.py    EvidenceRequest (what an ungrounded episode is missing)
     value_objects/deliberation.py        Deliberation (outcome of weighing competing explanations)
     value_objects/action.py              Action (a declared intention + expected outcome, Vision §27)
-    value_objects/goal.py                Goal (what an episode is toward, Vision §12/§26)
+    value_objects/goal.py                Goal (what an episode is toward + optional part_of, Vision §12/§26)
     value_objects/state_summary.py       StateSummary (compact immutable snapshot of all Jarvis holds)
-tests/                                   45 behaviour tests mirroring the above
+    value_objects/action_recommendation.py  ActionRecommendation (a graded stance, Vision §28)
+    services/goal_reflection.py          recurring_goals / reflection_effort (patterns over episodic goals)
+    perception/perception_source.py      PerceptionSource (Protocol) — raw observation → Evidence (Vision §32)
+  infrastructure/keyword_perception.py   KeywordPerception — dumb rule-based perceiver (NO LLM; §32/§37)
+  (persistent() also wires JsonBeliefStore files: companion, actions, reversibility, goals, subgoals)
+examples/                                6 runnable tours (main_loop, goal_arc, goal_parts, perceiving,
+                                         conversation, resolving) — each guarded by tests/test_examples.py
+tests/                                   353 tests mirroring the above (+ public-surface & example guards)
 ```
 
 Conceptual flow implemented:
@@ -921,6 +928,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   Consolidation only — no behaviour change, all prior tests green.
 - Gates: ruff clean · pyright strict 0 errors · pytest 345 passed.
 
+### Increment 73 — consolidation checkpoint: the map matches the territory ✅ (2026-08-24)
+- Audited the public surface: every documented `Jarvis` method is now listed in the README Vocabulary
+  (added the one drift, `state_summary`); the architecture map in this file gained the files added since
+  the perception/goals work (`perception/`, `keyword_perception`, `goal_reflection`, `part_of`, the extra
+  persistent stores, the `examples/` dir) so it describes what is actually on disk (Vision §40, §42).
+- Two regression guards, no new behaviour: `tests/test_examples.py` runs all six example tours as
+  `__main__` (they can no longer rot silently), and `tests/test_public_surface.py` asserts every
+  documented public method exists and is callable (a tripwire against silent signature drift).
+- Truthful bookkeeping only — all prior tests stay green. The next big area is now a deliberate choice:
+  an LLM adapter behind `PerceptionSource` (§32 — moves the "usable companion" needle most) or cognitive
+  energy/cost budgeting (§15).
+- Gates: ruff clean · pyright strict 0 errors · pytest 353 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1042,20 +1062,23 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Consolidation checkpoint: a state-of-the-system pass over STATUS/README/vocabulary (Vision §40, §42).**
-Seventy-two increments in, the surface is large (perceive/reason/act/goals/relationship). Before opening
-the next big vision area (e.g. §15 cognitive energy, or the real §32 LLM adapter), do a short, honest
-audit increment — no new behaviour, just make the map match the territory. Smallest honest step:
-- Re-read the README Vocabulary against the actual public methods on `Jarvis` (grep the `def`s); fix any
-  drift, dead entries, or missing ones. Confirm the six example tours all still run (exit 0) and
-  type-check. Verify STATUS's "What works today" / architecture map still describes reality.
-- Optionally add a tiny `tests/test_public_surface.py` that asserts the key public methods exist and are
-  callable (a guard against silent signature drift), or a smoke test that imports and runs each example's
-  `main()` under a captured stdout so examples can't rot.
-- Truthful bookkeeping only — every prior test stays green; no vision behaviour changes. Then pick the
-  next big area deliberately (LLM adapter behind `PerceptionSource`, or §15 energy).
+**Open §15 — cognitive energy: an episode has a cost, and attention should respect it (Vision §15, §14).**
+Chosen deliberately over the §32 LLM adapter for now: the LLM adapter introduces network/secrets/a
+dependency and deserves its own explicit design discussion, whereas §15 is self-contained, stays
+stdlib-only, and deepens the existing attention machinery (Increment 33's FULL/BRIEF). Smallest honest
+first step (a seam, not a full economy):
+- Model a per-episode *cost*: FULL attention costs more than BRIEF (a plain integer/`CognitiveCost` VO on
+  the episode, derived from attention + whether it sought evidence). Accumulate spent energy on `Jarvis`
+  and expose it read-only (`jarvis.energy_spent()` or in `state_summary`). No budget enforcement yet —
+  just make cost *visible and honest* first, the way perception started as a dumb seam.
+- Keep it truthful: cost is a recorded consequence of real work done, not a fabricated meter; BRIEF
+  episodes (already the cheap path, Increment 33/34) cost less, reinforcing why attention routing exists.
+- Behaviour tests: a FULL episode records more cost than a BRIEF one; total spent accumulates across
+  episodes; a fresh Jarvis has zero. (Later increments: a budget that makes attention *choose* BRIEF
+  under load — the actual §15 economy.)
 
-*(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
+*(When ready for the §32 LLM adapter instead, that is a separate track needing an API/secret decision —
+ flag it and we design it explicitly. Deferred, natural follow-ups: cognitive-energy budget enforcement;
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
 semantic trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
 
