@@ -361,3 +361,50 @@ class TestGivingUpOnAStuckGoal:
         assert reachable is not None and reachable.confidence.value >= 0.5
         revived = jarvis.feel_curious()
         assert revived is not None and revived.goal == "the hard goal"
+
+
+class TestAskingForHelp:
+    @staticmethod
+    def _exhausted_stuck(jarvis: Jarvis, goal: Goal) -> None:
+        jarvis.think("q", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("q", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        for _ in range(3):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None and impulse.goal == goal.statement
+            jarvis.pursue(impulse)
+
+    def test_an_exhausted_stuck_goal_is_asked_about(self) -> None:
+        jarvis = Jarvis()
+        self._exhausted_stuck(jarvis, Goal(statement="master recursion"))
+        assert jarvis.stuck_goals() == ("master recursion",)
+        message = jarvis.ask_for_help()
+        assert message is not None
+        assert "master recursion" in message
+        assert "can you help?" in message
+
+    def test_a_goal_still_under_the_effort_threshold_is_not_asked_about(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="the hard goal")
+        jarvis.think("q", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("q", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        # Only one reflection so far -- not yet exhausted.
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        jarvis.pursue(impulse)
+        assert jarvis.stuck_goals() == ()
+        assert jarvis.ask_for_help() is None
+
+    def test_a_reached_goal_is_no_longer_asked_about(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="master recursion")
+        self._exhausted_stuck(jarvis, goal)
+        assert jarvis.stuck_goals() == ("master recursion",)
+
+        for _ in range(4):
+            jarvis.mark_goal_reached(goal)
+        assert jarvis.stuck_goals() == ()
+        assert jarvis.ask_for_help() is None

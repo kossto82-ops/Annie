@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 50)
+Last updated: 2026-08-24 (Increment 51)
 
 ---
 
@@ -650,6 +650,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   `reflection_effort`); no belief asserted, no new state, no persistence.
 - Gates: ruff clean · pyright strict 0 errors · pytest 289 passed.
 
+### Increment 51 — asking for help: the companion turns outward after honest self-effort ✅ (2026-08-24)
+- `jarvis.stuck_goals()` lists the goals curiosity has given up on alone — learned-unreachable *and*
+  reflected on to exhaustion (`_is_exhausted_stuck_goal`), ordered by recurrence (most-returned-to
+  first). `jarvis.ask_for_help()` turns the most stuck one into a spoken request ("I keep returning to
+  X but haven't found how to reach it on my own — can you help?"), or None when there is none.
+- This is the natural counterpart to Increment 50: when `feel_curious()` falls silent on an exhausted
+  stuck goal, silence is not the whole honest answer — a companion says so and asks (Vision §16, §18,
+  §37). It only asks: asserts nothing, takes no action, sends nothing.
+- Pure read-model over existing predicates; a goal under the effort threshold is not asked about, and a
+  goal later learned reachable drops out of both `stuck_goals()` and `ask_for_help()`. Verified.
+- Gates: ruff clean · pyright strict 0 errors · pytest 292 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -762,19 +774,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Ask the companion for help with a goal Jarvis has given up wondering about alone (Vision §16, §18,
-§37).** Increment 50 lets curiosity fall silent on a goal it has wrestled with enough without progress —
-but silence is not the whole honest response. A companion that has exhausted its own reflection on a
-stuck goal should *say so and ask*, rather than simply dropping it. Smallest honest step:
-- Add a read-model `jarvis.stuck_goals() -> tuple[str, ...]` (or a single "most stuck") listing goals
-  that are learned-unreachable *and* reflected on to exhaustion — the ones curiosity has given up on
-  alone. Pure selection over the existing predicates (`_is_exhausted_stuck_goal`); no new state.
-- Surface it as a spoken line, e.g. `jarvis.ask_for_help()` returning a message naming the most stuck
-  goal ("I keep returning to X but haven't found how to reach it — can you help?"), or None when there
-  is none. This is the companion turning outward *after* honest self-effort (mirrors §18 contradiction
-  → dialogue). It asks; it asserts nothing and takes no action.
-- Behaviour tests: an exhausted stuck goal appears in `stuck_goals()` and drives `ask_for_help()`; a
-  goal still under the effort threshold does not; a reached goal drops out of both.
+**Companion help on a stuck goal actually moves its reachability (Vision §18, §26, §20).** Jarvis now
+asks for help on a stuck goal (Increment 51), but there is no way for the companion's answer to come
+back in — the loop dangles. When the companion offers guidance, that should count as evidence that
+changes what Jarvis has learned. Smallest honest step:
+- Add `jarvis.receive_help(goal, helpful=True)` (or fold into `mark_goal_reached`'s sibling): the
+  companion's guidance becomes `USER_STATEMENT`-sourced evidence on the goal's reachability belief —
+  strong provenance (weight 1.0, source factor 1.0), so a genuinely helpful answer can lift a stuck
+  goal above the threshold and clear the suppression, closing the ask→answer→learn loop.
+- Keep it truthful: help is evidence, not a guarantee — an unhelpful answer (`helpful=False`) is
+  recorded as contradicting, and reachability is still *derived*, never set. Distinguish the source in
+  the evidence content so provenance is visible in `explain()`.
+- Behaviour tests: `receive_help` on an exhausted stuck goal raises its reachability and removes it
+  from `stuck_goals()`/`ask_for_help()`; `helpful=False` does not; the reachability belief's evidence
+  records the companion as the source.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

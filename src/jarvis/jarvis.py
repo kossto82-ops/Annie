@@ -153,6 +153,34 @@ class Jarvis:
         """
         return reflection_effort(self.episodes.history(), goal_statement)
 
+    def stuck_goals(self) -> tuple[str, ...]:
+        """Goals Jarvis has given up wondering about alone (Vision §16, §37): those
+        it has learned are not reliably reachable *and* has already turned over to
+        exhaustion. Ordered by recurrence (most-returned-to first). Empty when none.
+        """
+        return tuple(
+            goal
+            for goal, _ in self.recurring_goals()
+            if self._is_exhausted_stuck_goal(goal)
+        )
+
+    def ask_for_help(self) -> str | None:
+        """A spoken request for help with the most stuck goal, or None if there is
+        none (Vision §18, §37).
+
+        This is the companion turning outward *after* honest self-effort: it names a
+        goal it keeps returning to but has not found how to reach, and asks. It only
+        asks -- it asserts nothing and takes no action.
+        """
+        stuck = self.stuck_goals()
+        if not stuck:
+            return None
+        goal = stuck[0]
+        return (
+            f"I keep returning to {goal} but haven't found how to reach it "
+            "on my own — can you help?"
+        )
+
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition
         (Vision §6): the ones it has enough history to judge.
