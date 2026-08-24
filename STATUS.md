@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 46)
+Last updated: 2026-08-24 (Increment 47)
 
 ---
 
@@ -603,6 +603,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   `recurring_goals()` + `belief_about_goal()`; nothing invented, confidence never overstated.
 - Gates: ruff clean · pyright strict 0 errors · pytest 278 passed.
 
+### Increment 47 — curiosity prefers a goal it keeps failing to reach ✅ (2026-08-24)
+- `feel_curious()`'s recurring-goal branch (the third source, D29) now picks the sharpest tension: a
+  goal Jarvis keeps returning to *and* has learned it keeps failing to reach (reachability belief
+  known and confidence < 0.5) is chosen over one already learned reachable (Vision §16, §26, §31). The
+  trigger names the tension — "Why do I keep returning to X without reaching it?".
+- Since `recurring_goals()` is count-ordered, the first known-unreached goal is also the most recurrent
+  among the unreached. Falls back to the most-recurrent goal when none are known-unreachable, so the
+  Increment-43 behaviour is unchanged when no reachability has been learned.
+- D29's overall priority order (self-tendencies → companion tension → recurring purpose) is untouched;
+  this only refines *which* recurring goal is chosen inside the third slot.
+- Gates: ruff clean · pyright strict 0 errors · pytest 280 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -709,18 +721,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A goal it keeps returning to but cannot reach becomes curiosity's priority (Vision §16, §26, §31).**
-Curiosity already raises a recurring goal (Increment 43), but it treats all recurring goals alike —
-including ones Jarvis has *learned it can reach*, which are the least interesting to wonder about. The
-genuinely interesting unknown is a goal it keeps returning to yet keeps *failing*. Smallest honest step:
-- In `feel_curious()`'s recurring-goal branch, prefer a recurring goal whose `belief_about_goal(...)` is
-  known-and-not-reachable (confidence < 0.5) over one already learned reachable; fall back to the most
-  recurrent when none are known-unreachable. Reword the trigger to name the tension ("Why do I keep
-  returning to X without reaching it?"). Still a recommendation, still pursued only via `pursue()`.
-- Keep D29's priority order intact (self-tendencies → companion tension → recurring purpose); this only
-  refines *which* recurring goal is chosen inside the third slot.
-- Behaviour tests: given two recurring goals, one marked reached and one marked not-reached, curiosity
-  picks the unreached one; with only reachable recurring goals it still raises the top one (no regression).
+**Pursuing an unreached-goal curiosity records the attempt against that goal (Vision §16, §26, §27).**
+Curiosity now points at the goal Jarvis keeps failing to reach (Increment 47), and `pursue()` runs a
+self-directed episode for it — but that episode is not tied back to the goal, so wondering about a
+stuck goal leaves no trace on the goal itself. Smallest honest step to close the loop:
+- Let a curiosity impulse carry the goal it concerns (add an optional `goal: str | None` to
+  `CuriosityImpulse`, set when the impulse is raised from a recurring goal). When `pursue()` runs such
+  an impulse, attach that goal to the episode (via the existing `Goal` on `CognitiveEpisode`), so the
+  self-directed reflection is recorded *toward* the goal in episodic memory — exactly like a companion
+  `think(..., goal=…)`. No new store; reuse Increment 40–41 machinery.
+- Keep it truthful: this records that Jarvis reflected on the goal, not that it reached it — reachability
+  still only changes via `mark_goal_reached`. A curiosity impulse not about a goal attaches none.
+- Behaviour tests: pursuing a recurring-goal impulse appends an `EpisodeRecord` whose `goal` is that
+  goal statement; pursuing a self-tendency/companion impulse records `goal=None`.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

@@ -260,6 +260,20 @@ class Jarvis:
         # pattern in memory, not a single belief, so no belief id.
         recurring = self.recurring_goals()
         if recurring:
+            # Sharpest tension first: a goal it keeps returning to yet has learned
+            # it keeps *failing* to reach is more worth wondering about than one it
+            # already knows it can reach. `recurring` is ordered by count, so the
+            # first unreached one is also the most recurrent among the unreached.
+            for goal, count in recurring:
+                belief = self.belief_about_goal(goal)
+                if belief is not None and belief.confidence.value < 0.5:
+                    return CuriosityImpulse(
+                        trigger=f"Why do I keep returning to {goal} without reaching it?",
+                        rationale=(
+                            f'I have pursued the goal "{goal}" {count} times '
+                            "without reaching it"
+                        ),
+                    )
             goal, count = recurring[0]
             return CuriosityImpulse(
                 trigger=f"Why do I keep returning to: {goal}?",

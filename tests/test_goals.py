@@ -206,3 +206,38 @@ class TestRecurringGoalBecomesCuriosity:
         jarvis.think("is it correct?", goal=Goal(statement="gamma"))
         assert jarvis.recurring_goals() == ()
         assert jarvis.feel_curious() is None
+
+    def test_curiosity_prefers_a_goal_it_keeps_failing_to_reach(self) -> None:
+        jarvis = Jarvis()
+        reachable = Goal(statement="the easy goal")
+        unreached = Goal(statement="the hard goal")
+        # One grounded belief keeps the self-model quiet; both goals recur equally.
+        jarvis.think("is it correct?", evidence=_grounded_evidence(), goal=reachable)
+        for _ in range(2):
+            jarvis.think("is it correct?", goal=reachable)
+        for _ in range(3):
+            jarvis.think("is it correct?", goal=unreached)
+        # Two reaches ground the reachable goal above the threshold; the hard goal
+        # is marked unreached, so it is the sharper tension.
+        jarvis.mark_goal_reached(reachable)
+        jarvis.mark_goal_reached(reachable)
+        jarvis.mark_goal_reached(unreached, reached=False)
+
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert "the hard goal" in impulse.trigger
+        assert "without reaching it" in impulse.trigger
+
+    def test_curiosity_still_raises_a_reachable_recurring_goal(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="the easy goal")
+        jarvis.think("is it correct?", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("is it correct?", goal=goal)
+        jarvis.mark_goal_reached(goal)
+        jarvis.mark_goal_reached(goal)
+
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert "the easy goal" in impulse.trigger
+        assert "without reaching it" not in impulse.trigger
