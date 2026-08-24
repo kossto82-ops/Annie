@@ -109,6 +109,14 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `ask_for_help()` — a spoken request for help with the most stuck goal, naming the blocking part (warmer once the companion has proven helpful), or None.
 - `receive_help(goal, helpful=True)` — take the companion's guidance in as evidence; it can lift a stuck goal, advance its blocking part, and teaches that the companion is helpful.
 
+**Reflect (the cognitive cycle)** — Remember → Connect → Reflect → Hypothesise → Challenge → Learn, self-triggered by curiosity.
+- `connections()` / `related_beliefs(trigger)` — beliefs linked by the evidence they share.
+- `reflect()` — load-bearing observations several beliefs rest on.
+- `hypothesise()` — a common-cause `HypothesisSet` brewed from the top reflection.
+- `challenge()` — the concrete falsifier of the leading hypothesis; `refute(observation, belief)` dethrones it.
+- `learn_from_reflection()` — adopt a surviving insight as a belief (the loop closes).
+- `reflect_cycle()` — run the whole cycle once; `feel_curious()` raises a reflect impulse on an un-mined pattern.
+
 **Memory & provenance**
 - `episodes.history()` — past episodes (conclusions and deliberations).
 - `trace_of(episode)` / `trace(correlation_id)` — the ordered event trace of one act of cognition.
@@ -118,7 +126,8 @@ Runnable end-to-end tours live in [`examples/main_loop.py`](examples/main_loop.p
 [`examples/goal_parts.py`](examples/goal_parts.py) (a goal made of parts, worked one blocker at a time),
 [`examples/perceiving.py`](examples/perceiving.py) (language in, evidence-grounded cognition out),
 [`examples/conversation.py`](examples/conversation.py) (a multi-line exchange grounds a belief that strengthens across a restart),
-and [`examples/resolving.py`](examples/resolving.py) (hear a contradiction → get curious → ask → resolve).
+[`examples/resolving.py`](examples/resolving.py) (hear a contradiction → get curious → ask → resolve),
+and [`examples/reflecting.py`](examples/reflecting.py) (Jarvis notices a pattern in its own beliefs, reflects, hypothesises, challenges, and learns — unprompted).
 
 ## Development
 

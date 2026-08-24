@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 80)
+Last updated: 2026-08-24 (Increment 81)
 
 ---
 
@@ -1042,6 +1042,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   distinct beliefs by accident, which Reflect rightly noticed — made their content unique to restore intent.
 - Gates: ruff clean · pyright strict 0 errors · pytest 381 passed.
 
+### Increment 81 — a reflective-cycle tour + README ✅ (2026-08-24)
+- New `examples/reflecting.py`: a Jarvis grounds three (grounded, well-spread) beliefs on one shared
+  observation, then — unprompted — `feel_curious()` returns a reflect impulse, `pursue()` runs the whole
+  cycle, and it adopts the common cause as a belief (0.64); curiosity then falls silent (mined). A second
+  run shows `challenge()` naming the falsifier and two `refute()`s dethroning the hypothesis (Vision §31,
+  §40). Deterministic (fixed timestamps), runs exit 0, type-checks; guarded by `tests/test_examples.py`.
+- README gains a "Reflect (the cognitive cycle)" group (`connections`/`related_beliefs`/`reflect`/
+  `hypothesise`/`challenge`/`refute`/`learn_from_reflection`/`reflect_cycle`); the examples list now points
+  at all seven tours. Consolidation only — no behaviour change, all prior tests green.
+- Gates: ruff clean · pyright strict 0 errors · pytest 381 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1220,19 +1231,19 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**A reflective-cycle tour + README: the whole self-triggered loop as a runnable story (Vision §31, §40).**
-Track A is complete but has no runnable example — the six tours all predate it. The completed cycle
-deserves a legible story. Smallest honest step:
-- Add `examples/reflecting.py`: a Jarvis grounds several beliefs on one shared observation (hand-fed or
-  perceived), then `feel_curious()` returns an *unprompted* reflect impulse, `pursue()` runs the cycle,
-  and the tour prints the `reflect()` finding, the brewed hypothesis, the challenge, and the learned
-  belief — then shows curiosity fall silent (the pattern is mined) and, optionally, `refute()` dethroning
-  a hypothesis. Deterministic; runs exit 0 and type-checks.
-- Extend the README with a "Reflect (the cognitive cycle)" group (`connections`, `related_beliefs`,
-  `reflect`, `hypothesise`, `challenge`, `refute`, `learn_from_reflection`, `reflect_cycle`); point the
-  examples list at the new tour. Consolidation only — no behaviour change.
-- Then (following increment) wire a *learned* insight to **Act**: a confident common-cause belief can
-  recommend a graded action (reuse `recommend_action`) — the cycle's output finally reaching behaviour.
+**Wire a learned insight to Act: a confident common cause can recommend attention (Vision §27, §28, §31).**
+The reflective cycle produces a learned common-cause belief, but that insight never reaches *behaviour* —
+the Act stage is built (`recommend_action`) yet unconnected to the cycle's output. A confident insight
+that one observation underpins several beliefs is exactly the kind of thing worth *doing* something about
+(e.g. verify or watch that observation). Smallest honest step:
+- `jarvis.act_on_insight()` (or fold into the cycle): when `learn_from_reflection()` has adopted a
+  confident common-cause belief, propose a graded action — e.g. "verify that '{observation}' still holds",
+  reversible — and return its `recommend_action` stance (SUGGEST/ASK_FIRST/WITHHOLD). None when there is
+  no learned insight. It only *recommends*; it performs nothing (autonomy is earned, §28).
+- Keep it truthful: the recommendation's confidence traces to the insight's; a dethroned/absent insight
+  recommends nothing. Reuse the existing action machinery; no LLM.
+- Behaviour tests: a learned insight yields an action recommendation naming the observation with a
+  sensible stance; no insight → none. This closes Remember→…→Learn→**Act** for the reflective cycle.
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:
