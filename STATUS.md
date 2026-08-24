@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 38)
+Last updated: 2026-08-21 (Increment 39)
 
 ---
 
@@ -511,6 +511,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
   survives a restart (unblocks D28). Reversibility unknown → conservative (not reversible → ask first).
   Verified across two processes: a learned reversible action → SUGGEST after restart; unknown → ASK_FIRST.
 - Gates: ruff clean · pyright strict 0 errors · pytest 252 passed.
+- Commit `394eef1` pushed to `origin/main`.
+
+### Increment 39 — remembered stance in the state snapshot ✅ (2026-08-21)
+- `StateSummary.action_beliefs` replaced by `learned_actions: tuple[LearnedAction, ...]` where each
+  `LearnedAction` carries description, derived confidence, and the recommended `stance` (from
+  `recommend_action_by_description`, Increment 38). Finishes the D28 story: a stance for every learned
+  action is now in the snapshot, and survives a restart.
+- Description recovered by inverting the controlled `_action_statement` template (`_action_description`),
+  not by parsing free text. Fresh Jarvis → empty. Consolidation only.
+- Gates: ruff clean · pyright strict 0 errors · pytest 252 passed.
 
 ---
 
@@ -613,18 +623,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Include remembered stance in `state_summary` (finishes the D28 story).** Increment 38 made a stance
-derivable for a remembered action (`recommend_action_by_description`); the state snapshot can now carry
-it. Small consolidation:
-- Add a `learned_actions: tuple[(description, confidence, stance)]` field to `StateSummary`, filling
-  `stance` from `recommend_action_by_description` for each action-outcome belief (map its statement
-  back to the description, or key the summary off the reversibility/outcome pair).
-- Keep it grounded: every field traces to real state; a fresh Jarvis stays all-empty.
-- Behaviour tests: a learned reversible action shows SUGGEST in the summary; an unproven one ASK_FIRST.
+**Goals: give an episode something it is *trying to achieve* (Vision §26, §12).** Cognition so far is
+reactive — a trigger comes in, a conclusion comes out — but Vision §12 lists a `goal` as part of an
+episode and §26's decision provenance is `Goal → … → Decision`. There is no goal anywhere yet. Small
+honest first step (a recorded intent, not a planner):
+- A `Goal` value object (a statement + optional success criterion) attachable to a `think()`/episode,
+  so the decision provenance can reference what the episode was for; `episode.goal`.
+- Thread it minimally: `jarvis.think(trigger, evidence=(), goal=None)`; the decision phrasing can note
+  the goal when present. No planning/decomposition yet — just first-class representation.
+- Behaviour tests: an episode given a goal exposes it; one without has `goal is None`; the trace/record
+  still work unchanged.
 
-*(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15); excessive-complexity
-self-observation tendency; a real DB behind the JSON stores; persisting traces; semantic
-trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
+*(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
+excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
+semantic trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
 
 ---
 

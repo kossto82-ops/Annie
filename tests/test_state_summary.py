@@ -32,7 +32,7 @@ class TestStateSummary:
         assert summary.episode_count == 0
         assert summary.self_tendencies == ()
         assert summary.companion_traits == ()
-        assert summary.action_beliefs == ()
+        assert summary.learned_actions == ()
 
     def test_the_summary_is_immutable(self) -> None:
         summary = Jarvis().state_summary()
@@ -53,14 +53,20 @@ class TestSummaryReflectsState:
         assert "prefers simplicity" in traits
 
     def test_it_lists_confident_self_tendencies_and_action_learning(self) -> None:
+        from jarvis.domain.enums.action_stance import ActionStance
+
         jarvis = Jarvis()
         for topic in ("a", "b", "c"):
             # grounded but same-instant -> overconfidence tendency
             jarvis.think(f"q {topic}", evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)])
-        action = jarvis.act("tidy the notes", expected="tidy")
-        jarvis.record_outcome(action, actual="tidy", met_expectation=True)
+        for _ in range(3):
+            action = jarvis.act("tidy the notes", expected="tidy", reversible=True)
+            jarvis.record_outcome(action, actual="tidy", met_expectation=True)
 
         summary = jarvis.state_summary()
         tendencies = [statement for statement, _ in summary.self_tendencies]
         assert any("overconfident" in statement for statement in tendencies)
-        assert len(summary.action_beliefs) == 1
+        assert len(summary.learned_actions) == 1
+        learned = summary.learned_actions[0]
+        assert learned.description == "tidy the notes"
+        assert learned.stance is ActionStance.SUGGEST

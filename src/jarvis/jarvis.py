@@ -33,7 +33,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
-from jarvis.domain.value_objects.state_summary import StateSummary
+from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
 from jarvis.executive.executive_controller import ExecutiveController
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
@@ -185,10 +185,18 @@ class Jarvis:
                 (belief.statement, belief.confidence.value)
                 for belief in self.companion.beliefs()
             ),
-            action_beliefs=tuple(
-                (belief.statement, belief.confidence.value)
+            learned_actions=tuple(
+                self._summarise_action(belief.statement, belief.confidence.value)
                 for belief in self.actions.all_beliefs()
             ),
+        )
+
+    def _summarise_action(self, statement: str, confidence: float) -> LearnedAction:
+        description = self._action_description(statement)
+        return LearnedAction(
+            description=description,
+            confidence=confidence,
+            stance=self.recommend_action_by_description(description).stance,
         )
 
     def feel_curious(self) -> CuriosityImpulse | None:
@@ -365,6 +373,13 @@ class Jarvis:
     @staticmethod
     def _action_statement(description: str) -> str:
         return f"My predictions about the action '{description}' hold"
+
+    @staticmethod
+    def _action_description(statement: str) -> str:
+        # Exact inverse of _action_statement (a controlled template, not free text).
+        return statement.removeprefix(
+            "My predictions about the action '"
+        ).removesuffix("' hold")
 
     def observe_companion(self, trait: str, evidence: Evidence) -> Belief:
         """Record an observation about the companion and evolve Jarvis's model of
