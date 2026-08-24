@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 68)
+Last updated: 2026-08-24 (Increment 69)
 
 ---
 
@@ -873,6 +873,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   (D31) — still only evidence, confidence still derived over the whole stream.
 - Gates: ruff clean · pyright strict 0 errors · pytest 339 passed.
 
+### Increment 69 — a conversation tour + README: an exchange grounds a belief that survives a restart ✅ (2026-08-24)
+- New `examples/conversation.py`: a persistent Jarvis perceives a short multi-line exchange with
+  `perceive_all(...)` — two supporting cues, a weaker doubt, and a cue-less line that is skipped —
+  grounding one belief at ~0.59 with narrated per-cue provenance, plus a companion stream via
+  `perceive_all_about_companion`. A *second session* (fresh `Jarvis.persistent` on the same dir) reopens
+  the belief at 0.59 and a further exchange strengthens it to 0.69 — perception and continuity together
+  across a restart (Vision §3, §40). Deterministic, runs exit 0, type-checks.
+- README "Perceive" group gains `perceive_all`/`perceive_all_about_companion`; the examples list now
+  points at all five tours. Consolidation only — no behaviour change, all prior tests green.
+- Gates: ruff clean · pyright strict 0 errors · pytest 339 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -992,18 +1003,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**A conversation tour + README: a whole exchange becomes a grounded, revisable belief (Vision §3, §40).**
-Increments 63–68 built perception up to streams, but no runnable story shows a *conversation* landing as
-cognition — the examples still perceive single lines or hand-build evidence. Smallest honest step:
-- Add `examples/conversation.py`: one persistent Jarvis is fed a short multi-line exchange via
-  `perceive_all(...)` (mixed supporting/contradicting/cue-less lines) that grounds one belief, plus a
-  stream about the companion via `perceive_all_about_companion(...)`, printing the conclusion, the
-  narrated provenance, and the companion belief. Then a *second* exchange the next "session" (same
-  persistent dir) shows the belief strengthening across a restart — perception + continuity together.
-  Deterministic; runs exit 0 and type-checks.
-- Extend the README "Perceive" group with `perceive_all`/`perceive_all_about_companion`; point the
-  examples list at the new tour. Consolidation only — no behaviour change.
-- Behaviour check: the example is import-clean and deterministic; the README lists the stream methods.
+**Perception can raise curiosity: a perceived contradiction is worth investigating (Vision §16, §18, §32).**
+A perceived exchange can carry both supporting and contradicting readings (Increment 67–68) — a belief
+that is genuinely *contested* by what Jarvis just heard. Contested beliefs are exactly what curiosity
+already fixes on for the companion model (Increment 36); perceived contested beliefs deserve the same.
+Right now a mixed perception grounds a tentative belief and then nothing pulls Jarvis to resolve it.
+Smallest honest step:
+- After `perceive_all(...)` grounds a working belief that has *both* supporting and contradicting
+  evidence, let `feel_curious()` (or a dedicated check) surface an impulse to investigate that tension
+  — reusing the contested-belief curiosity shape. The belief lives in the beliefs store (same trigger),
+  so it is queryable after the episode.
+- Keep it truthful: only a genuinely contested perceived belief raises it; a clean supporting stream
+  does not; still a recommendation, pursued only via `pursue()`. Respect the D29 priority order.
+- Behaviour tests: a mixed perceived exchange makes `feel_curious()` return an impulse naming the
+  contested topic; a purely supporting exchange does not.
 
 *(Deferred, natural follow-ups: cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
