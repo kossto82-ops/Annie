@@ -21,3 +21,7 @@ class CuriosityImpulse:
     # impulses arise from a pattern in memory (e.g. a recurring goal) rather than
     # a single belief, so this is optional -- the rationale still explains the why.
     prompted_by_belief_id: str | None = None
+    # The goal this impulse concerns, when it was raised from a recurring goal, so
+    # pursuing it can be recorded *toward* that goal in episodic memory. None for
+    # impulses about a self-tendency or the companion.
+    goal: str | None = None

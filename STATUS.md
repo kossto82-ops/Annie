@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 47)
+Last updated: 2026-08-24 (Increment 48)
 
 ---
 
@@ -615,6 +615,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   this only refines *which* recurring goal is chosen inside the third slot.
 - Gates: ruff clean · pyright strict 0 errors · pytest 280 passed.
 
+### Increment 48 — pursuing a goal-curiosity is recorded toward that goal ✅ (2026-08-24)
+- `CuriosityImpulse` gained an optional `goal: str | None`, set when the impulse is raised from a
+  recurring goal (both the unreached-tension and the fallback branches). `pursue()` now attaches that
+  goal to the self-directed episode's `Goal`, so wondering about a stuck goal leaves a trace *toward*
+  it in episodic memory (Vision §16, §26, §27) — reusing the Increment 40–41 goal machinery, no new store.
+- Truthful: this records that Jarvis *reflected* on the goal, not that it reached it — reachability
+  still changes only via `mark_goal_reached`. And `recurring_goals()` counts only COMPANION episodes,
+  so a self-directed pursuit does not inflate the recurrence count it was prompted by. A curiosity
+  impulse about a self-tendency or the companion attaches no goal (`goal=None`).
+- Gates: ruff clean · pyright strict 0 errors · pytest 282 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -721,19 +732,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Pursuing an unreached-goal curiosity records the attempt against that goal (Vision §16, §26, §27).**
-Curiosity now points at the goal Jarvis keeps failing to reach (Increment 47), and `pursue()` runs a
-self-directed episode for it — but that episode is not tied back to the goal, so wondering about a
-stuck goal leaves no trace on the goal itself. Smallest honest step to close the loop:
-- Let a curiosity impulse carry the goal it concerns (add an optional `goal: str | None` to
-  `CuriosityImpulse`, set when the impulse is raised from a recurring goal). When `pursue()` runs such
-  an impulse, attach that goal to the episode (via the existing `Goal` on `CognitiveEpisode`), so the
-  self-directed reflection is recorded *toward* the goal in episodic memory — exactly like a companion
-  `think(..., goal=…)`. No new store; reuse Increment 40–41 machinery.
-- Keep it truthful: this records that Jarvis reflected on the goal, not that it reached it — reachability
-  still only changes via `mark_goal_reached`. A curiosity impulse not about a goal attaches none.
-- Behaviour tests: pursuing a recurring-goal impulse appends an `EpisodeRecord` whose `goal` is that
-  goal statement; pursuing a self-tendency/companion impulse records `goal=None`.
+**How often has Jarvis reflected on a stuck goal? Surface the self-directed effort (Vision §26, §31).**
+Increment 48 records self-directed curiosity episodes *toward* a goal, but nothing reads that back — so
+Jarvis cannot tell "a goal I keep failing and have wrestled with many times" from "one I have barely
+looked at". The reflection trace exists in episodic memory but is invisible. Smallest honest step:
+- Add a read-model counting CURIOSITY-origin episodes per goal statement, e.g.
+  `jarvis.reflection_effort(goal_statement) -> int` (or fold a count into the introspection line). It
+  reads `episodes.history()` filtered to `origin == CURIOSITY and goal == statement` — a plain count,
+  mirroring `recurring_goals()` (which counts the COMPANION side). No new persistence.
+- Then the unmet-goal introspection line can read "… — I have not reliably reached this yet (…), and
+  have turned it over N times" — distinguishing a goal Jarvis is actively wrestling with from a
+  neglected one. Keep it truthful: effort ≠ progress; a high count with low reachability is honest.
+- Behaviour tests: pursuing a goal-curiosity twice makes `reflection_effort(goal) == 2`; a never-pursued
+  goal returns 0; companion `think(..., goal=…)` episodes do not count as reflection effort.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

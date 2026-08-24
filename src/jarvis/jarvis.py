@@ -273,11 +273,13 @@ class Jarvis:
                             f'I have pursued the goal "{goal}" {count} times '
                             "without reaching it"
                         ),
+                        goal=goal,
                     )
             goal, count = recurring[0]
             return CuriosityImpulse(
                 trigger=f"Why do I keep returning to: {goal}?",
                 rationale=f'I have pursued the goal "{goal}" {count} times',
+                goal=goal,
             )
         return None
 
@@ -285,9 +287,15 @@ class Jarvis:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).
 
         This is the first episode Jarvis initiates on its own rather than in
-        response to the companion; it is marked with a CURIOSITY origin.
+        response to the companion; it is marked with a CURIOSITY origin. When the
+        impulse concerns a goal, the episode is recorded *toward* that goal (Vision
+        §26), so wondering about a stuck goal leaves a trace on the goal itself --
+        this records the reflection, not that the goal was reached.
         """
-        episode = CognitiveEpisode(trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY)
+        goal = Goal(statement=impulse.goal) if impulse.goal is not None else None
+        episode = CognitiveEpisode(
+            trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY, goal=goal
+        )
         return self._executive.run(episode)
 
     def consider(

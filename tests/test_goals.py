@@ -241,3 +241,29 @@ class TestRecurringGoalBecomesCuriosity:
         assert impulse is not None
         assert "the easy goal" in impulse.trigger
         assert "without reaching it" not in impulse.trigger
+
+
+class TestPursuingAGoalCuriosityRecordsIt:
+    def test_pursuing_a_recurring_goal_impulse_records_the_episode_toward_it(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="the hard goal")
+        jarvis.think("is it correct?", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("is it correct?", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+
+        impulse = jarvis.feel_curious()
+        assert impulse is not None and impulse.goal == "the hard goal"
+        jarvis.pursue(impulse)
+        assert jarvis.episodes.history()[-1].goal == "the hard goal"
+
+    def test_pursuing_a_self_tendency_impulse_records_no_goal(self) -> None:
+        jarvis = Jarvis()
+        # Ungrounded episodes make the evidence-habit self-belief confident, so
+        # feel_curious raises a self-tendency impulse (which concerns no goal).
+        for topic in ("a", "b", "c"):
+            jarvis.think(f"q {topic}")
+        impulse = jarvis.feel_curious()
+        assert impulse is not None and impulse.goal is None
+        jarvis.pursue(impulse)
+        assert jarvis.episodes.history()[-1].goal is None
