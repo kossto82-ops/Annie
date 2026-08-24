@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-21 (Increment 39)
+Last updated: 2026-08-21 (Increment 40)
 
 ---
 
@@ -98,6 +98,7 @@ src/jarvis/
     value_objects/evidence_request.py    EvidenceRequest (what an ungrounded episode is missing)
     value_objects/deliberation.py        Deliberation (outcome of weighing competing explanations)
     value_objects/action.py              Action (a declared intention + expected outcome, Vision §27)
+    value_objects/goal.py                Goal (what an episode is toward, Vision §12/§26)
     value_objects/state_summary.py       StateSummary (compact immutable snapshot of all Jarvis holds)
 tests/                                   45 behaviour tests mirroring the above
 ```
@@ -521,6 +522,15 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Description recovered by inverting the controlled `_action_statement` template (`_action_description`),
   not by parsing free text. Fresh Jarvis → empty. Consolidation only.
 - Gates: ruff clean · pyright strict 0 errors · pytest 252 passed.
+- Commit `2bb4962` pushed to `origin/main`.
+
+### Increment 40 — goals: an episode has something it is toward ✅ (2026-08-21)
+- `Goal` value object (statement + optional success criterion). `CognitiveEpisode.goal`;
+  `jarvis.think(trigger, evidence=(), goal=None)` attaches it. When present, the decision names it
+  ("Toward '…': …") as first-class provenance (Vision §12, §26: Goal → … → Decision). A recorded
+  intent, not a planner/decomposition.
+- Truthful: an episode without a goal has `goal is None` and an unchanged decision string.
+- Gates: ruff clean · pyright strict 0 errors · pytest 258 passed.
 
 ---
 
@@ -623,16 +633,14 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**Goals: give an episode something it is *trying to achieve* (Vision §26, §12).** Cognition so far is
-reactive — a trigger comes in, a conclusion comes out — but Vision §12 lists a `goal` as part of an
-episode and §26's decision provenance is `Goal → … → Decision`. There is no goal anywhere yet. Small
-honest first step (a recorded intent, not a planner):
-- A `Goal` value object (a statement + optional success criterion) attachable to a `think()`/episode,
-  so the decision provenance can reference what the episode was for; `episode.goal`.
-- Thread it minimally: `jarvis.think(trigger, evidence=(), goal=None)`; the decision phrasing can note
-  the goal when present. No planning/decomposition yet — just first-class representation.
-- Behaviour tests: an episode given a goal exposes it; one without has `goal is None`; the trace/record
-  still work unchanged.
+**Record the goal in episodic memory (Vision §26, §21).** Increment 40 gave an episode a `goal`, but
+`EpisodeRecord` doesn't capture it, so the goal vanishes from history — and §26's provenance
+(`Goal → … → Decision`) should be *remembered*, not only live. Small honest step:
+- Add an optional `goal: str | None` to `EpisodeRecord` (the goal statement, or None); the executive
+  records it from `episode.goal`. Update the JSON episode store to (de)serialise it.
+- Keep it truthful: episodes without a goal store `None`; existing self-observation is unaffected.
+- Behaviour tests: a `think(..., goal=…)` appends a record carrying the goal statement; a goal-less
+  one records `None`; the record round-trips through the JSON store.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

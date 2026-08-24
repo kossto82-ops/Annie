@@ -117,6 +117,9 @@ class ExecutiveController:
 
         episode.begin_deciding()
         decision = self._decide(episode.trigger, belief, episode.attention)
+        if episode.goal is not None:
+            # Provenance: what this episode was toward (Vision §26).
+            decision = f"Toward '{episode.goal.statement}': {decision}"
         self._maybe_request_evidence(episode, belief)
         self._flush(episode)
 

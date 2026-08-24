@@ -24,6 +24,7 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
+from jarvis.domain.value_objects.goal import Goal
 
 
 class InvalidStateTransition(RuntimeError):
@@ -60,6 +61,7 @@ class CognitiveEpisode:
     result: str | None = None
     origin: TriggerOrigin = TriggerOrigin.COMPANION
     attention: Attention = Attention.FULL
+    goal: Goal | None = None
     _working_belief: Belief | None = field(default=None, repr=False)
     _evidence_request: EvidenceRequest | None = field(default=None, repr=False)
     _pending_events: list[CognitiveEvent] = field(

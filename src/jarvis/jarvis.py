@@ -33,6 +33,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
 from jarvis.executive.executive_controller import ExecutiveController
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
@@ -88,14 +89,18 @@ class Jarvis:
         )
 
     def think(
-        self, trigger: str, evidence: Iterable[Evidence] = ()
+        self,
+        trigger: str,
+        evidence: Iterable[Evidence] = (),
+        goal: Goal | None = None,
     ) -> CognitiveEpisode:
         """Run a cognitive episode for ``trigger``, grounded in ``evidence``.
 
+        An optional ``goal`` names what the episode is *toward* (Vision §12, §26).
         With no evidence the episode completes with an honest "insufficient
         evidence" conclusion rather than a fabricated answer (Vision §37).
         """
-        episode = CognitiveEpisode(trigger=trigger)
+        episode = CognitiveEpisode(trigger=trigger, goal=goal)
         return self._executive.run(episode, evidence)
 
     def observe_self(self) -> Belief | None:
