@@ -16,5 +16,8 @@ class CuriosityImpulse:
     """A proposed self-triggered investigation."""
 
     trigger: str  # what Jarvis would look into
-    rationale: str  # why -- the self-belief that prompted it
-    prompted_by_belief_id: str
+    rationale: str  # why -- the belief or pattern that prompted it
+    # The self/companion belief that prompted this, when there is one. Some
+    # impulses arise from a pattern in memory (e.g. a recurring goal) rather than
+    # a single belief, so this is optional -- the rationale still explains the why.
+    prompted_by_belief_id: str | None = None

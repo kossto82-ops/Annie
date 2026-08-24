@@ -243,6 +243,18 @@ class Jarvis:
                     ),
                     prompted_by_belief_id=belief.id,
                 )
+
+        # A goal Jarvis keeps returning to is worth turning inward on (Vision §26,
+        # §31): once self-reliability and companion tension are quiet, the pattern
+        # in its own purposes becomes the most interesting unknown. Prompted by a
+        # pattern in memory, not a single belief, so no belief id.
+        recurring = self.recurring_goals()
+        if recurring:
+            goal, count = recurring[0]
+            return CuriosityImpulse(
+                trigger=f"Why do I keep returning to: {goal}?",
+                rationale=f'I have pursued the goal "{goal}" {count} times',
+            )
         return None
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:

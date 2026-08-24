@@ -2,17 +2,43 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from jarvis import Jarvis
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.goal_reflection import recurring_goals
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
+
+
+def _grounded_evidence() -> tuple[Evidence, ...]:
+    """Two strong, well-spread supporting pieces: grounds a belief (confidence
+    above the threshold) with enough temporal spread that the conclusion is not
+    overconfident -- so the self-model stays quiet.
+    """
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    return (
+        Evidence(
+            content="a solid reason",
+            source=EvidenceSource.USER_STATEMENT,
+            weight=Confidence(0.9),
+            observed_at=base,
+        ),
+        Evidence(
+            content="a second solid reason later",
+            source=EvidenceSource.USER_STATEMENT,
+            weight=Confidence(0.9),
+            observed_at=base + timedelta(days=40),
+        ),
+    )
 
 
 class TestGoal:
@@ -106,3 +132,30 @@ class TestRecurringGoalsService:
 
         history = [record(TriggerOrigin.CURIOSITY) for _ in range(4)]
         assert recurring_goals(history) == ()
+
+
+class TestRecurringGoalBecomesCuriosity:
+    def test_a_recurring_goal_raises_curiosity_when_self_model_is_quiet(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="ship the parser")
+        # Grounded, well-spread episodes keep the self-model quiet, so the
+        # recurring goal is the most interesting remaining unknown.
+        jarvis.think("is it correct?", evidence=_grounded_evidence(), goal=goal)
+        jarvis.think("is it correct?", goal=goal)
+        jarvis.think("is it correct?", goal=goal)
+        assert jarvis.self_beliefs() == () or all(
+            b.confidence.value == 0.0 for b in jarvis.self_beliefs()
+        )
+        impulse = jarvis.feel_curious()
+        assert impulse is not None
+        assert "ship the parser" in impulse.trigger
+        assert impulse.prompted_by_belief_id is None
+
+    def test_no_recurring_goal_raises_no_goal_curiosity(self) -> None:
+        jarvis = Jarvis()
+        # Same quiet self-model, but distinct goals -> nothing recurs.
+        jarvis.think("is it correct?", evidence=_grounded_evidence(), goal=Goal(statement="alpha"))
+        jarvis.think("is it correct?", goal=Goal(statement="beta"))
+        jarvis.think("is it correct?", goal=Goal(statement="gamma"))
+        assert jarvis.recurring_goals() == ()
+        assert jarvis.feel_curious() is None

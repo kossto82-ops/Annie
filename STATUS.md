@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 42)
+Last updated: 2026-08-24 (Increment 43)
 
 ---
 
@@ -558,6 +558,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   history floor (D20) so both read-models demand comparable evidence before naming a pattern.
 - Gates: ruff clean · pyright strict 0 errors · pytest 265 passed.
 
+### Increment 43 — a recurring goal becomes curiosity: the pattern moves Jarvis ✅ (2026-08-24)
+- `feel_curious()` gained a third source, after self-tendencies and companion tension: when
+  `recurring_goals()` surfaces a goal, it raises a `CuriosityImpulse` to turn inward on it
+  ("Why do I keep returning to: {goal}?"), naming the recurrence count as its rationale (Vision §16,
+  §26, §31). Same recognised-signal→impulse pattern as Increments 22 (self-tendencies) and 36
+  (companion contradiction). Recommends only; `pursue()` runs it as a CURIOSITY-origin episode (§28).
+- Priority order is truthful and settled (see D29): own reliability first, then companion tension,
+  then recurring purpose — the goal impulse fires only when the earlier two are quiet.
+- `CuriosityImpulse.prompted_by_belief_id` is now **optional** (`str | None = None`): this impulse
+  arises from a pattern in memory, not a single belief, so it carries no belief id — the rationale
+  still explains the why. (Same spirit as D9: not all cognition binds to one entity.)
+- Gates: ruff clean · pyright strict 0 errors · pytest 267 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -654,23 +667,27 @@ with belief + episode events dispatched through the NervousSystem at each step.
   and the policy is injectable (`EvidenceWeightingPolicy`). Effective weight = raw × source factor;
   the raw weight/source are never mutated (provenance preserved). `USER_STATEMENT` factor is 1.0 so
   prior USER_STATEMENT-based tests/behaviour are unchanged; other sources scale down.
+- **D29** `feel_curious()` checks curiosity sources in a fixed priority: (1) self-tendencies
+  (own reliability, strongest weakness first), (2) contested companion beliefs (tension to resolve),
+  (3) recurring goals (a pattern in its own purposes). Later sources fire only when earlier ones are
+  quiet. Rationale: a companion should first be honest about its own weaknesses before turning its
+  attention outward or inward on purpose. Order is settled; new sources slot in with an explicit rank.
 
 ---
 
 ## Next increment (recommended, not yet started)
 
-**A recurring goal becomes curiosity (Vision §16, §26, §31).** Jarvis can now *see* the goals it keeps
-returning to (Increment 42); the next honest step is to let that recognition *move* it — the same
-pattern already used for self-tendencies (Increment 22) and companion contradictions (Increment 36),
-where a recognised signal raises a `CuriosityImpulse`. Smallest step:
-- In `feel_curious()`, after the existing self-model and companion-contradiction checks, if
-  `recurring_goals()` surfaces a goal, raise a `CuriosityImpulse` to wonder about that goal (e.g.
-  trigger "why do I keep returning to: {goal}?"). It recommends reflection, performs nothing (§28).
-- Keep the established priority order truthful: self-tendencies first (they are about Jarvis's own
-  reliability), then companion tension, then recurring purpose — only raise the goal impulse when the
-  earlier ones are quiet. A companion with no recurring goals → no goal impulse.
-- Behaviour tests: after three same-goal companion episodes, `feel_curious()` (when self-model and
-  companion are healthy) returns an impulse naming that goal; with no recurring goal it does not.
+**A recurring goal shows up in introspection / the state snapshot (Vision §29, §30, §21).** Jarvis can
+now *notice* and be *moved by* the goals it keeps returning to (Increments 42–43), but neither
+`introspect()` nor `state_summary()` mentions them — so a companion asking "what are you about?" would
+not hear its own recurring purposes. Smallest honest step:
+- In `introspect()`, after the self-tendency and companion lines, if `recurring_goals()` is non-empty
+  add a truthful line naming the top recurring goal(s) and how often — "I keep returning to: X (3
+  times)". Purely a read-model over existing state; nothing invented, nothing asserted as good.
+- Optionally mirror it in `StateSummary` as a `recurring_goals: tuple[tuple[str, int], ...]` field so
+  the machine-readable snapshot carries the same fact (fresh Jarvis → empty tuple).
+- Behaviour tests: after three same-goal companion episodes, `introspect()` contains the goal text and
+  count; a goal-less Jarvis's introspection is unchanged; the summary field matches `recurring_goals()`.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
