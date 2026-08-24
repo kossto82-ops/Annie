@@ -35,6 +35,7 @@ from jarvis.domain.services.self_observation import (
 )
 from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
+from jarvis.domain.value_objects.challenge import Challenge
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
@@ -88,6 +89,9 @@ class Jarvis:
         self._goals: BeliefRepository = goals_store or InMemoryBeliefStore()
         self._subgoals: BeliefRepository = subgoals_store or InMemoryBeliefStore()
         self._perception: PerceptionSource = perception or KeywordPerception()
+        # (observation, belief statement) pairs Challenge has refuted -- the belief
+        # would hold without the observation, so it no longer rests on it (Incr 77).
+        self._refutations: set[tuple[str, str]] = set()
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -530,7 +534,9 @@ class Jarvis:
         A pure read-model: it *notices*, it does not conclude. Empty when no
         observation grounds more than one belief. Feeds autonomous hypotheses.
         """
-        return find_reflections(list(self.beliefs.all_beliefs()))
+        return find_reflections(
+            list(self.beliefs.all_beliefs()), frozenset(self._refutations)
+        )
 
     def hypothesise(self) -> HypothesisSet | None:
         """Brew a hypothesis from reflection (Vision §17, §31), or None when nothing
@@ -544,6 +550,44 @@ class Jarvis:
         if hypotheses is not None:
             hypotheses.pull_events()  # read-model: drain without dispatching
         return hypotheses
+
+    def challenge(self) -> Challenge | None:
+        """Name what would refute the leading hypothesis (Vision §11, §17, §37), or
+        None when there is no hypothesis to challenge. Cycle stage four.
+
+        Self-adversarial: rather than seek only confirmation, Jarvis states the
+        concrete test — if a belief resting on the observation would still hold
+        without it, the common cause is wrong. It asserts nothing false; :meth:`refute`
+        records a counterexample, which removes that belief from the pattern and can
+        dethrone the hypothesis.
+        """
+        hypotheses = self.hypothesise()
+        if hypotheses is None:
+            return None
+        leading = hypotheses.leading()
+        if leading is None:
+            return None
+        finding = self.reflect()[0]
+        target = finding.beliefs[0]
+        falsifier = (
+            f'if "{target}" would still hold without "{finding.observation}", '
+            "then it is not the common cause after all."
+        )
+        return Challenge(
+            hypothesis=leading.statement,
+            observation=finding.observation,
+            falsifier=falsifier,
+            beliefs=finding.beliefs,
+        )
+
+    def refute(self, observation: str, belief_statement: str) -> None:
+        """Record that a belief would hold *without* an observation (Vision §17, §37):
+        a counterexample answering :meth:`challenge`. The belief no longer rests on
+        the observation, weakening — and, when enough are refuted, dethroning — the
+        common-cause hypothesis. Derived, revisable; changes nothing about the belief
+        itself, only that it no longer counts toward this pattern.
+        """
+        self._refutations.add((observation, belief_statement))
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).

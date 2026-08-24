@@ -20,11 +20,21 @@ def _evidence_contents(belief: Belief) -> set[str]:
     return {piece.content for piece in (*explanation.supporting, *explanation.contradicting)}
 
 
-def find_reflections(beliefs: Sequence[Belief]) -> tuple[Reflection, ...]:
-    """Every observation that grounds two or more beliefs, most load-bearing first."""
+def find_reflections(
+    beliefs: Sequence[Belief],
+    refuted: frozenset[tuple[str, str]] = frozenset(),
+) -> tuple[Reflection, ...]:
+    """Every observation that grounds two or more beliefs, most load-bearing first.
+
+    A ``(observation, belief statement)`` pair in ``refuted`` no longer counts:
+    Challenge (Increment 77) has established that belief would hold without that
+    observation, so it does not rest on it.
+    """
     by_observation: dict[str, set[str]] = {}
     for belief in beliefs:
         for content in _evidence_contents(belief):
+            if (content, belief.statement) in refuted:
+                continue
             by_observation.setdefault(content, set()).add(belief.statement)
     findings = [
         Reflection(observation=observation, beliefs=tuple(sorted(statements)))

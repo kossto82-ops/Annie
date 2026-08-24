@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 76)
+Last updated: 2026-08-24 (Increment 77)
 
 ---
 
@@ -984,6 +984,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
   common-cause hypothesis at 0.64 leading over the 0.00 coincidence null. Names what Challenge will test.
 - Gates: ruff clean · pyright strict 0 errors · pytest 367 passed.
 
+### Increment 77 — Challenge: naming (and acting on) what would refute the hypothesis ✅ (2026-08-24)
+- **Cycle stage 4** (… → Hypothesise → **Challenge** → Learn/Act). A mind that only confirms its guesses
+  is not thinking. `jarvis.challenge()` states the concrete falsifier of the leading hypothesis — "if
+  '{belief}' would still hold without '{observation}', it is not the common cause" — as a `Challenge` VO
+  (hypothesis, observation, falsifier, beliefs, `describe()`); None when there is no hypothesis to test
+  (Vision §11, §17, §37).
+- `jarvis.refute(observation, belief_statement)` records a counterexample: that belief would hold without
+  the observation, so it **stops resting on it**. `find_reflections` now takes a `refuted` set and drops
+  those pairs, so a refuted belief no longer counts toward the load. Refute enough and the load falls
+  below two → `reflect()`/`hypothesise()`/`challenge()` all go empty: the common cause is **dethroned**,
+  honestly, by removing what it claimed to explain. Verified end-to-end.
+- Truthful & self-adversarial: Challenge asserts nothing false; refutation changes nothing about the
+  belief itself, only that it no longer counts toward this pattern; everything stays derived and revisable.
+  (Limitation: refutations are in-memory this increment — not yet persisted across restart.)
+- Gates: ruff clean · pyright strict 0 errors · pytest 371 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1125,10 +1141,9 @@ All prior deferred threads are folded in below so nothing is lost.
 | **Connect** | ✅ done (Incr 74) | `Connection`, `connections()`, `related_beliefs()` — links by shared evidence |
 | **Reflect** | ✅ done (Incr 75) | `Reflection`, `reflect()` — load-bearing observations across the belief web |
 | **Hypothesise (autonomous)** | ✅ done (Incr 76) | `hypothesise()` — a common-cause `HypothesisSet` brewed from `reflect()` |
-| **Challenge** | ▶ NEXT | actively seek falsifying evidence for the leading hypothesis (self-adversarial; beyond §11) |
-| Learn | ✅ exists | action-outcome learning + self-model behaviour change — wire into the cycle |
-| Act | ✅ exists | graded autonomy / stances — wire into the cycle |
-| Run the whole cycle autonomously | ⬜ | generalise `feel_curious`/`pursue`: Jarvis triggers the cycle on itself |
+| **Challenge** | ✅ done (Incr 77) | `challenge()` names the falsifier; `refute()` dethrones by removing what it explained |
+| Learn / Act | ✅ exist, ▶ WIRE NEXT | action-outcome learning, self-model, graded autonomy — connect them to the cycle's output |
+| Run the whole cycle autonomously | ⬜ | generalise `feel_curious`/`pursue`: Jarvis triggers Connect→…→Challenge on itself |
 
 ### Track B — perception → the LLM adapter (highest external impact, separate)
 - Seam done (Increments 63–68): `PerceptionSource`, streams, provenance, contested-belief resolution.
@@ -1156,20 +1171,20 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Challenge (cycle stage 4): name what would falsify the leading hypothesis (Vision §11, §17, §37).**
-Increment 76 proposes a common-cause hypothesis autonomously; a mind that only *confirms* its own guesses
-is not thinking. Challenge is the self-adversarial step: Jarvis states precisely what evidence would
-*refute* the leading hypothesis, and lowers its standing when that refuting evidence is absent-but-checkable
-or present. Smallest honest step:
-- `jarvis.challenge()` (over the current `hypothesise()`): produce a structured `Challenge`/finding naming
-  the leading hypothesis and a concrete falsifier — e.g. "if any of these beliefs holds *without* the
-  observation, the common cause is wrong" — plus an `EvidenceRequest`-style pointer to what to check.
-  Return None when there is no hypothesis to challenge.
-- Keep it truthful: Challenge does not assert the hypothesis false — it names the test and, if the
-  companion later supplies refuting evidence (`resolve`-style), that evidence flows into the hypothesis
-  set and can dethrone the common cause. Reuse the §17 evidence machinery; no LLM.
-- Behaviour tests: a leading hypothesis yields a challenge naming a concrete falsifier; feeding the
-  falsifier weakens/dethrones the common-cause hypothesis; no hypothesis → no challenge.
+**Learn (cycle stage 5): a hypothesis that survives challenge becomes a belief — the loop closes (Vision
+§20, §31).** Stages 1–4 run (Connect → Reflect → Hypothesise → Challenge). Nothing yet *keeps* the result:
+a common-cause hypothesis that leads confidently and has not been refuted is a genuine insight Jarvis
+should adopt, so the next Connect/Reflect can build on it — making the cycle recursive (its output becomes
+new input). Smallest honest step:
+- `jarvis.learn_from_reflection()` (or fold into a single `jarvis.reflect_and_learn()`): when
+  `hypothesise()` has a leading common-cause hypothesis above a confidence bar *and* `challenge()` has not
+  been refuted, `think(...)` a new belief stating the common cause, grounded in the same evidence — so it
+  enters the beliefs store like any conclusion, revisable, derived. Returns the adopted belief or None.
+- Keep it truthful: it adopts only what survived challenge; a refuted/absent hypothesis learns nothing.
+  The new belief is ordinary — it can itself be connected, reflected on, and challenged later (the loop
+  eating its own tail, honestly). No LLM.
+- Behaviour tests: a surviving confident hypothesis is adopted as a belief naming the common cause; a
+  refuted one is not; the adopted belief then appears in `beliefs`/`connections`.
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:

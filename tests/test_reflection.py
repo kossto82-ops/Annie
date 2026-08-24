@@ -117,3 +117,45 @@ class TestHypothesise:
         three_leading = three.hypothesise().leading()  # type: ignore[union-attr]
         assert two_leading is not None and three_leading is not None
         assert three_leading.confidence.value > two_leading.confidence.value
+
+
+class TestChallenge:
+    def _with_hypothesis(self) -> Jarvis:
+        jarvis = Jarvis()
+        cause = "the client moved the deadline up"
+        for question in ("is the schedule at risk?", "should we cut scope?", "is morale ok?"):
+            jarvis.think(question, evidence=[_ev(cause)])
+        return jarvis
+
+    def test_challenge_names_a_concrete_falsifier(self) -> None:
+        jarvis = self._with_hypothesis()
+        challenge = jarvis.challenge()
+        assert challenge is not None
+        assert "the client moved the deadline up" in challenge.observation
+        assert "common cause" in challenge.hypothesis
+        assert "would still hold without" in challenge.falsifier
+
+    def test_no_hypothesis_means_no_challenge(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a", evidence=[_ev("observation A")])
+        jarvis.think("b", evidence=[_ev("observation B")])
+        assert jarvis.challenge() is None
+
+    def test_refuting_a_belief_removes_it_from_the_pattern(self) -> None:
+        jarvis = self._with_hypothesis()
+        assert jarvis.reflect()[0].load == 3
+        jarvis.refute(
+            "the client moved the deadline up",
+            "Working conclusion about: is morale ok?",
+        )
+        assert jarvis.reflect()[0].load == 2
+
+    def test_refuting_enough_beliefs_dethrones_the_hypothesis(self) -> None:
+        jarvis = self._with_hypothesis()
+        observation = "the client moved the deadline up"
+        jarvis.refute(observation, "Working conclusion about: is morale ok?")
+        jarvis.refute(observation, "Working conclusion about: should we cut scope?")
+        # Only one belief left on the observation — no longer a shared pattern.
+        assert jarvis.reflect() == ()
+        assert jarvis.hypothesise() is None
+        assert jarvis.challenge() is None
