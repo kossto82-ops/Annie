@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 48)
+Last updated: 2026-08-24 (Increment 49)
 
 ---
 
@@ -626,6 +626,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   impulse about a self-tendency or the companion attaches no goal (`goal=None`).
 - Gates: ruff clean · pyright strict 0 errors · pytest 282 passed.
 
+### Increment 49 — self-directed reflection effort is visible per goal ✅ (2026-08-24)
+- New domain read-model `goal_reflection.reflection_effort(history, goal_statement)` counts
+  CURIOSITY-origin episodes recorded toward a goal — the mirror of `recurring_goals()` (which counts
+  the COMPANION side). Exposed as `jarvis.reflection_effort(goal_statement)` (Vision §26, §31).
+- `introspect()`'s unmet-goal line now appends "… and have turned it over N times" when the effort is
+  non-zero, so Jarvis distinguishes a goal it keeps failing *and* keeps wrestling with from a neglected
+  one. Effort ≠ progress: a high count beside low reachability is an honest picture, not a boast.
+- Pure count over existing episodic memory; no new persistence. Companion `think(..., goal=…)` episodes
+  are not counted as reflection effort (they are the recurrence side, not the self-directed side).
+- Gates: ruff clean · pyright strict 0 errors · pytest 286 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -732,19 +743,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**How often has Jarvis reflected on a stuck goal? Surface the self-directed effort (Vision §26, §31).**
-Increment 48 records self-directed curiosity episodes *toward* a goal, but nothing reads that back — so
-Jarvis cannot tell "a goal I keep failing and have wrestled with many times" from "one I have barely
-looked at". The reflection trace exists in episodic memory but is invisible. Smallest honest step:
-- Add a read-model counting CURIOSITY-origin episodes per goal statement, e.g.
-  `jarvis.reflection_effort(goal_statement) -> int` (or fold a count into the introspection line). It
-  reads `episodes.history()` filtered to `origin == CURIOSITY and goal == statement` — a plain count,
-  mirroring `recurring_goals()` (which counts the COMPANION side). No new persistence.
-- Then the unmet-goal introspection line can read "… — I have not reliably reached this yet (…), and
-  have turned it over N times" — distinguishing a goal Jarvis is actively wrestling with from a
-  neglected one. Keep it truthful: effort ≠ progress; a high count with low reachability is honest.
-- Behaviour tests: pursuing a goal-curiosity twice makes `reflection_effort(goal) == 2`; a never-pursued
-  goal returns 0; companion `think(..., goal=…)` episodes do not count as reflection effort.
+**Give up wondering about a goal once it has been wrestled with enough without progress (Vision §16,
+§28, §37).** Curiosity now keeps re-raising the same unreached goal every time `feel_curious()` is
+called, forever — even after Jarvis has turned it over many times with no reachability gain. An honest
+companion knows when to stop banging on a stuck door. Smallest honest step:
+- In `feel_curious()`'s unreached-goal selection, skip a goal whose `reflection_effort()` already meets
+  a threshold (e.g. `_MAX_GOAL_REFLECTIONS = 3`) while its reachability is still low — it has been
+  wondered about enough for now. Prefer a less-wrestled unreached goal; fall back through the branch as
+  before when all are exhausted (so a brand-new stuck goal is still raised).
+- Keep it truthful and reversible: this is "not right now", not "never" — if `mark_goal_reached` later
+  moves reachability, or a fresh recurrence outweighs the effort, the goal can surface again. No belief
+  asserted; it is a selection policy, documented as a decision.
+- Behaviour tests: a goal reflected on ≥ threshold with low reachability is no longer raised while a
+  less-reflected unreached goal exists; with only an over-reflected goal, curiosity moves on (returns
+  None or the next source); reaching the goal clears the suppression.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;

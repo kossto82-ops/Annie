@@ -99,3 +99,18 @@ class TestIntrospect:
             row for row in jarvis.introspect().splitlines() if "ship the parser" in row
         )
         assert line.strip() == "- ship the parser (3 times)"
+
+    def test_an_unmet_goal_reports_how_often_it_was_reflected_on(self) -> None:
+        from jarvis.domain.value_objects.goal import Goal
+
+        jarvis = Jarvis()
+        goal = Goal(statement="the hard goal")
+        jarvis.think("is it correct?", evidence=[_ev(0.9, at=_EPOCH), _ev(0.9)], goal=goal)
+        for _ in range(2):
+            jarvis.think("is it correct?", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        for _ in range(2):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None
+            jarvis.pursue(impulse)
+        assert "have turned it over 2 times" in jarvis.introspect()

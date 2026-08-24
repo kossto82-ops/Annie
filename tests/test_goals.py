@@ -267,3 +267,30 @@ class TestPursuingAGoalCuriosityRecordsIt:
         assert impulse is not None and impulse.goal is None
         jarvis.pursue(impulse)
         assert jarvis.episodes.history()[-1].goal is None
+
+
+class TestReflectionEffort:
+    def test_it_counts_self_directed_episodes_toward_a_goal(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="the hard goal")
+        jarvis.think("is it correct?", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("is it correct?", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        for _ in range(2):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None and impulse.goal == "the hard goal"
+            jarvis.pursue(impulse)
+        assert jarvis.reflection_effort("the hard goal") == 2
+
+    def test_a_never_pursued_goal_has_no_effort(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("q", goal=Goal(statement="untouched"))
+        assert jarvis.reflection_effort("untouched") == 0
+
+    def test_companion_goal_episodes_are_not_reflection_effort(self) -> None:
+        jarvis = Jarvis()
+        goal = Goal(statement="companion goal")
+        for _ in range(3):
+            jarvis.think("q", goal=goal)
+        assert jarvis.reflection_effort("companion goal") == 0

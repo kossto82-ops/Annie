@@ -22,7 +22,7 @@ from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.curiosity import wonder
-from jarvis.domain.services.goal_reflection import recurring_goals
+from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
@@ -137,6 +137,15 @@ class Jarvis:
         nothing about whether pursuing it is wise. Empty when nothing recurs.
         """
         return recurring_goals(self.episodes.history())
+
+    def reflection_effort(self, goal_statement: str) -> int:
+        """How many times Jarvis has wondered about this goal on its own initiative
+        (Vision §26, §31): the count of self-directed episodes recorded toward it.
+
+        The mirror of the companion-side :meth:`recurring_goals`. It measures
+        effort, not progress -- a high count with low reachability is honest.
+        """
+        return reflection_effort(self.episodes.history(), goal_statement)
 
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition
@@ -433,7 +442,12 @@ class Jarvis:
         confidence = belief.confidence.value
         if confidence >= 0.5:
             return f" — I have learned I can reach this (confidence {confidence:.2f})"
-        return f" — I have not reliably reached this yet (confidence {confidence:.2f})"
+        note = f" — I have not reliably reached this yet (confidence {confidence:.2f})"
+        effort = self.reflection_effort(goal_statement)
+        if effort > 0:
+            times = "time" if effort == 1 else "times"
+            note += f", and have turned it over {effort} {times}"
+        return note
 
     def recommend_action_by_description(self, description: str) -> ActionRecommendation:
         """Recommend a stance for a *remembered* kind of action (Vision §28).

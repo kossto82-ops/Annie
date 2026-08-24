@@ -43,3 +43,18 @@ def recurring_goals(
             continue
         counts[record.goal] += 1
     return tuple((goal, count) for goal, count in counts.most_common() if count >= minimum)
+
+
+def reflection_effort(history: Sequence[EpisodeRecord], goal_statement: str) -> int:
+    """How many times Jarvis has turned a goal over on its own initiative.
+
+    Counts self-directed (curiosity-origin) episodes recorded toward this goal --
+    the mirror of ``recurring_goals`` (which counts the companion-directed side).
+    It measures effort, not progress: a high count with low reachability is an
+    honest picture of a goal Jarvis keeps wrestling with (Vision §26, §31).
+    """
+    return sum(
+        1
+        for record in history
+        if record.origin is TriggerOrigin.CURIOSITY and record.goal == goal_statement
+    )
