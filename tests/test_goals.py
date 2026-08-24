@@ -476,3 +476,38 @@ class TestReceivingHelp:
         jarvis = Jarvis()
         jarvis.mark_goal_reached(Goal(statement="master recursion"), reached=False)
         assert jarvis.companion.belief_about("is helpful when I am stuck") is None
+
+
+class TestAskPhrasing:
+    @staticmethod
+    def _exhausted_stuck(jarvis: Jarvis, goal: Goal) -> None:
+        jarvis.think("q", evidence=_grounded_evidence(), goal=goal)
+        for _ in range(2):
+            jarvis.think("q", goal=goal)
+        jarvis.mark_goal_reached(goal, reached=False)
+        for _ in range(3):
+            impulse = jarvis.feel_curious()
+            assert impulse is not None
+            jarvis.pursue(impulse)
+
+    def test_a_proven_helpful_companion_warms_the_request(self) -> None:
+        jarvis = Jarvis()
+        # Build a confident "companion is helpful" belief on an unrelated goal.
+        past = Goal(statement="a past goal")
+        jarvis.receive_help(past)
+        jarvis.receive_help(past)
+        # A fresh, un-helped stuck goal remains to ask about.
+        self._exhausted_stuck(jarvis, Goal(statement="the hard goal"))
+
+        message = jarvis.ask_for_help()
+        assert message is not None
+        assert "You've helped me get unstuck before" in message
+        assert "the hard goal" in message
+
+    def test_without_a_helpfulness_belief_the_request_is_neutral(self) -> None:
+        jarvis = Jarvis()
+        self._exhausted_stuck(jarvis, Goal(statement="the hard goal"))
+        message = jarvis.ask_for_help()
+        assert message is not None
+        assert "You've helped me get unstuck before" not in message
+        assert "on my own — can you help?" in message

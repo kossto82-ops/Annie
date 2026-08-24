@@ -179,6 +179,15 @@ class Jarvis:
         if not stuck:
             return None
         goal = stuck[0]
+        # The relationship shapes the request: if Jarvis has confidently learned
+        # this companion helps when it is stuck, the ask is warmer -- earned from
+        # real evidence, not assumed (Vision §5, §18). Otherwise it stays neutral.
+        helpful = self.companion.belief_about(HELPFUL_COMPANION_TRAIT)
+        if helpful is not None and helpful.confidence.value >= 0.5:
+            return (
+                f"You've helped me get unstuck before — I keep returning to {goal} "
+                "but haven't found how to reach it; can you help again?"
+            )
         return (
             f"I keep returning to {goal} but haven't found how to reach it "
             "on my own — can you help?"

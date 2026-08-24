@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 53)
+Last updated: 2026-08-24 (Increment 54)
 
 ---
 
@@ -687,6 +687,16 @@ with belief + episode events dispatched through the NervousSystem at each step.
   reached without any companion help leaves the companion model untouched.
 - Gates: ruff clean · pyright strict 0 errors · pytest 298 passed.
 
+### Increment 54 — a proven-helpful companion warms the ask ✅ (2026-08-24)
+- `ask_for_help()` now consults `companion.belief_about(HELPFUL_COMPANION_TRAIT)`: when Jarvis
+  confidently (≥0.5) believes this companion helps when it is stuck, the request is warmer ("You've
+  helped me get unstuck before — … can you help again?"); otherwise it keeps the neutral phrasing
+  (Vision §5, §18). Wording only — it still just asks, asserts nothing, takes no action.
+- Earned, not assumed: the warmth comes from a confident *derived* companion belief built from real help
+  received (Increment 53). No/low belief → neutral ask; reversible — if unhelpful guidance later weakens
+  that belief, the ask cools back down. The goal named is still the most stuck one.
+- Gates: ruff clean · pyright strict 0 errors · pytest 300 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -799,20 +809,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 
 ## Next increment (recommended, not yet started)
 
-**When Jarvis is stuck, whom does it turn to? Let a helpful companion sharpen the ask (Vision §5, §18,
-§37).** Jarvis now learns the companion is helpful when it is stuck (Increment 53), but `ask_for_help()`
-does not use that belief — it asks into the void the same way regardless of what it has learned about
-who actually helps. The relationship model should shape the request. Smallest honest step:
-- Have `ask_for_help()` consult `companion.belief_about(HELPFUL_COMPANION_TRAIT)`: when Jarvis
-  confidently believes the companion helps when it is stuck, warm the request ("You've helped me get
-  unstuck before — I keep returning to X but haven't found how to reach it; can you help again?");
-  otherwise keep the current neutral phrasing. Wording only — still just asks, asserts nothing.
-- Keep it truthful: the warmer phrasing is earned from real evidence (a confident, derived companion
-  belief), never assumed. No confidence in that belief → neutral ask. Reversible: if the companion
-  belief later weakens (unhelpful guidance), the ask cools back down.
-- Behaviour tests: after sustained helpful guidance, `ask_for_help()` on a new stuck goal uses the
-  warmer phrasing; with no/low companion-helpfulness belief it uses the neutral phrasing; the goal named
-  is still the most stuck one.
+**Persist the companion helpfulness belief so the warmth survives a restart (Vision §3, §5, §21).**
+Increment 54 warms the ask from a confident companion-helpfulness belief — but the companion model store
+is only wired to disk when it was passed in, and the `HELPFUL_COMPANION_TRAIT` belief lives in the same
+`companion` model as every other companion trait. Verify (and, if missing, fix) that the helpfulness
+belief round-trips through `Jarvis.persistent(dir)` so a warmed relationship is not forgotten on
+restart. Smallest honest step:
+- Add a persistence test: with `Jarvis.persistent(tmp)`, receive help twice on a goal, restart, and
+  assert `companion.belief_about(HELPFUL_COMPANION_TRAIT)` is still confident *and* `ask_for_help()` on
+  a fresh stuck goal still uses the warm phrasing after the restart.
+- If it does not survive (e.g. the companion store is not the persistent one, or events aren't flushed),
+  fix the wiring — do not paper over it. Keep it truthful: only what was actually learned persists.
+- This is a continuity checkpoint (Vision §3): the relationship Jarvis has built should outlast a
+  process, exactly as its beliefs, episodes, actions, reversibility and goals already do.
 
 *(Deferred, natural follow-ups: goal decomposition/planning; cognitive-energy/cost budgeting (§15);
 excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
