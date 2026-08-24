@@ -197,3 +197,44 @@ class TestLearnFromReflection:
         jarvis.think("a", evidence=[_ev("observation A")])
         jarvis.think("b", evidence=[_ev("observation B")])
         assert jarvis.learn_from_reflection() is None
+
+
+class TestReflectCycle:
+    def _with_hypothesis(self) -> Jarvis:
+        jarvis = Jarvis()
+        cause = "the client moved the deadline up"
+        for question in ("is the schedule at risk?", "should we cut scope?", "is morale ok?"):
+            jarvis.think(question, evidence=[_ev(cause)])
+        return jarvis
+
+    def test_one_call_runs_every_stage(self) -> None:
+        jarvis = self._with_hypothesis()
+        result = jarvis.reflect_cycle()
+        assert result.reflection is not None
+        assert result.hypothesis is not None and "common cause" in result.hypothesis
+        assert result.challenge is not None
+        assert result.learned is not None and "common cause" in result.learned
+        assert result.produced_insight is True
+        # The learned belief is now part of the web.
+        assert any("common cause" in b.statement for b in jarvis.beliefs.all_beliefs())
+
+    def test_an_isolated_web_yields_an_empty_cycle(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a", evidence=[_ev("observation A")])
+        jarvis.think("b", evidence=[_ev("observation B")])
+        result = jarvis.reflect_cycle()
+        assert result.reflection is None
+        assert result.hypothesis is None
+        assert result.challenge is None
+        assert result.learned is None
+        assert result.produced_insight is False
+
+    def test_a_dethroned_hypothesis_reports_no_learning(self) -> None:
+        jarvis = self._with_hypothesis()
+        observation = "the client moved the deadline up"
+        jarvis.refute(observation, "Working conclusion about: is morale ok?")
+        jarvis.refute(observation, "Working conclusion about: should we cut scope?")
+        result = jarvis.reflect_cycle()
+        assert result.reflection is None
+        assert result.learned is None
+        assert result.produced_insight is False

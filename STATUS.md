@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 78)
+Last updated: 2026-08-24 (Increment 79)
 
 ---
 
@@ -1015,6 +1015,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   now a genuine loop; Act (graded autonomy, already built) wires in next.
 - Gates: ruff clean · pyright strict 0 errors · pytest 375 passed.
 
+### Increment 79 — reflect_cycle(): the whole loop in one honest action ✅ (2026-08-24)
+- `jarvis.reflect_cycle()` runs Connect → Reflect → Hypothesise → Challenge → Learn end to end and returns
+  a `ReflectiveCycle` summary VO (top reflection, leading hypothesis statement, challenge, learned belief
+  statement — each None where the cycle stopped; `produced_insight`). It *calls* the existing stage
+  methods in order — it does not re-implement them (Vision §31, §19).
+- One method now expresses "Jarvis thinks about what it knows". Not purely a read-model: the Learn stage
+  adopts a surviving insight as a belief (documented). On an isolated web every field is None and
+  `produced_insight` is False; a dethroned hypothesis reports no learning. Verified end-to-end.
+- This is the **seam for autonomy**: a future trigger (a curiosity source, or scheduled self-reflection)
+  makes running the cycle a one-liner — the last ⬜ in Track A. The cycle itself is complete and green.
+- Gates: ruff clean · pyright strict 0 errors · pytest 378 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1159,7 +1171,8 @@ All prior deferred threads are folded in below so nothing is lost.
 | **Challenge** | ✅ done (Incr 77) | `challenge()` names the falsifier; `refute()` dethrones by removing what it explained |
 | **Learn** | ✅ done (Incr 78) | `learn_from_reflection()` — a surviving insight becomes a belief; the loop closes |
 | Act | ✅ exists, ▶ WIRE NEXT | graded autonomy / stances — let a learned insight recommend an action |
-| Run the whole cycle autonomously | ⬜ | one `reflect_cycle()` (or curiosity source) that runs Connect→…→Learn on itself |
+| **`reflect_cycle()` — the whole loop in one call** | ✅ done (Incr 79) | runs Connect→…→Learn, returns `ReflectiveCycle` summary |
+| Trigger the cycle autonomously | ▶ NEXT | a curiosity source / scheduled self-reflection that calls `reflect_cycle()` on its own |
 
 ### Track B — perception → the LLM adapter (highest external impact, separate)
 - Seam done (Increments 63–68): `PerceptionSource`, streams, provenance, contested-belief resolution.
@@ -1187,21 +1200,18 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Run the whole cycle in one call — `reflect_cycle()` (Vision §31, §19).** Every stage exists
-(Connect→Reflect→Hypothesise→Challenge→Learn) but the caller must invoke them one by one. The natural
-capstone is a single method that runs the cycle end-to-end and reports what it did, so Jarvis "thinking
-about what it knows" is one honest action — and the seam for later triggering it autonomously. Smallest
-honest step:
-- `jarvis.reflect_cycle()` → a structured result: the top reflection, the hypothesis it brewed, the
-  challenge it raised, and the belief it learned (or None at each stage it stopped). It calls the existing
-  stage methods in order; it does not re-implement them. Returns a `ReflectiveCycle`/summary VO.
-- Keep it truthful: it only *reports* what the derived stages produced; no new epistemics. If nothing is
-  load-bearing, it returns an empty result honestly. This is the "one action" a future autonomous trigger
-  (a curiosity source, or a scheduled self-reflection) will call — not built yet, but the method makes it
-  a one-liner when we get there.
-- Behaviour tests: on a belief web with a load-bearing observation, `reflect_cycle()` returns a result
-  whose reflection/hypothesis/challenge/learned are all populated and consistent; on an isolated web it
-  returns an empty result; after it runs, the learned belief is in the web.
+**Curiosity wants to reflect: an un-mined load-bearing observation raises an impulse (Vision §16, §31).**
+`reflect_cycle()` exists but only runs when the caller asks. The honest bridge to autonomy is to let the
+*curiosity* Jarvis already has notice when it has something worth reflecting on — a load-bearing
+observation it has not yet turned into a learned insight — and raise an impulse whose pursuit runs the
+cycle. Smallest honest step:
+- In `feel_curious()` (a new slot, respecting D29), when `reflect()` surfaces a load-bearing observation
+  that has *not* already been learned (no `"…is a common cause…"` belief for it), raise a `CuriosityImpulse`
+  to reflect on it. `pursue()` (or a small branch) runs `reflect_cycle()` for that impulse.
+- Keep it truthful: only an *un-mined* pattern raises it (once learned, it is quiet — no loop); it stays a
+  recommendation; the existing priority order is preserved. No LLM.
+- Behaviour tests: a fresh load-bearing web makes `feel_curious()` return a reflect impulse; after
+  `reflect_cycle()`/learning, that impulse is no longer raised; an isolated web raises none.
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:

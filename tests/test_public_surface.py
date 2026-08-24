@@ -28,6 +28,7 @@ _PUBLIC_METHODS = (
     "challenge",
     "refute",
     "learn_from_reflection",
+    "reflect_cycle",
     # Act & learn
     "act",
     "record_outcome",

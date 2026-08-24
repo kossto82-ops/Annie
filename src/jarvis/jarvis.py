@@ -43,6 +43,7 @@ from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.reflection import Reflection
+from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
 from jarvis.executive.executive_controller import ExecutiveController, working_statement
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
@@ -618,6 +619,29 @@ class Jarvis:
             for statement in finding.beliefs
         ]
         return self.think(trigger, evidence=evidence).working_belief
+
+    def reflect_cycle(self) -> ReflectiveCycle:
+        """Run the whole reflective cycle once and report what it produced (Vision
+        §31): Connect → Reflect → Hypothesise → Challenge → Learn, end to end.
+
+        One honest action for "think about what I know" — it *calls* the existing
+        stage methods in order (it does not re-implement them), and returns a
+        summary of each stage's result, empty where nothing was load-bearing. Note
+        it is not purely a read-model: the Learn stage adopts a surviving insight as
+        a belief. This is the seam a future autonomous trigger will call.
+        """
+        reflections = self.reflect()
+        reflection = reflections[0] if reflections else None
+        hypotheses = self.hypothesise()
+        leading = hypotheses.leading() if hypotheses is not None else None
+        challenge = self.challenge()
+        learned = self.learn_from_reflection()
+        return ReflectiveCycle(
+            reflection=reflection,
+            hypothesis=leading.statement if leading is not None else None,
+            challenge=challenge,
+            learned=learned.statement if learned is not None else None,
+        )
 
     def refute(self, observation: str, belief_statement: str) -> None:
         """Record that a belief would hold *without* an observation (Vision §17, §37):
