@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-25 (Increment 87)
+Last updated: 2026-08-25 (Increment 88)
 
 ---
 
@@ -1142,6 +1142,26 @@ with belief + episode events dispatched through the NervousSystem at each step.
   endpoint — the increment that decides the concrete provider + where the secret lives + the CI story.
 - Gates: ruff clean · pyright strict 0 errors · pytest 417 passed.
 
+### Increment 88 — the first LIVE adapter: config from env, Groq-ready, CI-safe ✅ (2026-08-25)
+- `env_settings`: `settings_from_env(environ=None)` reads `JARVIS_LLM_*` into `ProviderSettings`, and
+  `language_model_from_env()` builds the model. The API secret lives ONLY in `JARVIS_LLM_API_KEY` (env),
+  never in code/repo. **Default provider is `scripted`**, so with nothing set behaviour is unchanged
+  (offline stub). A real provider without `JARVIS_LLM_MODEL` → clear error; local SLMs need no key.
+- **Live smoke test is opt-in** (`tests/test_live_llm.py`, `skipif` unless `JARVIS_LLM_*` names a real
+  provider + model): CI/offline stay green with **zero network** (verified: 422 passed, 2 skipped). When
+  configured it does one real `complete()` round-trip and one `perceive` through `LlmPerception`.
+- **First live provider = Groq** (user choice); env names = `JARVIS_LLM_*` (user choice). The generic
+  `OpenAiCompatibleModel` + stdlib `urllib` transport actually reach it — no new dependency. §38 (D33) intact.
+- **How to run it live (developer):**
+  ```
+  # Groq (cloud): get a key at console.groq.com, then
+  JARVIS_LLM_PROVIDER=groq JARVIS_LLM_MODEL=llama-3.3-70b-versatile \
+  JARVIS_LLM_API_KEY=gsk_... python -m pytest tests/test_live_llm.py -q
+  # Local SLM (no key): with Ollama running,
+  JARVIS_LLM_PROVIDER=ollama JARVIS_LLM_MODEL=llama3 python -m pytest tests/test_live_llm.py -q
+  ```
+- Gates: ruff clean · pyright strict 0 errors · pytest 422 passed, 2 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1345,20 +1365,19 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Track B step 3 — the first LIVE adapter: really call one provider (Vision §32).** The registry +
-generic adapter are done and tested with a fake transport; the remaining honest step is to actually reach
-a real endpoint once. This is the first increment that touches the network and a secret, so it must be
-opt-in and CI-safe. Smallest honest step:
-- Read the API key from an **environment variable** (e.g. `JARVIS_LLM_API_KEY`), never committed or
-  hardcoded; a `build_from_env()`/settings helper assembles `ProviderSettings` from env (`JARVIS_LLM_PROVIDER`,
-  `JARVIS_LLM_MODEL`, `JARVIS_LLM_BASE_URL`). Default provider stays `"scripted"` so nothing changes without
-  explicit config.
-- A live smoke test is **skipped unless the env is set** (`pytest.mark.skipif`), so CI/offline stays green
-  with zero network; when a key is present it does one real `complete()` round-trip and asserts non-empty
-  text. Suggest starting with a **local SLM (Ollama)** — no cloud key, fully local — to prove the live path
-  cheaply, then any cloud provider is the same path with a key.
-- Keep the §38 boundary (D33) intact. Decide together: which provider to smoke first (recommend local
-  Ollama), and confirm the env-var names. Then Track E (command center) can select provider/model live.
+**Track E begins — a minimal Command Center: talk to Jarvis + see/tune its state (Vision §30, §40; user
+requirement).** The LLM plumbing is done (86–88); the developer's other standing requirement is a place to
+chat with Jarvis and change parameters. Start with the smallest honest console REPL — no GUI yet, no new
+dependency. Smallest honest step:
+- `examples/command_center.py` (or `python -m jarvis.console`): a text loop that reads a line and routes it:
+  plain text → `perceive`/`think` and prints the conclusion; a few commands — `:introspect`, `:reflect`
+  (run `reflect_cycle`), `:state` (`state_summary`), `:energy`, `:help`, `:quit`. It builds the perceiver
+  via `language_model_from_env()` so it uses the real LLM when `JARVIS_LLM_*` is set, else the stub.
+- Tunable knobs first pass: let the console show and set the already-injectable config (energy costs/budget)
+  live — proving the "tune parameters" requirement end-to-end on what is already config-driven. Keep other
+  thresholds noted for making injectable as we touch them.
+- Deterministic/testable: factor the line-routing into a pure function (input line + Jarvis → reply string)
+  so it is unit-tested without stdin; the REPL wrapper is thin. No network in tests (stub default).
 
 ---
 
