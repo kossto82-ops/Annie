@@ -32,12 +32,15 @@ from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.executive.executive_controller import working_statement
+from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.perceiver_factory import (
     available_providers,
     build_perceiver,
     describe,
 )
 from jarvis.jarvis import Jarvis
+
+_OFFLINE_PERCEIVERS = frozenset({"", "keyword", "scripted", "stub"})
 
 _CONSOLE_HTML = Path(__file__).with_name("console.html")
 
@@ -244,25 +247,50 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
 
     With no ``provider`` it just reports (the live perceiver rides in every snapshot).
     With one, it swaps the evidence *producer* -- the keyword rule, or an LLM provider
-    from the open registry -- without rebuilding Jarvis. The secret never comes from
-    the page: the API key is read from ``JARVIS_LLM_API_KEY`` inside the factory. A
-    misconfigured provider is a clear error, not a crash.
+    from the open registry -- without rebuilding Jarvis.
+
+    An optional ``api_key`` lets the developer hand over a real credential to start
+    testing: it is applied to the live process and saved to ``.env`` (so a restart
+    resumes), but it is write-only -- never echoed back in the reply or any snapshot.
+    Without a key, the factory reads whatever ``JARVIS_LLM_API_KEY`` already holds. A
+    misconfigured provider (e.g. real provider, no model) is a clear error, not a crash.
     """
     provider = str(payload.get("provider", "")).strip()
     if not provider:
         return {"reply": "Name a provider to switch the perceiver.", "speak": False}
     model = str(payload.get("model", "")).strip()
     base_url = str(payload.get("base_url", "")).strip() or None
+    # The API key is write-only from the page: it is applied to the live process and
+    # saved to .env, but never echoed back in any reply or snapshot.
+    api_key = str(payload.get("api_key", "")).strip()
+    is_real = provider.lower() not in _OFFLINE_PERCEIVERS
+    if api_key and is_real and not model:
+        # Don't stage/persist a half-formed config: a real provider needs a model.
+        return {"error": f"a model id is required for provider {provider!r} (e.g. llama-3.3-70b)"}
+    staged: dict[str, str] | None = None
+    if api_key:
+        staged = llm_config_store.stage(provider, model, base_url, api_key)
     try:
         source = build_perceiver(provider, model, base_url)
     except ValueError as error:
         return {"error": str(error)}
     jarvis.set_perception(source)
+    if staged is not None:
+        llm_config_store.persist(staged)  # survive a restart; never returns the key
     described = describe(jarvis.perception)
+    saved = " Key saved to the server's .env." if api_key else ""
     if described.get("kind") == "keyword":
-        return {"reply": "Perceiver set to the keyword rule (no LLM in judgment).", "speak": False}
+        return {
+            "reply": f"Perceiver set to the keyword rule (no LLM in judgment).{saved}",
+            "speak": False,
+            "saved": bool(api_key),
+        }
     named = described.get("model") or described.get("provider")
-    return {"reply": f"Perceiver set to {described.get('provider')} ({named}).", "speak": False}
+    return {
+        "reply": f"Perceiver set to {described.get('provider')} ({named}).{saved}",
+        "speak": False,
+        "saved": bool(api_key),
+    }
 
 
 def _state(_jarvis: Jarvis, _payload: Reply) -> Reply:

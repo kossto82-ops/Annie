@@ -155,8 +155,11 @@
           <h3>Perceiver — who reads the world</h3>
           <label>provider <select id="provider"></select></label>
           <label>model <input type="text" id="model" placeholder="e.g. llama-3.3-70b" /></label>
+          <label>API key <input type="password" id="apikey" autocomplete="off"
+            placeholder="paste to save — never shown" /></label>
           <button type="button" id="applyperceiver" class="switch">Switch perceiver</button>
-          <div class="muted">The API key stays in the server's environment — never sent from here.</div>
+          <div class="muted">The key is saved to the server's <b>.env</b> (git-ignored) and never shown
+            back. Leave it blank to keep the one already configured.</div>
         </div>
       </div>
 
@@ -289,7 +292,11 @@ function renderPerceiver(p) {
 async function applyPerceiver() {
   const provider = $("provider").value;
   const model = $("model").value.trim();
-  const data = await api("perceiver", { provider, model });
+  const apikey = $("apikey").value;   // sent write-only; cleared right after
+  const payload = { provider, model };
+  if (apikey) payload.api_key = apikey;
+  const data = await api("perceiver", payload);
+  $("apikey").value = "";             // never leave the secret on the page
   bubble("jarvis", data.error ? "Couldn't switch perceiver: " + data.error : data.reply);
   renderState(data.state);
 }

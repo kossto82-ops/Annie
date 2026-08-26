@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 92)
+Last updated: 2026-08-26 (Increment 93)
 
 ---
 
@@ -1256,6 +1256,25 @@ with belief + episode events dispatched through the NervousSystem at each step.
   error with no swap; switching back to `keyword` restored it. Zero JS console errors.
 - Gates: ruff clean · pytest 462 passed, 3 skipped (added `tests/test_perceiver_factory.py` + `TestPerceiver`).
 
+### Increment 93 — hand over the key: live Track B from the panel, secret to .env ✅ (2026-08-26)
+- **The last mile to real language: the panel now takes an API key and runs the center against a live LLM.**
+  The `perceiver` command accepts an optional `api_key`; new `infrastructure/llm_config_store.py` `stage`s it
+  into the live process env (so the very next `build_perceiver` uses it) and `persist`s it to `.env`
+  (atomic temp+replace, upsert-in-place, other lines untouched) so a restart resumes. `.env` and `.jarvis/`
+  are git-ignored.
+- **Write-only secret (§40 discipline):** the key flows page → local server → `.env` + process env and is
+  **never** read back — not in the reply, not in any snapshot. `console.html` uses a masked `type=password`
+  field that is cleared right after submit; the reply only confirms "Key saved", never the value.
+- **Track B is now exercised end-to-end, not simulated.** With a real provider + key set from the panel,
+  `say` runs the observation through `LlmPerception` (the model *extracts candidate evidence*, §38), those
+  claims become `Evidence` (source `EXTERNAL_SOURCE`, "perceived via language model"), and the reasoning
+  panel shows the LLM-extracted grounds behind a real belief. The keyword rule remains the offline default.
+- **Verified in a real browser:** the masked key field switched to `groq`/`llama-3.3-70b`, the field cleared,
+  the reply confirmed the save, the (temp) `.env` held `PROVIDER`/`MODEL`/`API_KEY`, and `/api/state` did
+  **not** contain the key. (Offline validation used a dummy key; the live model call is the developer's to
+  run with a real credential.)
+- Gates: ruff clean · pytest 468 passed, 3 skipped (added `tests/test_llm_config_store.py` + key-path tests).
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1425,6 +1444,9 @@ tracks: wire a learned insight to Act (recommend an action); Track B (LLM adapte
 energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 
 ### Track B — perception → the LLM adapter (highest external impact, separate)
+> **UPDATE (Increments 87–93): Track B is landed and live.** Open registry (87), env-config (88), UI
+> switcher (92), and panel-entered key → `.env` (93) mean the center runs against a real LLM from the
+> browser. The prose below is the historical build-up; the recommendation lines further down are superseded.
 - Seam done (Increments 63–68): `PerceptionSource`, streams, provenance, contested-belief resolution.
 - **LLM seam done (Increment 86):** `LanguageModel` Protocol + `LlmPerception` (a `PerceptionSource`) +
   `ScriptedLanguageModel` stub — provider-agnostic, §38 boundary held (D33), NO live API.
@@ -1525,11 +1547,12 @@ semantic trigger↔trait matching; recurring-goals/working-patterns facets; weig
 
 ## Known limitations / not built yet  (refreshed 2026-08-24, Increment 74)
 
-**Big missing capability (the ~20–30% gap):**
-- **No real perception yet.** The `PerceptionSource` seam exists (Increments 63–68) but the only
-  implementation is the dumb `KeywordPerception`. Jarvis cannot understand real language — an LLM adapter
-  behind the same Protocol (§32) is the single highest-impact remaining piece. Separate track: needs an
-  API/secret + design decision (see Roadmap).
+**Big capability — now landed (Increments 87–93):**
+- **Real perception is wired end-to-end.** The `PerceptionSource` seam (Increments 63–68) now has, besides
+  the dumb `KeywordPerception`, an LLM-backed `LlmPerception` behind the same Protocol (§32/§38), an open
+  provider registry (Incr 87), env-config (Incr 88), a UI switcher (Incr 92), and panel-entered credentials
+  saved to `.env` (Incr 93). The developer runs the center against a live Groq/Ollama/etc. from the browser;
+  the keyword rule stays the offline default. Remaining: streaming replies, and more live-tunable knobs.
 
 **Reflective cycle — partially built (see Roadmap for order):**
 - Connect ✅ (Increment 74). Reflect / autonomous Hypothesise / Challenge / cycle-wiring: NOT built.

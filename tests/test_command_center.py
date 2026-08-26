@@ -7,7 +7,11 @@ it is exercised directly here. The socket in `server.py` only moves these bytes.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import cast
+
+import pytest
 
 from jarvis import Jarvis
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -212,6 +216,43 @@ class TestPerceiver:
         result = handle(Jarvis(), "perceiver", {"provider": "groq"})
         assert "error" in result
         assert "model" in str(result["error"]).lower()
+
+    @staticmethod
+    def _isolate_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
+        # Record the JARVIS_LLM_* vars so monkeypatch reverts whatever `stage` sets in
+        # the real process env — keeping this test from leaking into others.
+        for var in ("PROVIDER", "MODEL", "BASE_URL", "API_KEY"):
+            monkeypatch.delenv(f"JARVIS_LLM_{var}", raising=False)
+
+    def test_an_api_key_is_saved_to_env_and_never_echoed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._isolate_llm_env(monkeypatch)
+        env_file = tmp_path / ".env"
+        monkeypatch.setenv("JARVIS_ENV_FILE", str(env_file))
+        secret = "gsk_do_not_leak_me"
+        result = handle(
+            Jarvis(),
+            "perceiver",
+            {"provider": "groq", "model": "llama-3.3-70b", "api_key": secret},
+        )
+        # The key is persisted for a restart...
+        assert "JARVIS_LLM_API_KEY=" + secret in env_file.read_text(encoding="utf-8")
+        # ...but never echoed back anywhere in the reply or the live snapshot.
+        assert result["saved"] is True
+        assert secret not in json.dumps(result)
+
+    def test_a_key_without_a_model_is_rejected_before_being_saved(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._isolate_llm_env(monkeypatch)
+        env_file = tmp_path / ".env"
+        monkeypatch.setenv("JARVIS_ENV_FILE", str(env_file))
+        result = handle(
+            Jarvis(), "perceiver", {"provider": "groq", "api_key": "gsk_secret"}
+        )
+        assert "error" in result
+        assert not env_file.exists()  # nothing half-formed was written
 
 
 class TestUnknownCommand:
