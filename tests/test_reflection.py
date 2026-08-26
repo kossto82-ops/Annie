@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from jarvis import Jarvis
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
@@ -309,3 +311,37 @@ class TestActOnInsight:
         jarvis.think("b", evidence=[_ev(cause)])
         assert jarvis.reflect() != ()
         assert jarvis.act_on_insight() is None
+
+
+class TestRefutationsPersist:
+    def _ground(self, jarvis: Jarvis, cause: str) -> None:
+        for question in ("is the schedule at risk?", "should we cut scope?", "is morale ok?"):
+            jarvis.think(question, evidence=[_ev(cause)])
+
+    def test_a_dethroned_hypothesis_stays_dethroned_after_a_restart(self, tmp_path: Path) -> None:
+        cause = "the client moved the deadline up"
+        first = Jarvis.persistent(tmp_path)
+        self._ground(first, cause)
+        assert first.hypothesise() is not None  # a hypothesis exists
+        first.refute(cause, "Working conclusion about: is morale ok?")
+        first.refute(cause, "Working conclusion about: should we cut scope?")
+        assert first.hypothesise() is None  # dethroned
+
+        restarted = Jarvis.persistent(tmp_path)
+        # The beliefs persist too, so the pattern would reappear -- unless the
+        # refutations also survived. They do.
+        assert restarted.hypothesise() is None
+        assert restarted.reflect() == ()
+
+    def test_a_separate_ephemeral_jarvis_does_not_inherit_refutations(self) -> None:
+        cause = "the client moved the deadline up"
+        one = Jarvis()
+        self._ground(one, cause)
+        one.refute(cause, "Working conclusion about: is morale ok?")
+        one.refute(cause, "Working conclusion about: should we cut scope?")
+        assert one.hypothesise() is None  # dethroned in this instance
+
+        # A separate ephemeral Jarvis with the same beliefs is unaffected.
+        other = Jarvis()
+        self._ground(other, cause)
+        assert other.hypothesise() is not None

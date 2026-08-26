@@ -22,6 +22,7 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.repositories.refutation_repository import RefutationRepository
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.curiosity import wonder
@@ -48,8 +49,10 @@ from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummar
 from jarvis.executive.executive_controller import ExecutiveController, working_statement
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
+from jarvis.infrastructure.in_memory_refutation_store import InMemoryRefutationStore
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
+from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace
@@ -82,6 +85,7 @@ class Jarvis:
         goals_store: BeliefRepository | None = None,
         subgoals_store: BeliefRepository | None = None,
         perception: PerceptionSource | None = None,
+        refutations_store: RefutationRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -96,7 +100,9 @@ class Jarvis:
         self._perception: PerceptionSource = perception or KeywordPerception()
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
-        self._refutations: set[tuple[str, str]] = set()
+        self._refutations: RefutationRepository = (
+            refutations_store or InMemoryRefutationStore()
+        )
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -108,9 +114,10 @@ class Jarvis:
         """A Jarvis whose whole memory lives on disk under one directory.
 
         Wires every store -- beliefs, episodes, companion model, action learning,
-        reversibility, goal reachability and sub-goal links -- to files under
-        ``directory``, so a single call gives full continuity across restarts
-        (Vision §3, §21). Nothing new is persisted; this composes the JSON stores.
+        reversibility, goal reachability, sub-goal links and reflective-cycle
+        refutations -- to files under ``directory``, so a single call gives full
+        continuity across restarts (Vision §3, §21). Nothing new is persisted; this
+        composes the JSON stores.
         """
         base = Path(directory)
         return cls(
@@ -121,6 +128,7 @@ class Jarvis:
             reversibility_store=JsonBeliefStore(base / "reversibility.json"),
             goals_store=JsonBeliefStore(base / "goals.json"),
             subgoals_store=JsonBeliefStore(base / "subgoals.json"),
+            refutations_store=JsonRefutationStore(base / "refutations.json"),
         )
 
     def think(
@@ -554,9 +562,7 @@ class Jarvis:
         A pure read-model: it *notices*, it does not conclude. Empty when no
         observation grounds more than one belief. Feeds autonomous hypotheses.
         """
-        return find_reflections(
-            list(self.beliefs.all_beliefs()), frozenset(self._refutations)
-        )
+        return find_reflections(list(self.beliefs.all_beliefs()), self._refutations.all())
 
     def hypothesise(self) -> HypothesisSet | None:
         """Brew a hypothesis from reflection (Vision §17, §31), or None when nothing
@@ -702,7 +708,7 @@ class Jarvis:
         common-cause hypothesis. Derived, revisable; changes nothing about the belief
         itself, only that it no longer counts toward this pattern.
         """
-        self._refutations.add((observation, belief_statement))
+        self._refutations.add(observation, belief_statement)
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).

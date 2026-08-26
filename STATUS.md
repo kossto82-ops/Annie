@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-25 (Increment 82)
+Last updated: 2026-08-25 (Increment 83)
 
 ---
 
@@ -1067,6 +1067,17 @@ with belief + episode events dispatched through the NervousSystem at each step.
   Act, self-triggered by curiosity, every stage derived/revisable/auditable, no LLM.**
 - Gates: ruff clean · pyright strict 0 errors · pytest 384 passed.
 
+### Increment 83 — the reflective cycle's refutations persist ✅ (2026-08-25)
+- Closes the Increment-77 limitation: `refute()` counterexamples were in-memory, so a dethroned
+  hypothesis revived on restart while the beliefs it explained persisted. New `RefutationRepository`
+  Protocol (domain) with `InMemoryRefutationStore` (ephemeral default) and `JsonRefutationStore` (8th
+  persistent file `refutations.json`); `Jarvis.persistent` wires it (Vision §3, §21).
+- `reflect()` reads `self._refutations.all()` exactly as before; `refute()` writes through the store. No
+  change to the derivation. Verified: a hypothesis dethroned by two refutations stays dethroned across a
+  `Jarvis.persistent` restart; a separate ephemeral Jarvis does not inherit another's refutations.
+- Track D finish-off — everything Jarvis learns, including what it has *ruled out*, now survives a restart.
+- Gates: ruff clean · pyright strict 0 errors · pytest 386 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1243,22 +1254,26 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ---
 
-## Next increment (recommended, not yet started)
+## Next increment — a strategic fork (your call)
 
-**Persist the reflective cycle's refutations (Track D finish-off, Vision §3, §21).** Track A is complete,
-but `refute()` records counterexamples only in memory (`self._refutations`), so a dethroned hypothesis
-comes back after a restart — a real continuity gap now that the cycle matters. Everything else Jarvis
-learns persists; this should too. Smallest honest step:
-- Back `_refutations` with a small persistent store (a JSON file wired by `Jarvis.persistent`, an 8th
-  store), so a refuted `(observation, belief)` pair survives a restart; `reflect()`/`hypothesise()` read
-  it exactly as today. In-memory default stays for ephemeral `Jarvis()`.
-- Keep it truthful: only what was actually refuted persists; loading is additive; no behaviour change to
-  the derivation. A persistence test: refute, restart on the same dir, the hypothesis stays dethroned.
-- Behaviour tests: refutations round-trip through `Jarvis.persistent`; an ephemeral Jarvis is unchanged.
+Track A (the reflective cycle) is complete and its refutations now persist. The two big remaining
+directions are genuine forks; I will not pick between them silently.
 
-*(Then the strategic fork, needing an explicit go: **Track B** — an LLM-backed `PerceptionSource` (§32,
- biggest external impact, needs an API/secret design decision); or **Track C** — §15 cognitive energy
- (self-contained). Both are open; say which when ready and we design Track B before any code.)*
+- **Track B — an LLM-backed `PerceptionSource` (§32).** The highest external-value jump: it is what lets
+  Jarvis understand *real* language instead of the toy keyword rule. But it needs an explicit design
+  decision first — which provider, where the API secret lives, how offline/CI tests still run, and how
+  the §38 boundary is enforced (the LLM produces `Evidence`, never decides). **Gated: we design before any
+  code.** When you say "go Track B", the next step is a short design increment (interface + a stub/faked
+  adapter proving the seam), not a live API call.
+- **Track C — §15 cognitive energy (self-contained).** A per-episode cost (FULL > BRIEF), accumulated and
+  exposed, later a budget that makes attention *choose* BRIEF under load. No deps, stays stdlib-only,
+  deepens the Increment-33 attention machinery. Can start immediately.
+
+Meanwhile, small opportunistic Track D finish-offs remain (unify the two `CognitiveEpisode` shapes;
+`TemporalStability` for hypotheses; injectable weighting policy; persist traces).
+
+*Recommendation: if you want the biggest leap and are ready to decide provider/secrets, say Track B and we
+design it first. If you want to keep the pure, dependency-free momentum, say Track C and I start §15 now.*
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:
@@ -1288,7 +1303,8 @@ semantic trigger↔trait matching; recurring-goals/working-patterns facets; weig
   Increment 7) but not injectable at the `Jarvis(...)` level.
 - Belief/connection identity keys on exact strings (D17): trigger for beliefs, evidence *content* for
   connections. No semantic matching yet — the deliberate later, richer step.
-- Persistence is per-store JSON (`Jarvis.persistent` wires all 7); no real DB; traces are not persisted.
+- Persistence is per-store JSON (`Jarvis.persistent` wires all 8, incl. reflective-cycle refutations);
+  no real DB; traces are not persisted.
 - §15 cognitive energy/cost: not started (self-contained track, still open).
 - NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
 
