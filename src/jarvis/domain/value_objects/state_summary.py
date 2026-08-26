@@ -36,3 +36,4 @@ class StateSummary:
     companion_traits: tuple[Scored, ...]  # beliefs about the companion
     learned_actions: tuple[LearnedAction, ...]  # action learning + its stance
     recurring_goals: tuple[tuple[str, int], ...]  # goals kept returning to, with counts
+    energy_spent: int  # total cognitive energy spent so far (Vision §15)

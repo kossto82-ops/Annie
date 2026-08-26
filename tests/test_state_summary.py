@@ -34,6 +34,7 @@ class TestStateSummary:
         assert summary.companion_traits == ()
         assert summary.learned_actions == ()
         assert summary.recurring_goals == ()
+        assert summary.energy_spent == 0
 
     def test_the_summary_is_immutable(self) -> None:
         summary = Jarvis().state_summary()

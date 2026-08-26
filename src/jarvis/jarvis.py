@@ -41,6 +41,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
+from jarvis.domain.value_objects.energy_costs import EnergyCosts
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.reflection import Reflection
@@ -86,6 +87,7 @@ class Jarvis:
         subgoals_store: BeliefRepository | None = None,
         perception: PerceptionSource | None = None,
         refutations_store: RefutationRepository | None = None,
+        energy_costs: EnergyCosts | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -103,6 +105,11 @@ class Jarvis:
         self._refutations: RefutationRepository = (
             refutations_store or InMemoryRefutationStore()
         )
+        # Cognitive energy (Vision §15): each episode costs by its attention level.
+        # Configurable so a later command center can tune it; only made *visible*
+        # here (accumulated), not yet a budget that constrains attention.
+        self._energy_costs = energy_costs or EnergyCosts()
+        self._energy_spent = 0
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -144,7 +151,25 @@ class Jarvis:
         evidence" conclusion rather than a fabricated answer (Vision §37).
         """
         episode = CognitiveEpisode(trigger=trigger, goal=goal)
-        return self._executive.run(episode, evidence)
+        return self._run(episode, evidence)
+
+    def _run(
+        self, episode: CognitiveEpisode, evidence: Iterable[Evidence] = ()
+    ) -> CognitiveEpisode:
+        """Run an episode through the executive and charge its cognitive cost
+        (Vision §15). Every episode-running path goes through here so spent energy
+        reflects all the thinking Jarvis actually did.
+        """
+        result = self._executive.run(episode, evidence)
+        self._energy_spent += self._energy_costs.for_attention(episode.attention)
+        return result
+
+    def energy_spent(self) -> int:
+        """Total cognitive energy spent so far (Vision §15) — the accumulated cost of
+        every episode run, FULL costing more than BRIEF. Read-only; zero for a fresh
+        Jarvis. Not yet a budget that constrains attention, only an honest tally.
+        """
+        return self._energy_spent
 
     def perceive(
         self, observation: str, trigger: str | None = None, goal: Goal | None = None
@@ -356,6 +381,7 @@ class Jarvis:
                 for belief in self.actions.all_beliefs()
             ),
             recurring_goals=self.recurring_goals(),
+            energy_spent=self._energy_spent,
         )
 
     def _summarise_action(self, statement: str, confidence: float) -> LearnedAction:
@@ -728,7 +754,7 @@ class Jarvis:
         episode = CognitiveEpisode(
             trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY, goal=goal
         )
-        return self._executive.run(episode)
+        return self._run(episode)
 
     def consider(
         self, observation: str, options: Mapping[str, Sequence[Evidence]]

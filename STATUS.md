@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-25 (Increment 83)
+Last updated: 2026-08-25 (Increment 84)
 
 ---
 
@@ -1078,6 +1078,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Track D finish-off — everything Jarvis learns, including what it has *ruled out*, now survives a restart.
 - Gates: ruff clean · pyright strict 0 errors · pytest 386 passed.
 
+### Increment 84 — cognitive energy: an episode has a cost (Track C, §15) ✅ (2026-08-25)
+- **Track C opened.** Thinking is no longer free: a new `EnergyCosts` VO (`full=3`, `brief=1`, method
+  `for_attention`) charges each episode by its attention level (Increment 33's FULL/BRIEF). A private
+  `Jarvis._run(episode, evidence)` runs the executive *and* charges the cost, so every episode-running
+  path (`think`, `perceive`/`perceive_all`, `resolve`, `learn_from_reflection`, `pursue`) is counted.
+- `jarvis.energy_spent()` reports the accumulated cost (0 for a fresh Jarvis); `StateSummary` gained an
+  `energy_spent` field. Verified: a FULL episode costs 3, a BRIEF one 1, and the tally accumulates.
+- **Config-driven, per the command-center requirement (Track E):** `EnergyCosts` is injectable at
+  `Jarvis(energy_costs=…)`, not a buried constant — so a later command center can tune it at runtime.
+- Made *visible* only — no budget yet. Next §15 step: a budget that makes attention *choose* BRIEF (or
+  decline) under load. Deliberations (`consider`) are not charged yet (documented).
+- Gates: ruff clean · pyright strict 0 errors · pytest 391 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1235,10 +1248,24 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 - **Open:** an LLM-backed `PerceptionSource` (§32) — the piece that lets Jarvis understand real language.
   Needs an explicit decision (which provider, where secrets live, offline/test story) before any code,
   and must keep the §38 boundary (LLM produces evidence, never decides). **Flag when we want this; design first.**
+- **USER REQUIREMENT (2026-08-25): provider must be trivially swappable.** The adapter is provider-agnostic
+  behind the `PerceptionSource` Protocol; choose the concrete LLM/API via config (a small registry /
+  factory + settings), so switching provider or model is a config change, never a code change. Ship a
+  faked/stub adapter first so tests never need a live API; the real providers plug in behind the same seam.
 
-### Track C — §15 cognitive energy (self-contained, still open)
+### Track C — §15 cognitive energy (self-contained, still open — CHOSEN NEXT 2026-08-25)
 - Per-episode cost (FULL > BRIEF), accumulate + expose read-only, later a budget that makes attention
-  *choose* BRIEF under load. Deepens Increment 33/34 attention. No deps. Pick up any time.
+  *choose* BRIEF under load. Deepens Increment 33/34 attention. No deps. Starting now (Increment 84).
+
+### Track E — Command Center (chat with Jarvis + tune parameters) — USER REQUIREMENT (2026-08-25)
+- **A "command center" UI where the user can chat/talk with Jarvis and change parameters at runtime.**
+  Not yet built; captured so it is not lost. Needs, at minimum: (1) a conversational surface (text now,
+  voice later) that maps user turns → `perceive`/`think`/`ask_about`/`resolve` and Jarvis's state →
+  readable replies (introspect / reflect_cycle / state_summary); (2) live tuning of the tunable knobs —
+  grounded/insight/confidence thresholds, weighting policy, `_MAX_GOAL_REFLECTIONS`, the coming energy
+  budget — so they are *injectable/config-driven*, not hard-coded constants. Design note: as we add each
+  tunable, expose it via constructor/config rather than a module constant, so the command center can bind
+  to it later. Likely lands after Track B (real language) but the config-surface work starts opportunistically.
 
 ### Track D — smaller finish-offs (fold in opportunistically, not their own phase)
 - Unify the two `CognitiveEpisode` shapes (conclusion vs deliberation) — or document the split as final.
@@ -1254,10 +1281,26 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ---
 
-## Next increment — a strategic fork (your call)
+## Next increment (recommended, not yet started)
 
-Track A (the reflective cycle) is complete and its refutations now persist. The two big remaining
-directions are genuine forks; I will not pick between them silently.
+**§15 step 2 — a cognitive-energy budget that makes attention choose (Vision §15, §14).** Increment 84
+makes cost *visible*; the point of §15 is that a tired/loaded mind *economises*. Smallest honest step:
+- Give `Jarvis` an optional energy budget (config-driven, `Jarvis(energy_budget=…)` — honour Track E:
+  injectable, tunable). Track remaining energy (`energy_remaining()`); when it runs low, a would-be FULL
+  episode is downgraded to BRIEF (answer from what is already known rather than the full lifecycle), and
+  `state_summary`/`introspect` can say Jarvis is "conserving". Energy recovers over time or on demand
+  (`rest()`), so this is fatigue, not a hard cap.
+- Keep it truthful: with no budget set (default), nothing changes — behaviour is identical to today. The
+  downgrade is honest ("I'm answering briefly to conserve"), never a fabricated shortcut. No LLM.
+- Behaviour tests: under a low budget a normally-FULL episode runs BRIEF; with ample/no budget it stays
+  FULL; `rest()` restores capacity; the tally still accrues.
+
+---
+
+## After that — a strategic fork (your call)
+
+Track A (the reflective cycle) is complete and persistent; Track C (§15) is underway. The two big
+remaining external directions are genuine forks; I will not pick between them silently.
 
 - **Track B — an LLM-backed `PerceptionSource` (§32).** The highest external-value jump: it is what lets
   Jarvis understand *real* language instead of the toy keyword rule. But it needs an explicit design
