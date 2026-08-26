@@ -19,9 +19,11 @@ from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
+from jarvis.infrastructure.llm_config_store import load_env_file
 from jarvis.infrastructure.perceiver_factory import (
     companion_perceiver_from_settings,
     perceiver_from_settings,
+    renderer_from_settings,
 )
 from jarvis.interface.command_center import Response, route
 from jarvis.jarvis import Jarvis
@@ -40,21 +42,24 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     perception: PerceptionSource = perceiver_from_settings(settings)
     companion_perception = companion_perceiver_from_settings(settings)
     if home is None:
-        return Jarvis(perception=perception, companion_perception=companion_perception)
-    base = Path(home)
-    base.mkdir(parents=True, exist_ok=True)
-    return Jarvis(
-        beliefs=JsonBeliefStore(base / "beliefs.json"),
-        episodes=JsonEpisodeStore(base / "episodes.json"),
-        companion_store=JsonBeliefStore(base / "companion.json"),
-        actions_store=JsonBeliefStore(base / "actions.json"),
-        reversibility_store=JsonBeliefStore(base / "reversibility.json"),
-        goals_store=JsonBeliefStore(base / "goals.json"),
-        subgoals_store=JsonBeliefStore(base / "subgoals.json"),
-        refutations_store=JsonRefutationStore(base / "refutations.json"),
-        perception=perception,
-        companion_perception=companion_perception,
-    )
+        jarvis = Jarvis(perception=perception, companion_perception=companion_perception)
+    else:
+        base = Path(home)
+        base.mkdir(parents=True, exist_ok=True)
+        jarvis = Jarvis(
+            beliefs=JsonBeliefStore(base / "beliefs.json"),
+            episodes=JsonEpisodeStore(base / "episodes.json"),
+            companion_store=JsonBeliefStore(base / "companion.json"),
+            actions_store=JsonBeliefStore(base / "actions.json"),
+            reversibility_store=JsonBeliefStore(base / "reversibility.json"),
+            goals_store=JsonBeliefStore(base / "goals.json"),
+            subgoals_store=JsonBeliefStore(base / "subgoals.json"),
+            refutations_store=JsonRefutationStore(base / "refutations.json"),
+            perception=perception,
+            companion_perception=companion_perception,
+        )
+    jarvis.set_voice(renderer_from_settings(settings))  # reply in the user's language
+    return jarvis
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -104,6 +109,9 @@ def create_server(
 
 def run(host: str = "127.0.0.1", port: int = 8765, home: str | Path | None = None) -> None:
     """Serve the command center until interrupted (Ctrl-C)."""
+    # Resume a saved provider/model/key so a restart keeps whatever was configured in
+    # the panel (the read-back half of the .env persistence). Real env vars still win.
+    load_env_file()
     jarvis = create_jarvis(home)
     server = create_server(jarvis, host, port)
     bound_host, bound_port = server.server_address[0], server.server_address[1]

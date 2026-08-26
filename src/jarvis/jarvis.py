@@ -60,6 +60,7 @@ from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
+from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace
@@ -114,6 +115,10 @@ class Jarvis:
         self._companion_perception: CompanionPerceptionSource = (
             companion_perception or SilentCompanionPerception()
         )
+        # Presentation only (Vision §40, §38): voices a decided reply in the companion's
+        # language. Rides on the session object for the surface to use; the cognitive
+        # core never calls it. Identity by default -> the canonical reply, unchanged.
+        self._voice: ResponseRenderer = IdentityRenderer()
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
         self._refutations: RefutationRepository = (
@@ -166,6 +171,19 @@ class Jarvis:
     def set_companion_perception(self, source: CompanionPerceptionSource) -> None:
         """Swap the companion perceiver at runtime (Vision §5, §38), like the world one."""
         self._companion_perception = source
+
+    @property
+    def voice(self) -> ResponseRenderer:
+        """The presentation renderer that voices a decided reply (Vision §40).
+
+        Edge concern, not cognition: the surface uses it to phrase Jarvis's reply in the
+        companion's language. It never changes what Jarvis concluded (§38).
+        """
+        return self._voice
+
+    def set_voice(self, renderer: ResponseRenderer) -> None:
+        """Swap the reply renderer at runtime (matches the active provider)."""
+        self._voice = renderer
 
     def note_companion(self, utterance: str) -> tuple[Belief, ...]:
         """Learn about the companion from what they said (Vision §5, §38).

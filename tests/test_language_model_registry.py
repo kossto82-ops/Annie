@@ -86,6 +86,8 @@ class TestOpenAiCompatibleModel:
         assert reply == "hello from the model"
         assert transport.url == "https://api.groq.com/openai/v1/chat/completions"
         assert transport.headers["Authorization"] == "Bearer secret-key"
+        # A real User-Agent is sent so Cloudflare-fronted providers don't 403 (code 1010).
+        assert transport.headers["User-Agent"] == "Jarvis/1.0"
         sent = json.loads(transport.body)
         assert sent["model"] == "llama-3.3-70b"
         assert sent["messages"] == [{"role": "user", "content": "hi"}]

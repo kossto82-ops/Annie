@@ -37,6 +37,7 @@ from jarvis.infrastructure.perceiver_factory import (
     available_providers,
     build_companion_perceiver,
     build_perceiver,
+    build_renderer,
     describe,
 )
 from jarvis.jarvis import Jarvis
@@ -162,8 +163,22 @@ def _say(jarvis: Jarvis, payload: Reply) -> Reply:
     text = str(payload.get("text", "")).strip()
     if not text:
         return {"reply": "I'm here — say something and I'll reason about it.", "speak": False}
-    episode = jarvis.perceive(text, trigger=text)
-    learned = jarvis.note_companion(text)  # the relational channel (Vision §5)
+    try:
+        # Both channels touch the language model when an LLM perceiver is active; a
+        # provider/network/credential failure here must not 500 — surface it clearly.
+        episode = jarvis.perceive(text, trigger=text)
+        learned = jarvis.note_companion(text)  # the relational channel (Vision §5)
+    except Exception as error:  # noqa: BLE001 - the external-provider boundary
+        return {
+            "reply": (
+                f"I couldn't reach the language model ({type(error).__name__}). "
+                "Check the provider, model, and API key in Tools — or switch back to the "
+                "keyword perceiver."
+            ),
+            "speak": True,
+            "provenance": None,
+            "trace": [],
+        }
     trace = _trace_steps(jarvis.trace_of(episode))
     belief = episode.working_belief
     if belief is None:
@@ -194,7 +209,10 @@ def _say(jarvis: Jarvis, payload: Reply) -> Reply:
             "provenance": _provenance(belief),
             "trace": trace,
         }
-    return _augment_with_companion(result, learned)
+    result = _augment_with_companion(result, learned)
+    # Voice the decided reply in the companion's language (identity offline, Vision §40).
+    result["reply"] = jarvis.voice.phrase(str(result["reply"]), like=text)
+    return result
 
 
 def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -207,13 +225,15 @@ def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
     belief = jarvis.beliefs.get_by_statement(working_statement(topic))
     if belief is None:
         return {
-            "reply": f'I don\'t hold a view on "{topic}" yet.',
+            "reply": jarvis.voice.phrase(f'I don\'t hold a view on "{topic}" yet.', like=topic),
             "speak": True,
             "provenance": None,
         }
     explanation = belief.explain()
     return {
-        "reply": explanation.narrate(subject_of(explanation.statement)),
+        "reply": jarvis.voice.phrase(
+            explanation.narrate(subject_of(explanation.statement)), like=topic
+        ),
         "speak": True,
         "confidence": belief.confidence.value,
         "provenance": _provenance(belief),
@@ -302,12 +322,13 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     # saved to .env, but never echoed back in any reply or snapshot.
     api_key = str(payload.get("api_key", "")).strip()
     is_real = provider.lower() not in _OFFLINE_PERCEIVERS
-    if api_key and is_real and not model:
-        # Don't stage/persist a half-formed config: a real provider needs a model.
+    if is_real and not model:
+        # A real provider needs a model — reject before staging/persisting anything.
         return {"error": f"a model id is required for provider {provider!r} (e.g. llama-3.3-70b)"}
-    staged: dict[str, str] | None = None
-    if api_key:
-        staged = llm_config_store.stage(provider, model, base_url, api_key)
+    # Apply the choice to the live process and build from it. The key is only-from-env:
+    # `stage` sets any provided key (write-only) plus the non-secret provider/model so a
+    # bare model fix (no key) also takes effect immediately.
+    staged = llm_config_store.stage(provider, model, base_url, api_key)
     try:
         source = build_perceiver(provider, model, base_url)
     except ValueError as error:
@@ -316,10 +337,13 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     # Switch the relational perceiver to the same provider, so talking to Jarvis both
     # reasons about the world and learns about you through one model (Vision §5).
     jarvis.set_companion_perception(build_companion_perceiver(provider, model, base_url))
-    if staged is not None:
-        llm_config_store.persist(staged)  # survive a restart; never returns the key
+    # And voice replies in the companion's language through the same model (Vision §40).
+    jarvis.set_voice(build_renderer(provider, model, base_url))
+    # Persist on every switch so the choice (and model fixes) survive a restart; the key
+    # line is only written when a key was provided, and is never read back into a reply.
+    llm_config_store.persist(staged)
     described = describe(jarvis.perception)
-    saved = " Key saved to the server's .env." if api_key else ""
+    saved = " Key saved to .env." if api_key else ""
     if described.get("kind") == "keyword":
         return {
             "reply": f"Perceiver set to the keyword rule (no LLM in judgment).{saved}",
@@ -372,7 +396,8 @@ def _parse(body: bytes) -> Reply:
         return {}
     try:
         loaded: object = json.loads(body)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # Malformed or non-UTF-8 body -> empty payload, never a 500.
         return {}
     return cast("Reply", loaded) if isinstance(loaded, dict) else {}
 

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 97)
+Last updated: 2026-08-26 (Increment 98)
 
 ---
 
@@ -1336,6 +1336,30 @@ with belief + episode events dispatched through the NervousSystem at each step.
   companion belief and the command center surfaces it in the reply + snapshot. New tests
   `tests/test_companion_perception.py` + `TestCompanionChannel`.
 - Gates: ruff clean · pytest 479 passed, 3 skipped.
+
+### Increment 98 — live LLM works end-to-end, and Jarvis speaks the companion's language ✅ (2026-08-26)
+- **Track B goes truly live (real Groq), and three real bugs that blocked it are fixed:**
+  1. **`.env` was written but never read** — a saved provider/model/key never resumed; every restart fell
+     back to keyword. Added `llm_config_store.load_env_file()` (dependency-free; real env vars still win),
+     called in `server.run()`. **This was the "it won't configure" root cause.**
+  2. **No `User-Agent`** — Cloudflare-fronted providers (Groq) returned `403` (error 1010). The generic
+     adapter now sends `User-Agent: Jarvis/1.0`.
+  3. **The switch only persisted when a key was passed** — a bare model fix (or keyless Ollama) was lost on
+     restart. `perceiver` now stages + persists on every switch (key still only-from-env).
+- **Resilience:** an LLM/provider failure in `say` no longer 500s — it returns a clear, actionable message
+  ("couldn't reach the language model … check provider/model/key in Tools"). `_parse` also tolerates a
+  non-UTF-8 request body instead of crashing.
+- **The voice speaks the companion's language (Vision §40, §38):** new `ResponseRenderer` seam —
+  `IdentityRenderer` (offline: canonical reply unchanged) and `LlmResponseRenderer` (rephrases a *decided*
+  reply in the language of the user's message, preserving every fact; model error → original reply). Built
+  from the same provider, set on `Jarvis.voice` alongside the perceivers; `_say`/`_explain` voice their reply.
+- **Verified live against Groq (openai/gpt-oss-20b):** *"Hola Jarvis, me llamo Roberto y me encanta la
+  montaña"* → understood in Spanish, replied in Spanish (*"Recordaré esto sobre ti: se llama Roberto; le
+  gusta la montaña"*), and learned `is named Roberto` / `likes the mountain`. Both channels + the voice work
+  end-to-end.
+- Gates: ruff clean · pytest 491 passed, 3 skipped (new `tests/test_response_renderer.py` + loader/UA/voice
+  tests). Note: reply *scaffolding* is now localized; stored companion traits remain canonical English (panel
+  shows English traits, chat is in-language) — a later polish.
 
 ---
 

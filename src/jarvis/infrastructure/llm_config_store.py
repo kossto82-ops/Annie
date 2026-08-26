@@ -60,6 +60,32 @@ def stage(
     return updates
 
 
+def load_env_file(
+    env_path: str | Path | None = None,
+    environ: MutableMapping[str, str] | None = None,
+) -> None:
+    """Load ``KEY=VALUE`` lines from ``.env`` into the environment at startup.
+
+    The missing half of `persist`: a saved provider/model/key only resumes across a
+    restart if something reads the file back. This is a tiny, dependency-free reader —
+    it skips blanks and ``#`` comments, splits on the first ``=``, and **never overrides
+    a variable already set in the real environment** (an explicit env var wins over the
+    file). Absent file → no-op. Values (including the API key) are set, never logged.
+    """
+    env = environ if environ is not None else os.environ
+    path = Path(env_path or env.get(_ENV_FILE_VAR) or _DEFAULT_ENV_FILE)
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        key = key.strip()
+        if key and key not in env:  # a real environment variable always wins
+            env[key] = value.strip()
+
+
 def persist(
     updates: dict[str, str],
     *,

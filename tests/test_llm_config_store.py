@@ -54,3 +54,30 @@ class TestPersist:
         )
         assert written == path
         assert path.exists()
+
+
+class TestLoadEnvFile:
+    def test_it_loads_saved_values_into_the_environment(self, tmp_path: Path) -> None:
+        path = tmp_path / ".env"
+        path.write_text(
+            "# saved by the panel\nJARVIS_LLM_PROVIDER=groq\nJARVIS_LLM_MODEL=llama-3.3-70b\n"
+            "JARVIS_LLM_API_KEY=gsk_secret\n",
+            encoding="utf-8",
+        )
+        env: dict[str, str] = {}
+        llm_config_store.load_env_file(env_path=path, environ=env)
+        assert env["JARVIS_LLM_PROVIDER"] == "groq"
+        assert env["JARVIS_LLM_MODEL"] == "llama-3.3-70b"
+        assert env["JARVIS_LLM_API_KEY"] == "gsk_secret"
+
+    def test_a_real_environment_variable_wins_over_the_file(self, tmp_path: Path) -> None:
+        path = tmp_path / ".env"
+        path.write_text("JARVIS_LLM_PROVIDER=groq\n", encoding="utf-8")
+        env = {"JARVIS_LLM_PROVIDER": "ollama"}
+        llm_config_store.load_env_file(env_path=path, environ=env)
+        assert env["JARVIS_LLM_PROVIDER"] == "ollama"  # explicit env is not overridden
+
+    def test_a_missing_file_is_a_no_op(self, tmp_path: Path) -> None:
+        env: dict[str, str] = {}
+        llm_config_store.load_env_file(env_path=tmp_path / "nope.env", environ=env)
+        assert env == {}

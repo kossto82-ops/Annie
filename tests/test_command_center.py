@@ -117,6 +117,26 @@ class TestCompanionChannel:
         assert "remember this about you" not in str(result["reply"])
 
 
+class _UpperVoice:
+    """A stand-in renderer: proves the reply is passed through jarvis.voice."""
+
+    def phrase(self, reply: str, like: str) -> str:
+        return reply.upper()
+
+
+class TestVoice:
+    def test_say_replies_are_voiced_through_the_renderer(self) -> None:
+        jarvis = Jarvis()
+        jarvis.set_voice(_UpperVoice())
+        result = handle(jarvis, "say", {"text": "hola"})
+        assert str(result["reply"]) == str(result["reply"]).upper()
+
+    def test_the_default_voice_leaves_the_reply_untouched(self) -> None:
+        result = handle(Jarvis(), "say", {"text": "the deploy definitely succeeded"})
+        # IdentityRenderer default: canonical English reply, unchanged.
+        assert "I hold" in str(result["reply"])
+
+
 class TestReasoning:
     def test_say_carries_provenance_and_a_step_trace(self) -> None:
         jarvis = Jarvis(perception=_YesPerception())
@@ -230,6 +250,14 @@ class TestTuning:
 
 
 class TestPerceiver:
+    @pytest.fixture(autouse=True)
+    def _isolate_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Every switch now stages into the process env and persists to .env; point that
+        # file at a temp path and revert the JARVIS_LLM_* vars so no test leaks config.
+        monkeypatch.setenv("JARVIS_ENV_FILE", str(tmp_path / ".env"))
+        for var in ("PROVIDER", "MODEL", "BASE_URL", "API_KEY"):
+            monkeypatch.delenv(f"JARVIS_LLM_{var}", raising=False)
+
     def test_snapshot_reports_the_live_perceiver_and_available_ones(self) -> None:
         # A default Jarvis reads the world with the keyword rule.
         state = snapshot(Jarvis())
@@ -266,19 +294,7 @@ class TestPerceiver:
         assert "error" in result
         assert "model" in str(result["error"]).lower()
 
-    @staticmethod
-    def _isolate_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
-        # Record the JARVIS_LLM_* vars so monkeypatch reverts whatever `stage` sets in
-        # the real process env — keeping this test from leaking into others.
-        for var in ("PROVIDER", "MODEL", "BASE_URL", "API_KEY"):
-            monkeypatch.delenv(f"JARVIS_LLM_{var}", raising=False)
-
-    def test_an_api_key_is_saved_to_env_and_never_echoed(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        self._isolate_llm_env(monkeypatch)
-        env_file = tmp_path / ".env"
-        monkeypatch.setenv("JARVIS_ENV_FILE", str(env_file))
+    def test_an_api_key_is_saved_to_env_and_never_echoed(self, tmp_path: Path) -> None:
         secret = "gsk_do_not_leak_me"
         result = handle(
             Jarvis(),
@@ -286,22 +302,26 @@ class TestPerceiver:
             {"provider": "groq", "model": "llama-3.3-70b", "api_key": secret},
         )
         # The key is persisted for a restart...
-        assert "JARVIS_LLM_API_KEY=" + secret in env_file.read_text(encoding="utf-8")
+        assert "JARVIS_LLM_API_KEY=" + secret in (tmp_path / ".env").read_text(encoding="utf-8")
         # ...but never echoed back anywhere in the reply or the live snapshot.
         assert result["saved"] is True
         assert secret not in json.dumps(result)
 
-    def test_a_key_without_a_model_is_rejected_before_being_saved(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        self._isolate_llm_env(monkeypatch)
-        env_file = tmp_path / ".env"
-        monkeypatch.setenv("JARVIS_ENV_FILE", str(env_file))
+    def test_a_key_without_a_model_is_rejected_before_being_saved(self, tmp_path: Path) -> None:
         result = handle(
             Jarvis(), "perceiver", {"provider": "groq", "api_key": "gsk_secret"}
         )
         assert "error" in result
-        assert not env_file.exists()  # nothing half-formed was written
+        assert not (tmp_path / ".env").exists()  # nothing half-formed was written
+
+    def test_switching_the_model_persists_without_re_entering_the_key(
+        self, tmp_path: Path
+    ) -> None:
+        # Fixing just the model (no key) must take effect AND survive a restart.
+        handle(Jarvis(), "perceiver", {"provider": "groq", "model": "wrong-model"})
+        env_text = (tmp_path / ".env").read_text(encoding="utf-8")
+        assert "JARVIS_LLM_MODEL=wrong-model" in env_text
+        assert "JARVIS_LLM_PROVIDER=groq" in env_text
 
 
 class TestUnknownCommand:
@@ -340,4 +360,9 @@ class TestRoute:
 
     def test_malformed_body_is_tolerated(self) -> None:
         response = route(Jarvis(), "POST", "/api/say", b"not json at all")
+        assert response.status == 200
+
+    def test_non_utf8_body_is_tolerated(self) -> None:
+        # A body that isn't valid UTF-8 must not 500 (Latin-1 "ñ" = 0xf1).
+        response = route(Jarvis(), "POST", "/api/say", b'{"text": "monta\xf1a"}')
         assert response.status == 200

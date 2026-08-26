@@ -54,7 +54,9 @@ class OpenAiCompatibleModel:
     def complete(self, prompt: str) -> str:
         settings = self._settings
         url = f"{self._base_url.rstrip('/')}/chat/completions"
-        headers = {"Content-Type": "application/json"}
+        # A real User-Agent is required: some providers front their API with Cloudflare,
+        # which blocks the default `Python-urllib` signature with a 403 (error 1010).
+        headers = {"Content-Type": "application/json", "User-Agent": "Jarvis/1.0"}
         if settings.api_key:  # local SLMs may need no key
             headers["Authorization"] = f"Bearer {settings.api_key}"
         body = json.dumps(

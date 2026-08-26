@@ -25,7 +25,9 @@ from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.language_model_registry import available, build_language_model
 from jarvis.infrastructure.llm_companion_perception import LlmCompanionPerception
 from jarvis.infrastructure.llm_perception import LlmPerception
+from jarvis.infrastructure.llm_response_renderer import LlmResponseRenderer
 from jarvis.infrastructure.provider_settings import ProviderSettings
+from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 
 _PREFIX = "JARVIS_LLM_"
@@ -93,6 +95,17 @@ def companion_perceiver_from_settings(
     return LlmCompanionPerception(build_language_model(settings))
 
 
+def renderer_from_settings(settings: ProviderSettings) -> ResponseRenderer:
+    """The reply renderer (Vision §40) for fully-formed settings.
+
+    Offline -> the identity renderer (canonical reply, unchanged); a real provider -> an
+    LLM voice over the same model, so replies come back in the companion's language.
+    """
+    if settings.provider in _OFFLINE or not settings.model:
+        return IdentityRenderer()
+    return LlmResponseRenderer(build_language_model(settings))
+
+
 def _settings_from_ui(
     provider: str, model: str, base_url: str | None, environ: Mapping[str, str] | None
 ) -> ProviderSettings:
@@ -143,3 +156,20 @@ def build_companion_perceiver(
     return companion_perceiver_from_settings(
         _settings_from_ui(provider, model, base_url, environ)
     )
+
+
+def build_renderer(
+    provider: str,
+    model: str = "",
+    base_url: str | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> ResponseRenderer:
+    """Build the reply renderer from the UI's non-secret choice (Vision §40).
+
+    Offline -> identity (canonical reply); a real provider -> an LLM voice over the same
+    model, keyed from the environment only, so replies are phrased in the user's language.
+    """
+    name = provider.strip().lower()
+    if name in _OFFLINE:
+        return IdentityRenderer()
+    return renderer_from_settings(_settings_from_ui(provider, model, base_url, environ))
