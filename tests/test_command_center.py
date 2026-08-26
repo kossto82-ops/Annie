@@ -97,6 +97,19 @@ class TestReasoning:
         assert steps[0] == "started"
         assert steps[-1] == "concluded"
 
+    def test_the_internal_working_label_never_leaks_to_the_user(self) -> None:
+        # Grounded and ungrounded replies must both name the subject in plain words,
+        # never the internal "Working conclusion about:" identity label.
+        grounded = handle(
+            Jarvis(perception=_YesPerception()), "say", {"text": "the build passed"}
+        )
+        assert "Working conclusion about" not in json.dumps(grounded)
+        prov = cast("dict[str, object]", grounded["provenance"])
+        assert prov["statement"] == "the build passed"
+        ungrounded = handle(Jarvis(), "say", {"text": "hola jarvis"})
+        assert "Working conclusion about" not in json.dumps(ungrounded)
+        assert "hola jarvis" in str(ungrounded["reply"])
+
     def test_ungrounded_say_still_returns_a_trace_and_empty_grounds(self) -> None:
         # With no evidence Jarvis still forms an (empty) working belief and concludes
         # honestly — the panel shows a real trace with no grounds, not a fabrication.

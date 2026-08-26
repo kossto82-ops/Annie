@@ -116,11 +116,17 @@ class BeliefExplanation:
     supporting: tuple[Evidence, ...]
     contradicting: tuple[Evidence, ...]
 
-    def narrate(self) -> str:
-        """Render a human-readable account of why the belief is held."""
+    def narrate(self, subject: str | None = None) -> str:
+        """Render a human-readable account of why the belief is held.
+
+        ``subject`` overrides the phrase used to name the belief in the text (the
+        surface passes the natural subject so an internal identity label is never
+        shown); when omitted, the belief's own statement is used.
+        """
+        name = subject if subject is not None else self.statement
         if not self.supporting and not self.contradicting:
             return (
-                f'I don\'t hold a view on "{self.statement}" yet — I have no '
+                f'I don\'t hold a view on "{name}" yet — I have no '
                 "evidence. I would need observations before concluding."
             )
 
@@ -140,7 +146,7 @@ class BeliefExplanation:
         )
 
         parts = [
-            f'I hold "{self.statement}" with {confidence_label} confidence '
+            f'I hold "{name}" with {confidence_label} confidence '
             f"({confidence:.2f}), {stability_label}."
         ]
         if self.supporting:

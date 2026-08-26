@@ -47,7 +47,11 @@ from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
-from jarvis.executive.executive_controller import ExecutiveController, working_statement
+from jarvis.executive.executive_controller import (
+    ExecutiveController,
+    subject_of,
+    working_statement,
+)
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.in_memory_refutation_store import InMemoryRefutationStore
@@ -497,7 +501,7 @@ class Jarvis:
         # companion belief. The belief persists in the beliefs store under its trigger.
         contested = self._contested_working_belief()
         if contested is not None:
-            topic = contested.statement.removeprefix("Working conclusion about: ")
+            topic = subject_of(contested.statement)
             return CuriosityImpulse(
                 trigger=f"Resolve the tension in what I concluded about: {topic}",
                 rationale=f'what I concluded about "{topic}" is contested by my evidence',

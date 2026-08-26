@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 94)
+Last updated: 2026-08-26 (Increment 95)
 
 ---
 
@@ -1287,6 +1287,23 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - **Verified in a real browser:** boot shows the unobscured face + narrower chat, header pill `keyword`,
   15 providers in the select; the drawer slides in with all four cards and a contained masked key field;
   toggling open/close works. Zero JS console errors.
+
+### Increment 95 — stop leaking the machine label; honest reply for a claimless input ✅ (2026-08-26)
+- **Bug: the internal working-belief identity ("Working conclusion about: …") leaked into every chat reply
+  and the provenance panel** — a greeting came back as *I don't hold a view on "Working conclusion about:
+  Hola Jarvis" yet*. The prefix is machine bookkeeping (D17 identity), never for the companion's eyes.
+- Fix at the seam: `executive_controller` gets a `subject_of()` (inverse of `working_statement`, sharing one
+  `_WORKING_PREFIX` constant); `BeliefExplanation.narrate(subject=…)` takes an optional display subject
+  (default unchanged). The command center passes the natural subject in `_say`/`_explain` and cleans
+  `_provenance.statement`, so no reply or snapshot ever shows the internal label.
+- **Honest, not robotic:** an input with no extractable evidence (a bare "Hola Jarvis") now replies around
+  the user's own words — *I can't ground a view on "Hola Jarvis" yet — there's nothing in it I can take as
+  evidence. Tell me something with a claim in it and I'll reason from it* — still §37 honest silence, no
+  invented view, and NOT scripted small-talk (the engine stays evidence-first, not a chatbot).
+- **Verified (HTTP + browser):** greeting reply is clean and label-free; a grounded cue ("… definitely
+  succeeded") narrates the natural subject with real grounds; `"Working conclusion about"` appears in no
+  reply or provenance. New guard test `test_the_internal_working_label_never_leaks_to_the_user`.
+- Gates: ruff clean · pytest 469 passed, 3 skipped.
 
 ---
 

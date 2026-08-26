@@ -31,7 +31,7 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.evidence import Evidence
-from jarvis.executive.executive_controller import working_statement
+from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.perceiver_factory import (
     available_providers,
@@ -102,7 +102,8 @@ def _provenance(belief: Belief) -> Reply:
     """
     explanation = belief.explain()
     return {
-        "statement": explanation.statement,
+        # The natural subject, never the internal "Working conclusion about:" label.
+        "statement": subject_of(explanation.statement),
         "confidence": explanation.confidence.value,
         "supporting": [_evidence_json(e) for e in explanation.supporting],
         "contradicting": [_evidence_json(e) for e in explanation.contradicting],
@@ -144,18 +145,32 @@ def _say(jarvis: Jarvis, payload: Reply) -> Reply:
     episode = jarvis.perceive(text, trigger=text)
     trace = _trace_steps(jarvis.trace_of(episode))
     belief = episode.working_belief
-    if belief is not None:
+    if belief is None:
         return {
-            "reply": belief.explain().narrate(),
+            "reply": "I don't have enough grounded evidence to form a view on that yet.",
+            "speak": True,
+            "provenance": None,
+            "trace": trace,
+        }
+    explanation = belief.explain()
+    if explanation.supporting or explanation.contradicting:
+        # A grounded belief: narrate it in the companion's own words (no internal label).
+        return {
+            "reply": explanation.narrate(subject_of(explanation.statement)),
             "speak": True,
             "confidence": belief.confidence.value,
             "provenance": _provenance(belief),
             "trace": trace,
         }
+    # No evidence yet — honest, and phrased around what was actually said, not a
+    # machine "view" on a greeting. Still shows the (empty) provenance + trace.
     return {
-        "reply": "I don't have enough grounded evidence to form a view on that yet.",
+        "reply": (
+            f'I can\'t ground a view on "{text}" yet — there\'s nothing in it I can '
+            "take as evidence. Tell me something with a claim in it and I'll reason from it."
+        ),
         "speak": True,
-        "provenance": None,
+        "provenance": _provenance(belief),
         "trace": trace,
     }
 
@@ -174,8 +189,9 @@ def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": True,
             "provenance": None,
         }
+    explanation = belief.explain()
     return {
-        "reply": belief.explain().narrate(),
+        "reply": explanation.narrate(subject_of(explanation.statement)),
         "speak": True,
         "confidence": belief.confidence.value,
         "provenance": _provenance(belief),

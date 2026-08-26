@@ -52,12 +52,28 @@ LOW_STABILITY_THRESHOLD = 0.2
 LEARNED_HABIT_THRESHOLD = 0.5
 
 
+# The internal identity prefix for a working conclusion. It disambiguates working
+# beliefs from other belief kinds and keeps retrieval deterministic (D17) — but it is
+# machine bookkeeping, never shown to the companion (use `subject_of` at the surface).
+_WORKING_PREFIX = "Working conclusion about: "
+
+
 def working_statement(trigger: str) -> str:
     """The statement of the belief an episode reasons toward for ``trigger``.
 
     Deterministic, so the same trigger retrieves the same belief across episodes.
     """
-    return f"Working conclusion about: {trigger}"
+    return f"{_WORKING_PREFIX}{trigger}"
+
+
+def subject_of(statement: str) -> str:
+    """The natural subject behind a working-conclusion statement, for display.
+
+    Strips the internal `_WORKING_PREFIX` so the surface can name what a belief is
+    *about* in the companion's own words, never the machine label. A statement without
+    the prefix (a self-tendency, a companion trait) is returned unchanged.
+    """
+    return statement.removeprefix(_WORKING_PREFIX)
 
 
 def _assess_attention(belief: Belief, *, given_new_evidence: bool) -> Attention:
