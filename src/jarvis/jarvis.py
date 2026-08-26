@@ -88,6 +88,7 @@ class Jarvis:
         perception: PerceptionSource | None = None,
         refutations_store: RefutationRepository | None = None,
         energy_costs: EnergyCosts | None = None,
+        energy_budget: int | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -110,6 +111,12 @@ class Jarvis:
         # here (accumulated), not yet a budget that constrains attention.
         self._energy_costs = energy_costs or EnergyCosts()
         self._energy_spent = 0
+        # An optional current-capacity budget (Vision §15): when it runs low Jarvis
+        # conserves -- answering briefly rather than running the full lifecycle --
+        # and recovers on `rest()`. Config-driven (Track E). None = no budget, so
+        # behaviour is identical to before. Distinct from the cumulative tally above.
+        self._energy_budget = energy_budget
+        self._energy_available = energy_budget if energy_budget is not None else 0
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         self._executive = ExecutiveController(
@@ -160,16 +167,43 @@ class Jarvis:
         (Vision §15). Every episode-running path goes through here so spent energy
         reflects all the thinking Jarvis actually did.
         """
-        result = self._executive.run(episode, evidence)
-        self._energy_spent += self._energy_costs.for_attention(episode.attention)
+        result = self._executive.run(episode, evidence, conserve=self._should_conserve())
+        cost = self._energy_costs.for_attention(episode.attention)
+        self._energy_spent += cost
+        if self._energy_budget is not None:
+            self._energy_available = max(0, self._energy_available - cost)
         return result
+
+    def _should_conserve(self) -> bool:
+        """True when the budget is low enough that a full episode should be avoided."""
+        return (
+            self._energy_budget is not None
+            and self._energy_available < self._energy_costs.full
+        )
 
     def energy_spent(self) -> int:
         """Total cognitive energy spent so far (Vision §15) — the accumulated cost of
         every episode run, FULL costing more than BRIEF. Read-only; zero for a fresh
-        Jarvis. Not yet a budget that constrains attention, only an honest tally.
+        Jarvis. This is the lifetime tally, separate from the recoverable budget.
         """
         return self._energy_spent
+
+    def energy_remaining(self) -> int | None:
+        """Current energy left in the recoverable budget (Vision §15), or None when
+        no budget is set. Depletes as episodes run; restored by :meth:`rest`.
+        """
+        return self._energy_available if self._energy_budget is not None else None
+
+    def is_conserving(self) -> bool:
+        """True when Jarvis is low enough on energy to answer briefly to conserve."""
+        return self._should_conserve()
+
+    def rest(self) -> None:
+        """Restore energy to full (Vision §15) — this is fatigue, not a hard cap.
+        A no-op when no budget is set.
+        """
+        if self._energy_budget is not None:
+            self._energy_available = self._energy_budget
 
     def perceive(
         self, observation: str, trigger: str | None = None, goal: Goal | None = None
@@ -357,6 +391,10 @@ class Jarvis:
             f"This rests on {episodes} past episode(s); everything here is "
             "provisional and open to revision."
         )
+        if self.is_conserving():
+            lines.append(
+                "I am low on energy right now, so I am thinking briefly to conserve."
+            )
         return "\n".join(lines)
 
     def state_summary(self) -> StateSummary:

@@ -46,6 +46,9 @@ _PUBLIC_METHODS = (
     "introspect",
     "state_summary",
     "energy_spent",
+    "energy_remaining",
+    "is_conserving",
+    "rest",
     # Goals & relationship
     "recurring_goals",
     "reflection_effort",

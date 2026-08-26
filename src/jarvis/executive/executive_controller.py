@@ -88,7 +88,11 @@ class ExecutiveController:
         self._companion = companion
 
     def run(
-        self, episode: CognitiveEpisode, evidence: Iterable[Evidence] = ()
+        self,
+        episode: CognitiveEpisode,
+        evidence: Iterable[Evidence] = (),
+        *,
+        conserve: bool = False,
     ) -> CognitiveEpisode:
         """Drive ``episode`` to COMPLETED, grounding its decision in evidence.
 
@@ -96,13 +100,21 @@ class ExecutiveController:
         continuity across episodes (Vision §3); otherwise a fresh one is formed.
         Attention (Vision §14) routes the depth: a confidently-known trigger with
         no new evidence is answered briefly, skipping the deeper integration.
+
+        ``conserve`` (Vision §15): when energy is low, a would-be FULL episode that
+        carries no new evidence is answered briefly instead of running the full
+        lifecycle -- but only then, since dropping to BRIEF while new evidence is
+        present would discard that evidence. It economises, it never loses input.
         """
         pieces = list(evidence)
         self._flush(episode)  # dispatch EpisodeStarted recorded at construction
 
         episode.begin_reasoning()
         belief = self._resolve_working_belief(episode)
-        episode.attend(_assess_attention(belief, given_new_evidence=bool(pieces)))
+        attention = _assess_attention(belief, given_new_evidence=bool(pieces))
+        if conserve and attention is Attention.FULL and not pieces:
+            attention = Attention.BRIEF
+        episode.attend(attention)
         if episode.attention is Attention.FULL:
             self._seed_from_companion(episode)
             for piece in pieces:

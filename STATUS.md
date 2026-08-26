@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-25 (Increment 84)
+Last updated: 2026-08-25 (Increment 85)
 
 ---
 
@@ -1091,6 +1091,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
   decline) under load. Deliberations (`consider`) are not charged yet (documented).
 - Gates: ruff clean · pyright strict 0 errors · pytest 391 passed.
 
+### Increment 85 — a cognitive-energy budget: a tired mind economises (Track C, §15) ✅ (2026-08-25)
+- Cost is no longer just visible — it *constrains*. `Jarvis(energy_budget=…)` (config-driven, Track E) is
+  a recoverable current-capacity meter. When it drops below the FULL cost, `is_conserving()` is true and a
+  would-be FULL episode is answered **BRIEF** — the executive's `run(..., conserve=True)` downgrades it,
+  but *only* when the episode carries no new evidence (dropping to BRIEF with evidence present would
+  discard it; economise, never lose input) (Vision §15, §14).
+- `energy_remaining()` reports the meter (None when no budget); `rest()` restores it (fatigue, not a hard
+  cap); `introspect()` says "I am low on energy … thinking briefly to conserve" when conserving. With no
+  budget set (default) behaviour is **identical to before**. Verified: budget 5 → FULL (−3) → conserving
+  → BRIEF, BRIEF → `rest()` → full again; an evidence-bearing episode stays FULL even at budget 1.
+- Honest, config-driven, no LLM. Next §15/Track-D steps optional; the strategic fork (Track B LLM vs more
+  Track C/D) is below.
+- Gates: ruff clean · pyright strict 0 errors · pytest 397 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1281,42 +1295,27 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ---
 
-## Next increment (recommended, not yet started)
+## Next increment — a strategic fork (your call)
 
-**§15 step 2 — a cognitive-energy budget that makes attention choose (Vision §15, §14).** Increment 84
-makes cost *visible*; the point of §15 is that a tired/loaded mind *economises*. Smallest honest step:
-- Give `Jarvis` an optional energy budget (config-driven, `Jarvis(energy_budget=…)` — honour Track E:
-  injectable, tunable). Track remaining energy (`energy_remaining()`); when it runs low, a would-be FULL
-  episode is downgraded to BRIEF (answer from what is already known rather than the full lifecycle), and
-  `state_summary`/`introspect` can say Jarvis is "conserving". Energy recovers over time or on demand
-  (`rest()`), so this is fatigue, not a hard cap.
-- Keep it truthful: with no budget set (default), nothing changes — behaviour is identical to today. The
-  downgrade is honest ("I'm answering briefly to conserve"), never a fabricated shortcut. No LLM.
-- Behaviour tests: under a low budget a normally-FULL episode runs BRIEF; with ample/no budget it stays
-  FULL; `rest()` restores capacity; the tally still accrues.
-
----
-
-## After that — a strategic fork (your call)
-
-Track A (the reflective cycle) is complete and persistent; Track C (§15) is underway. The two big
-remaining external directions are genuine forks; I will not pick between them silently.
+Track A (the reflective cycle) is complete and persistent; **Track C (§15 energy) has both its seams
+done** (cost visible + a fatigue budget, Increments 84–85). The remaining directions:
 
 - **Track B — an LLM-backed `PerceptionSource` (§32).** The highest external-value jump: it is what lets
-  Jarvis understand *real* language instead of the toy keyword rule. But it needs an explicit design
-  decision first — which provider, where the API secret lives, how offline/CI tests still run, and how
-  the §38 boundary is enforced (the LLM produces `Evidence`, never decides). **Gated: we design before any
-  code.** When you say "go Track B", the next step is a short design increment (interface + a stub/faked
-  adapter proving the seam), not a live API call.
-- **Track C — §15 cognitive energy (self-contained).** A per-episode cost (FULL > BRIEF), accumulated and
-  exposed, later a budget that makes attention *choose* BRIEF under load. No deps, stays stdlib-only,
-  deepens the Increment-33 attention machinery. Can start immediately.
+  Jarvis understand *real* language instead of the toy keyword rule. Gated on an explicit design decision
+  — which provider, where the API secret lives, how offline/CI tests still run, and the §38 boundary (the
+  LLM produces `Evidence`, never decides). **Must be provider-swappable via config (user requirement,
+  Track B/[[jarvis-user-requirements]]).** When you say "go Track B", the next step is a design increment
+  (provider-agnostic interface + a stub adapter proving the seam), not a live API call.
+- **Track E — Command Center** (chat with Jarvis + tune params). Captured as a user requirement; likely
+  lands after Track B (real language). The config-surface work (making tunables injectable) proceeds
+  opportunistically as we add each knob.
+- **Track C/D leftovers (opportunistic).** More §15 (charge deliberations; energy recovery over time);
+  unify the two `CognitiveEpisode` shapes; `TemporalStability` for hypotheses; injectable weighting
+  policy; persist traces.
 
-Meanwhile, small opportunistic Track D finish-offs remain (unify the two `CognitiveEpisode` shapes;
-`TemporalStability` for hypotheses; injectable weighting policy; persist traces).
-
-*Recommendation: if you want the biggest leap and are ready to decide provider/secrets, say Track B and we
-design it first. If you want to keep the pure, dependency-free momentum, say Track C and I start §15 now.*
+*Recommendation: Track B is the biggest leap and the natural next big move — say the word and I write the
+design increment first (no live API, provider-agnostic seam + stub). Otherwise I pick up an opportunistic
+Track C/D finish-off.*
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:
