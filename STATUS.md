@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-25 (Increment 86)
+Last updated: 2026-08-25 (Increment 87)
 
 ---
 
@@ -1123,6 +1123,25 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Next Track B step: a config-driven registry/factory to pick the provider by name; then a real adapter.
 - Gates: ruff clean · pyright strict 0 errors · pytest 406 passed.
 
+### Increment 87 — an open provider registry: many LLMs + local SLMs, by config ✅ (2026-08-25)
+- **Not limited to the big three (user requirement).** Key insight: nearly every provider — cloud and
+  local — speaks the OpenAI chat API, so one generic `OpenAiCompatibleModel` (a `LanguageModel`) plus an
+  extensible endpoint table covers them all. Adding a provider is a config entry, not code (Vision §32).
+- `ProviderSettings` (provider, model, base_url, api_key, timeout, temperature) + a
+  `language_model_registry`: `build_language_model(settings)`, `available()`, `register_endpoint`,
+  `register_factory`. 16 providers out of the box — OpenAI, Groq, xAI/Grok, DeepSeek, Moonshot/Kimi,
+  Mistral, Perplexity, OpenRouter, Together, **local Ollama, local LM Studio** — plus "openai-compatible"
+  for any endpoint by `base_url`, and "scripted"/"stub" (the offline default). Unknown provider → clear
+  error, never a silent fallback.
+- **No network in code paths under test, no dependency:** the HTTP send is an injectable `Transport`; the
+  default uses stdlib `urllib`, tests inject a fake and verify request shape (URL, Bearer header, model,
+  messages) and reply parsing. Local SLMs send no auth header when keyless. §38 boundary unchanged (D33):
+  the model still only returns text; `LlmPerception` turns it into evidence. Verified end-to-end via a
+  fake transport → `LlmPerception` → a grounded belief, with zero network.
+- Next Track B step: the FIRST real adapter is now just wiring the default `urllib` transport to a live
+  endpoint — the increment that decides the concrete provider + where the secret lives + the CI story.
+- Gates: ruff clean · pyright strict 0 errors · pytest 417 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1286,12 +1305,15 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 ### Track B — perception → the LLM adapter (highest external impact, separate)
 - Seam done (Increments 63–68): `PerceptionSource`, streams, provenance, contested-belief resolution.
 - **LLM seam done (Increment 86):** `LanguageModel` Protocol + `LlmPerception` (a `PerceptionSource`) +
-  `ScriptedLanguageModel` stub — provider-agnostic, §38 boundary held (D33), NO live API. Verified via stub.
-- **Open next:** (1) a config-driven registry/factory to select the provider by name/settings (the
-  swappable-by-config user requirement, made concrete); (2) a real provider adapter (an actual SDK behind
-  `LanguageModel`) — the first live-API increment, deciding provider + secret location + offline/CI story.
-- USER REQUIREMENT (2026-08-25): provider trivially swappable — satisfied structurally (inject a
-  `LanguageModel`); the registry makes it a settings change.
+  `ScriptedLanguageModel` stub — provider-agnostic, §38 boundary held (D33), NO live API.
+- **Open registry done (Increment 87):** `ProviderSettings` + `language_model_registry` +
+  generic `OpenAiCompatibleModel` (stdlib `urllib`, injectable `Transport`). 16 providers out of the box
+  incl. Groq/Grok/DeepSeek/Kimi/Mistral/Perplexity/OpenRouter/Together and **local Ollama/LM Studio**;
+  any other endpoint by `base_url`; add more with a one-line `register_endpoint`. USER REQUIREMENT
+  (many providers + local SLMs, not just the big three) — **satisfied**.
+- **Open next:** the FIRST real adapter — wire the default `urllib` transport to a live endpoint. This is
+  the first live-API increment: decides which provider to smoke-test, where the API secret lives (env
+  var, never committed), and how CI/offline stays green (default stays "scripted"; live is opt-in).
 
 ### Track C — §15 cognitive energy (self-contained, still open — CHOSEN NEXT 2026-08-25)
 - Per-episode cost (FULL > BRIEF), accumulate + expose read-only, later a budget that makes attention
@@ -1323,19 +1345,20 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Track B step 2 — a provider registry so the LLM is chosen by config (Vision §32; user requirement).**
-The seam exists (Increment 86); now make *which* model is used a settings choice, not a code edit — the
-developer's explicit requirement. Smallest honest step (still NO live API):
-- A tiny `language_model` registry/factory: `register(name, factory)` + `build_language_model(name,
-  settings)` returning a `LanguageModel`. Register the `ScriptedLanguageModel` under a name (e.g.
-  "scripted"/"stub"); real providers register themselves later. A `Jarvis`-level helper or the composition
-  root selects the perceiver from a config value.
-- Keep it truthful: unknown provider name → a clear error, never a silent fallback that hides
-  misconfiguration; the stub stays the default so tests/offline runs need no API. No dependency added.
-- Behaviour tests: building "scripted" returns a working `LanguageModel`; an unknown name errors; a
-  registered fake is selectable by name. (Then the following increment is the FIRST real adapter — an
-  actual SDK behind `LanguageModel` — which is where we decide provider + where the secret lives + the
-  offline/CI story. Flag it and we choose the provider then.)
+**Track B step 3 — the first LIVE adapter: really call one provider (Vision §32).** The registry +
+generic adapter are done and tested with a fake transport; the remaining honest step is to actually reach
+a real endpoint once. This is the first increment that touches the network and a secret, so it must be
+opt-in and CI-safe. Smallest honest step:
+- Read the API key from an **environment variable** (e.g. `JARVIS_LLM_API_KEY`), never committed or
+  hardcoded; a `build_from_env()`/settings helper assembles `ProviderSettings` from env (`JARVIS_LLM_PROVIDER`,
+  `JARVIS_LLM_MODEL`, `JARVIS_LLM_BASE_URL`). Default provider stays `"scripted"` so nothing changes without
+  explicit config.
+- A live smoke test is **skipped unless the env is set** (`pytest.mark.skipif`), so CI/offline stays green
+  with zero network; when a key is present it does one real `complete()` round-trip and asserts non-empty
+  text. Suggest starting with a **local SLM (Ollama)** — no cloud key, fully local — to prove the live path
+  cheaply, then any cloud provider is the same path with a key.
+- Keep the §38 boundary (D33) intact. Decide together: which provider to smoke first (recommend local
+  Ollama), and confirm the env-var names. Then Track E (command center) can select provider/model live.
 
 ---
 
