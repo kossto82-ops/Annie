@@ -46,6 +46,10 @@ def _strip(word: str) -> str:
 class KeywordPerception:
     """Turns certainty cues in an observation into one piece of evidence per cue."""
 
+    def describe(self) -> dict[str, str | None]:
+        """Self-report for a surface: the dumb, offline, no-LLM perceiver (Vision §35)."""
+        return {"kind": "keyword", "provider": "keyword", "model": None}
+
     def perceive(self, observation: str) -> tuple[Evidence, ...]:
         text = observation.strip()
         if not text:

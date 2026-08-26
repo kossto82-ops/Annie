@@ -17,6 +17,9 @@ dist/
 venv/
 env/
 
+# Local secrets — the command center writes JARVIS_LLM_API_KEY here; never commit it
+.env
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -92,6 +92,12 @@
   .tune label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); margin: 8px 0; }
   .tune input[type=range] { flex: 1; accent-color: var(--teal); }
   .tune .val { color: var(--teal); min-width: 34px; text-align: right; }
+  .tune select, .tune input[type=text] { flex: 1; background: #070c16; border: 1px solid var(--edge);
+    color: var(--ink); padding: 5px 8px; border-radius: 8px; font-size: 12px; outline: none; min-width: 0; }
+  .tune select:focus, .tune input[type=text]:focus { border-color: var(--teal2); }
+  .switch { width: 100%; margin: 4px 0 6px; background: var(--panel2); color: var(--ink);
+    border: 1px solid var(--edge); padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; }
+  .switch:hover { border-color: var(--teal2); color: #fff; }
   /* Reasoning panel — the mind, not just the mouth */
   .reasoning { border-top: 1px solid var(--edge); background: var(--panel); padding: 12px 16px;
     max-height: 34vh; overflow-y: auto; }
@@ -144,6 +150,13 @@
           <label><input type="checkbox" id="unbounded" checked /> think freely (no budget)</label>
           <label>budget <input type="range" id="budget" min="3" max="60" step="1" value="15" disabled />
             <span class="val" id="budgetval">∞</span></label>
+        </div>
+        <div class="card tune">
+          <h3>Perceiver — who reads the world</h3>
+          <label>provider <select id="provider"></select></label>
+          <label>model <input type="text" id="model" placeholder="e.g. llama-3.3-70b" /></label>
+          <button type="button" id="applyperceiver" class="switch">Switch perceiver</button>
+          <div class="muted">The API key stays in the server's environment — never sent from here.</div>
         </div>
       </div>
 
@@ -251,6 +264,34 @@ function renderState(s) {
   }
   renderList("self", s.self);
   renderList("companion", s.companion);
+  renderPerceiver(s.perceiver);
+}
+
+/* ---- which perceiver is live, and switching it -------------------------- */
+let perceiverLoaded = false;
+function renderPerceiver(p) {
+  if (!p) return;
+  const label = p.kind === "keyword" ? "keyword" : (p.model || p.provider || p.kind);
+  $("perceiver").textContent = label;
+  const sel = $("provider");
+  if (!perceiverLoaded && Array.isArray(p.available)) {
+    sel.innerHTML = "";
+    p.available.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name; opt.textContent = name; sel.appendChild(opt);
+    });
+    if (p.kind === "llm" && p.model) $("model").value = p.model;
+    perceiverLoaded = true;
+  }
+  if (p.provider) sel.value = p.provider;   // reflect the live provider
+}
+
+async function applyPerceiver() {
+  const provider = $("provider").value;
+  const model = $("model").value.trim();
+  const data = await api("perceiver", { provider, model });
+  bubble("jarvis", data.error ? "Couldn't switch perceiver: " + data.error : data.reply);
+  renderState(data.state);
 }
 
 function renderList(id, items) {
@@ -414,6 +455,9 @@ unbounded.addEventListener("change", applyBudget);
 budget.addEventListener("input", () => { budgetval.textContent = budget.value; });
 budget.addEventListener("change", applyBudget);
 
+/* perceiver switch — runtime provider/perceiver change (secret stays server-side) */
+$("applyperceiver").addEventListener("click", applyPerceiver);
+
 /* ---- voice input (Web Speech API) --------------------------------------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 if (SR) {
@@ -550,9 +594,7 @@ async function boot() {
   resize();
   requestAnimationFrame(frame);
   const d = await api("state", {});
-  renderState(d.state);
-  // best-effort perceiver readout: infer from whether the core is LLM-backed
-  $("perceiver").textContent = "ready";
+  renderState(d.state);   // sets the live perceiver readout + populates the switcher
 }
 boot();
 </script>

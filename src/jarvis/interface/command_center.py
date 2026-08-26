@@ -32,6 +32,11 @@ from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.executive.executive_controller import working_statement
+from jarvis.infrastructure.perceiver_factory import (
+    available_providers,
+    build_perceiver,
+    describe,
+)
 from jarvis.jarvis import Jarvis
 
 _CONSOLE_HTML = Path(__file__).with_name("console.html")
@@ -60,6 +65,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
     summary = jarvis.state_summary()
     return {
         "episodes": summary.episode_count,
+        "perceiver": {**describe(jarvis.perception), "available": list(available_providers())},
         "energy": {
             "spent": jarvis.energy_spent(),
             "remaining": jarvis.energy_remaining(),
@@ -233,6 +239,32 @@ def _energy_budget(jarvis: Jarvis, payload: Reply) -> Reply:
     return {"reply": f"Energy budget set to {budget}.", "speak": False}
 
 
+def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Report or switch the live perceiver at runtime (Vision §32, §38; Track B).
+
+    With no ``provider`` it just reports (the live perceiver rides in every snapshot).
+    With one, it swaps the evidence *producer* -- the keyword rule, or an LLM provider
+    from the open registry -- without rebuilding Jarvis. The secret never comes from
+    the page: the API key is read from ``JARVIS_LLM_API_KEY`` inside the factory. A
+    misconfigured provider is a clear error, not a crash.
+    """
+    provider = str(payload.get("provider", "")).strip()
+    if not provider:
+        return {"reply": "Name a provider to switch the perceiver.", "speak": False}
+    model = str(payload.get("model", "")).strip()
+    base_url = str(payload.get("base_url", "")).strip() or None
+    try:
+        source = build_perceiver(provider, model, base_url)
+    except ValueError as error:
+        return {"error": str(error)}
+    jarvis.set_perception(source)
+    described = describe(jarvis.perception)
+    if described.get("kind") == "keyword":
+        return {"reply": "Perceiver set to the keyword rule (no LLM in judgment).", "speak": False}
+    named = described.get("model") or described.get("provider")
+    return {"reply": f"Perceiver set to {described.get('provider')} ({named}).", "speak": False}
+
+
 def _state(_jarvis: Jarvis, _payload: Reply) -> Reply:
     """Just the live snapshot (added by :func:`handle`); no side effects."""
     return {}
@@ -246,6 +278,7 @@ _COMMANDS: dict[str, Command] = {
     "wonder": _wonder,
     "rest": _rest,
     "energy_budget": _energy_budget,
+    "perceiver": _perceiver,
     "state": _state,
 }
 

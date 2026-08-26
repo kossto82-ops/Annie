@@ -123,6 +123,26 @@ class Jarvis:
             self.nervous_system, self.beliefs, self.episodes, self.companion
         )
 
+    @property
+    def perception(self) -> PerceptionSource:
+        """The capability provider that turns observations into evidence (Vision §32).
+
+        Exposed read-only so a surface can *report* which perceiver is live (a dumb
+        keyword rule, or a real LLM behind the same seam) without reaching into
+        internals. It never decides anything (Vision §38).
+        """
+        return self._perception
+
+    def set_perception(self, source: PerceptionSource) -> None:
+        """Swap the perception source at runtime (Vision §32, §38; Track B).
+
+        The choice of perceiver -- keyword rule vs a given LLM provider -- is config,
+        changeable while running without rebuilding Jarvis. This only replaces the
+        evidence *producer*; confidence is still derived downstream and the executive
+        still reasons, so the cognitive core is untouched.
+        """
+        self._perception = source
+
     @classmethod
     def persistent(cls, directory: str | Path) -> Jarvis:
         """A Jarvis whose whole memory lives on disk under one directory.

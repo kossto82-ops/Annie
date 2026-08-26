@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 91)
+Last updated: 2026-08-26 (Increment 92)
 
 ---
 
@@ -1237,6 +1237,25 @@ with belief + episode events dispatched through the NervousSystem at each step.
   state*, it adds no cognition.
 - Gates: ruff clean · pyright strict 0 errors · pytest 449 passed, 3 skipped.
 
+### Increment 92 — a perceiver switcher in the command center: see and change the live LLM ✅ (2026-08-26)
+- **The join between the open registry (Increment 87) and the UI: the surface now shows *which* perceiver
+  is reading the world, and lets you point it at any registered provider at runtime.** Jarvis gained a
+  read-only `perception` property and a `set_perception()` seam (runtime swap of the capability provider —
+  Track B; §32/§38). The perceivers self-report: `KeywordPerception.describe()` and
+  `LlmPerception.describe()` (identity is optional metadata, never used in judgment).
+- New `infrastructure/perceiver_factory.py` is the one place that maps a provider name → `PerceptionSource`
+  and back (`describe` / `available_providers` / `perceiver_from_settings` / `build_perceiver`). The secret
+  stays in the environment: `build_perceiver` (what the UI calls) takes only provider/model/base_url; the
+  API key is read from `JARVIS_LLM_API_KEY`, never from the page. Building only constructs — no network.
+- `command_center` snapshot now carries the live `perceiver` (`kind`/`provider`/`model` + the `available`
+  list), and a new **`perceiver` command** switches it; a real provider without a model is a clear error,
+  not a crash. `server.py` builds the initial perceiver through the factory so the readout reflects
+  `JARVIS_LLM_*`. `console.html` shows the live perceiver in the header and adds a switcher card.
+- **Verified in a real browser:** boot = keyword (header + populated select); switch to `groq`/`llama-3.3-70b`
+  updated the header pill, the reply, and the snapshot; a real provider with no model showed a graceful
+  error with no swap; switching back to `keyword` restored it. Zero JS console errors.
+- Gates: ruff clean · pytest 462 passed, 3 skipped (added `tests/test_perceiver_factory.py` + `TestPerceiver`).
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1433,11 +1452,12 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
   gentle fallback where boundaries aren't delivered. Verified in-browser.
 - **Reasoning shown live (Increment 91):** a reasoning panel renders belief provenance (grounds for/against
   + confidence), the episode's step trace, and the reflective cycle; an `explain` command answers "why?".
-- **Still open (refinements, opportunistic):** (1) a provider/perceiver switcher in the UI (see + change the
-  live LLM); streaming replies; (2) expose more tunable knobs live — grounded/insight/confidence
-  thresholds, weighting policy, `_MAX_GOAL_REFLECTIONS` — each made injectable as we touch it; (3) show
-  provenance/trace and the reflective cycle visually; (4) a perceiver/provider readout + switcher in the UI;
-  (5) streaming replies. As we add each tunable, expose it via constructor/config, not a module constant.
+- **Perceiver/provider switcher (Increment 92):** the header shows the live perceiver and a card switches it
+  to any registered provider at runtime (`perceiver` command + `perceiver_factory`); the secret stays in the
+  env. This closes former open items (1)/(4).
+- **Still open (refinements, opportunistic):** (a) expose more tunable knobs live — grounded/insight/
+  confidence thresholds, weighting policy, `_MAX_GOAL_REFLECTIONS` — each made injectable as we touch it;
+  (b) streaming replies. As we add each tunable, expose it via constructor/config, not a module constant.
 
 ### Track D — smaller finish-offs (fold in opportunistically, not their own phase)
 - Unify the two `CognitiveEpisode` shapes (conclusion vs deliberation) — or document the split as final.

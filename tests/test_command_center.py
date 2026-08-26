@@ -176,6 +176,44 @@ class TestTuning:
         assert jarvis.energy_remaining() == 6
 
 
+class TestPerceiver:
+    def test_snapshot_reports_the_live_perceiver_and_available_ones(self) -> None:
+        # A default Jarvis reads the world with the keyword rule.
+        state = snapshot(Jarvis())
+        perceiver = cast("dict[str, object]", state["perceiver"])
+        assert perceiver["kind"] == "keyword"
+        available = cast("list[str]", perceiver["available"])
+        assert "keyword" in available
+        assert "groq" in available
+
+    def test_no_provider_just_asks(self) -> None:
+        result = handle(Jarvis(), "perceiver", {})
+        assert result["speak"] is False
+        assert "provider" in str(result["reply"]).lower()
+
+    def test_switching_to_a_real_provider_swaps_the_perceiver(self) -> None:
+        jarvis = Jarvis()
+        result = handle(jarvis, "perceiver", {"provider": "groq", "model": "llama-3.3-70b"})
+        state = cast("dict[str, object]", result["state"])
+        perceiver = cast("dict[str, object]", state["perceiver"])
+        assert perceiver["kind"] == "llm"
+        assert perceiver["provider"] == "groq"
+        assert perceiver["model"] == "llama-3.3-70b"
+
+    def test_switching_back_to_keyword(self) -> None:
+        jarvis = Jarvis()
+        handle(jarvis, "perceiver", {"provider": "groq", "model": "llama-3.3-70b"})
+        result = handle(jarvis, "perceiver", {"provider": "keyword"})
+        state = cast("dict[str, object]", result["state"])
+        perceiver = cast("dict[str, object]", state["perceiver"])
+        assert perceiver["kind"] == "keyword"
+
+    def test_a_real_provider_without_a_model_is_a_clear_error(self) -> None:
+        result = handle(Jarvis(), "perceiver", {"provider": "groq"})
+        assert "error" in result
+        assert "model" in str(result["error"]).lower()
+
+
 class TestUnknownCommand:
     def test_it_is_a_clear_error_with_live_state(self) -> None:
         result = handle(Jarvis(), "does-not-exist", {})

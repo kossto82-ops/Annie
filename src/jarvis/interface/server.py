@@ -10,31 +10,26 @@ persistent memory under a home directory so the companion remembers across resta
 
 from __future__ import annotations
 
-import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
 
 from jarvis.domain.perception.perception_source import PerceptionSource
-from jarvis.infrastructure.env_settings import language_model_from_env
+from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
-from jarvis.infrastructure.llm_perception import LlmPerception
+from jarvis.infrastructure.perceiver_factory import perceiver_from_settings
 from jarvis.interface.command_center import Response, route
 from jarvis.jarvis import Jarvis
 
-_OFFLINE_PROVIDERS = frozenset({"", "scripted", "stub"})
 
-
-def _perception_from_env() -> PerceptionSource | None:
-    """An LLM-backed perceiver when ``JARVIS_LLM_*`` names a real provider, else None
-    (so Jarvis uses its default keyword perceiver — no LLM in the judgment, §38).
+def _perception_from_env() -> PerceptionSource:
+    """The perceiver named by ``JARVIS_LLM_*`` — an LLM-backed one for a real provider,
+    the keyword rule otherwise (no LLM in the judgment, §38). The command center can
+    still switch it at runtime.
     """
-    provider = os.environ.get("JARVIS_LLM_PROVIDER", "").strip().lower()
-    if provider in _OFFLINE_PROVIDERS:
-        return None
-    return LlmPerception(language_model_from_env())
+    return perceiver_from_settings(settings_from_env())
 
 
 def create_jarvis(home: str | Path | None = None) -> Jarvis:

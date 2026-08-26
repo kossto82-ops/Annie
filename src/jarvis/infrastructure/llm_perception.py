@@ -36,8 +36,26 @@ _INSTRUCTIONS = (
 class LlmPerception:
     """Turns a language model's reading of an observation into evidence."""
 
-    def __init__(self, model: LanguageModel) -> None:
+    def __init__(
+        self,
+        model: LanguageModel,
+        *,
+        provider: str | None = None,
+        model_name: str | None = None,
+    ) -> None:
         self._model = model
+        # Identity for self-report only (which provider/model is live) -- never used
+        # in judgment. Optional so a bare LlmPerception(model) still works unchanged.
+        self._provider = provider
+        self._model_name = model_name
+
+    def describe(self) -> dict[str, str | None]:
+        """Self-report for a surface: which LLM provider/model is producing evidence.
+
+        Purely descriptive (Vision §38): it names the capability provider, it does not
+        decide anything.
+        """
+        return {"kind": "llm", "provider": self._provider, "model": self._model_name}
 
     def perceive(self, observation: str) -> tuple[Evidence, ...]:
         text = observation.strip()
