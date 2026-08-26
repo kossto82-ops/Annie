@@ -34,8 +34,14 @@
   header .pill { font-size: 11px; color: var(--dim); border: 1px solid var(--edge);
     padding: 3px 10px; border-radius: 999px; letter-spacing: .5px; }
   header .pill b { color: var(--teal); font-weight: 600; }
+  header .toolbtn { font-size: 12px; color: var(--ink); background: var(--panel2);
+    border: 1px solid var(--edge); padding: 5px 12px; border-radius: 999px; cursor: pointer;
+    letter-spacing: .5px; display: flex; align-items: center; gap: 6px; }
+  header .toolbtn:hover { border-color: var(--teal2); color: #fff; }
+  header .toolbtn.on { border-color: var(--teal); color: var(--teal); }
 
-  main { display: grid; grid-template-columns: 1.15fr 0.85fr; min-height: 0; }
+  /* Chat is intentionally a touch narrower so the face has room to breathe. */
+  main { display: grid; grid-template-columns: 1.24fr 0.76fr; min-height: 0; }
   .stage { position: relative; border-right: 1px solid var(--edge);
     display: grid; grid-template-rows: 1fr auto; min-height: 0; }
   #face { width: 100%; height: 100%; display: block; }
@@ -79,10 +85,24 @@
   .send { background: linear-gradient(180deg, var(--teal), var(--teal2)); color: #04121a;
     border: none; font-weight: 700; padding: 0 18px; border-radius: 10px; cursor: pointer; letter-spacing: .5px; }
 
-  /* Left rail overlay panels on the stage */
-  .panels { position: absolute; right: 16px; top: 52px; width: 260px; display: flex; flex-direction: column; gap: 12px; }
-  .card { background: rgba(10,16,28,.82); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px;
-    backdrop-filter: blur(4px); }
+  /* Tools & configuration — a separate slide-in window so the face stays unobscured */
+  .scrim { position: fixed; inset: 0; background: rgba(2,4,9,.55); opacity: 0; visibility: hidden;
+    transition: opacity .25s ease, visibility .25s ease; z-index: 40; }
+  .scrim.open { opacity: 1; visibility: visible; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 360px; max-width: 90vw;
+    background: linear-gradient(180deg, var(--panel2), var(--panel)); border-left: 1px solid var(--edge);
+    box-shadow: -18px 0 40px rgba(0,0,0,.45); transform: translateX(100%);
+    transition: transform .25s ease; z-index: 50; display: grid; grid-template-rows: auto 1fr; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px;
+    border-bottom: 1px solid var(--edge); }
+  .drawer-head h2 { margin: 0; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600; }
+  .drawer-head .spacer { flex: 1; }
+  .drawer-close { background: none; border: 1px solid var(--edge); color: var(--dim); cursor: pointer;
+    width: 30px; height: 30px; border-radius: 8px; font-size: 15px; }
+  .drawer-close:hover { color: #fff; border-color: var(--teal2); }
+  .drawer-body { overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; }
   .card h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); }
   .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 6px 0; font-size: 12px; }
   .row .lbl { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -92,9 +112,10 @@
   .tune label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); margin: 8px 0; }
   .tune input[type=range] { flex: 1; accent-color: var(--teal); }
   .tune .val { color: var(--teal); min-width: 34px; text-align: right; }
-  .tune select, .tune input[type=text] { flex: 1; background: #070c16; border: 1px solid var(--edge);
-    color: var(--ink); padding: 5px 8px; border-radius: 8px; font-size: 12px; outline: none; min-width: 0; }
-  .tune select:focus, .tune input[type=text]:focus { border-color: var(--teal2); }
+  .tune select, .tune input[type=text], .tune input[type=password] { flex: 1; background: #070c16;
+    border: 1px solid var(--edge); color: var(--ink); padding: 5px 8px; border-radius: 8px;
+    font-size: 12px; outline: none; min-width: 0; }
+  .tune select:focus, .tune input[type=text]:focus, .tune input[type=password]:focus { border-color: var(--teal2); }
   .switch { width: 100%; margin: 4px 0 6px; background: var(--panel2); color: var(--ink);
     border: 1px solid var(--edge); padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; }
   .switch:hover { border-color: var(--teal2); color: #fff; }
@@ -129,39 +150,14 @@
     <span class="spacer"></span>
     <span class="pill">perceiver <b id="perceiver">—</b></span>
     <span class="pill">episodes <b id="epi">0</b></span>
+    <button type="button" class="toolbtn" id="tools" title="Tools & configuration"
+      aria-controls="drawer" aria-expanded="false">&#9881; Tools</button>
   </header>
 
   <main>
     <section class="stage">
       <canvas id="face"></canvas>
       <div class="status">state · <b id="mood">idle</b></div>
-
-      <div class="panels">
-        <div class="card">
-          <h3>Self-tendencies</h3>
-          <div id="self"><div class="muted">nothing noticed yet</div></div>
-        </div>
-        <div class="card">
-          <h3>Companion</h3>
-          <div id="companion"><div class="muted">unknown so far</div></div>
-        </div>
-        <div class="card tune">
-          <h3>Tune — how hard I think</h3>
-          <label><input type="checkbox" id="unbounded" checked /> think freely (no budget)</label>
-          <label>budget <input type="range" id="budget" min="3" max="60" step="1" value="15" disabled />
-            <span class="val" id="budgetval">∞</span></label>
-        </div>
-        <div class="card tune">
-          <h3>Perceiver — who reads the world</h3>
-          <label>provider <select id="provider"></select></label>
-          <label>model <input type="text" id="model" placeholder="e.g. llama-3.3-70b" /></label>
-          <label>API key <input type="password" id="apikey" autocomplete="off"
-            placeholder="paste to save — never shown" /></label>
-          <button type="button" id="applyperceiver" class="switch">Switch perceiver</button>
-          <div class="muted">The key is saved to the server's <b>.env</b> (git-ignored) and never shown
-            back. Leave it blank to keep the one already configured.</div>
-        </div>
-      </div>
 
       <div class="reasoning" id="reasoning">
         <div class="muted">Jarvis's reasoning appears here — ask it something, or press Reflect.</div>
@@ -194,6 +190,41 @@
       </form>
     </section>
   </main>
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Tools and configuration">
+    <div class="drawer-head">
+      <h2>Tools &amp; configuration</h2>
+      <span class="spacer"></span>
+      <button type="button" class="drawer-close" id="drawerclose" title="Close">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="card">
+        <h3>Self-tendencies</h3>
+        <div id="self"><div class="muted">nothing noticed yet</div></div>
+      </div>
+      <div class="card">
+        <h3>Companion</h3>
+        <div id="companion"><div class="muted">unknown so far</div></div>
+      </div>
+      <div class="card tune">
+        <h3>Tune — how hard I think</h3>
+        <label><input type="checkbox" id="unbounded" checked /> think freely (no budget)</label>
+        <label>budget <input type="range" id="budget" min="3" max="60" step="1" value="15" disabled />
+          <span class="val" id="budgetval">∞</span></label>
+      </div>
+      <div class="card tune">
+        <h3>Perceiver — who reads the world</h3>
+        <label>provider <select id="provider"></select></label>
+        <label>model <input type="text" id="model" placeholder="e.g. llama-3.3-70b" /></label>
+        <label>API key <input type="password" id="apikey" autocomplete="off"
+          placeholder="paste to save — never shown" /></label>
+        <button type="button" id="applyperceiver" class="switch">Switch perceiver</button>
+        <div class="muted">The key is saved to the server's <b>.env</b> (git-ignored) and never shown
+          back. Leave it blank to keep the one already configured.</div>
+      </div>
+    </div>
+  </aside>
 
 <script>
 "use strict";
@@ -464,6 +495,19 @@ budget.addEventListener("change", applyBudget);
 
 /* perceiver switch — runtime provider/perceiver change (secret stays server-side) */
 $("applyperceiver").addEventListener("click", applyPerceiver);
+
+/* tools & configuration drawer — a separate window so the face stays unobscured */
+function setDrawer(open) {
+  $("drawer").classList.toggle("open", open);
+  $("scrim").classList.toggle("open", open);
+  $("drawer").setAttribute("aria-hidden", open ? "false" : "true");
+  $("tools").setAttribute("aria-expanded", open ? "true" : "false");
+  $("tools").classList.toggle("on", open);
+}
+$("tools").addEventListener("click", () => setDrawer(!$("drawer").classList.contains("open")));
+$("drawerclose").addEventListener("click", () => setDrawer(false));
+$("scrim").addEventListener("click", () => setDrawer(false));
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setDrawer(false); });
 
 /* ---- voice input (Web Speech API) --------------------------------------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

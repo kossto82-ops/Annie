@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 93)
+Last updated: 2026-08-26 (Increment 94)
 
 ---
 
@@ -1274,6 +1274,19 @@ with belief + episode events dispatched through the NervousSystem at each step.
   **not** contain the key. (Offline validation used a dummy key; the live model call is the developer's to
   run with a real credential.)
 - Gates: ruff clean · pytest 468 passed, 3 skipped (added `tests/test_llm_config_store.py` + key-path tests).
+
+### Increment 94 — see Jarvis whole: a Tools & configuration drawer, unobscured face ✅ (2026-08-26)
+- **The control cards no longer sit on top of the face.** The four overlay panels (Self-tendencies,
+  Companion, Tune, Perceiver) moved out of the stage into a separate slide-in **Tools & configuration**
+  drawer, toggled by a header ⚙ button (close via the ✕, the backdrop scrim, or Escape). The point-cloud
+  face is now fully visible — "seeing Jarvis" is the default view; configuration is one click away.
+- The chat column was narrowed ~8% (`main` columns `1.15fr 0.85fr` → `1.24fr 0.76fr`) to give the stage
+  more room. The API-key field's CSS now includes `input[type=password]` so it sits flush with the other
+  inputs. HTML/CSS/JS only — no core or command changes; the asset tripwire (`test_console_asset.py`) still
+  guards the face/speech/reasoning wiring.
+- **Verified in a real browser:** boot shows the unobscured face + narrower chat, header pill `keyword`,
+  15 providers in the select; the drawer slides in with all four cards and a contained masked key field;
+  toggling open/close works. Zero JS console errors.
 
 ---
 
