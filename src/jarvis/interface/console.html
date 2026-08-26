@@ -194,8 +194,12 @@ function speak(text) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.0; u.pitch = 0.95;
-    u.onstart = () => { speaking = true; };
-    u.onend = () => { speaking = false; };
+    // Drive the mouth from the REAL speech: a boundary fires as each word is spoken,
+    // so the face articulates in sync with what is actually being said.
+    u.onstart = () => setSpeaking(true);
+    u.onboundary = () => pulseWord();
+    u.onend = () => setSpeaking(false);
+    u.onerror = () => setSpeaking(false);
     window.speechSynthesis.speak(u);
   } catch (e) { /* speech is a bonus, never a requirement */ }
 }
@@ -352,16 +356,45 @@ function buildPoints(n) {
 }
 const POINTS = buildPoints(1100);
 
-let angle = 0, mouthEnv = 0, mouthTarget = 0, blink = 0, lastBlink = 0;
+let angle = 0, mouthEnv = 0, blink = 0, lastBlink = 0;
+// Speech articulation: `articulation` is bumped by each spoken-word boundary and
+// decays between words, so the mouth opens on real words. `pulsed` tells whether
+// this browser actually delivered boundary events; if not, we fall back to a gentle
+// continuous motion so the face still looks like it's talking.
+let articulation = 0, pulsed = false;
+function setSpeaking(on) {
+  speaking = !!on;
+  if (speaking) { pulsed = false; articulation = 0; }
+}
+function pulseWord(strength) {
+  articulation = Math.min(1, typeof strength === "number" ? strength : 0.7 + Math.random() * 0.3);
+  pulsed = true;
+}
+// A small hook so the mouth-sync mechanism can be exercised and observed directly.
+window.__face = {
+  pulseWord: (s) => pulseWord(s),
+  setSpeaking: (b) => setSpeaking(b),
+  get mouthEnv() { return mouthEnv; },
+  get speaking() { return speaking; },
+  get pulsed() { return pulsed; },
+};
 function frame(now) {
   const t = now * 0.001;
   angle += 0.0035;
   const breathe = 1 + 0.02 * Math.sin(t * 1.4);
-  // mouth envelope: jittery while speaking, decays to rest otherwise
+  // Mouth: driven by real word boundaries when the browser provides them (open at
+  // each word, close between), otherwise a gentle continuous "talking" motion.
+  let mouthTarget = 0;
   if (speaking) {
-    if (Math.random() < 0.25) mouthTarget = 0.25 + Math.random() * 0.75;
-  } else mouthTarget = 0;
-  mouthEnv += (mouthTarget - mouthEnv) * 0.35;
+    if (pulsed) {
+      const flutter = 0.5 + 0.5 * Math.abs(Math.sin(t * 32));  // articulate within a word
+      mouthTarget = Math.min(1, articulation * flutter);
+    } else {
+      mouthTarget = 0.28 + 0.32 * Math.abs(Math.sin(t * 13));  // fallback: no boundaries
+    }
+  }
+  mouthEnv += (mouthTarget - mouthEnv) * 0.4;
+  articulation *= 0.9;  // each word's opening decays until the next boundary
   // blink roughly every ~4s
   if (t - lastBlink > 3.5 + Math.random()) { lastBlink = t; blink = 1; }
   blink = Math.max(0, blink - 0.08);

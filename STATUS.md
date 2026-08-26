@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 89)
+Last updated: 2026-08-26 (Increment 90)
 
 ---
 
@@ -1197,6 +1197,24 @@ with belief + episode events dispatched through the NervousSystem at each step.
   ```
 - Gates: ruff clean · pyright strict 0 errors · pytest 442 passed, 3 skipped.
 
+### Increment 90 — the face speaks: mouth synced to real word boundaries ✅ (2026-08-26)
+- **Honest correction, then the real thing.** The plan said "route TTS through Web Audio (AnalyserNode)",
+  but `speechSynthesis` output is **not capturable** by Web Audio in browsers — an analyser there reads
+  silence. The truthful amplitude source is the utterance's own events: `SpeechSynthesisUtterance.onboundary`
+  fires as each **word** is spoken. So the mouth now opens on real words (bumped per boundary, decaying
+  between), gated by `onstart`/`onend` — genuine speech sync, not the old free-running jitter.
+- All in `console.html` (no Python change to the running core): an `articulation` value bumped by
+  `pulseWord()` on each boundary, a `pulsed` flag, and honest degradation — if a browser delivers no
+  boundary events, the mouth falls back to a gentle continuous "talking" motion so it still animates.
+  A `window.__face` hook (`pulseWord`/`setSpeaking`/`mouthEnv`) exposes the mechanism for verification.
+- **Verified in a real browser** against the running server: mouth **closed at rest (0)**, **articulating
+  0.37–0.50 while words fire** (`pulsed=true`, boundary path live), **decaying back to 0 on silence** —
+  the mouth moves *with the words*. Zero JS console errors.
+- **Tripwire test** (`tests/test_console_asset.py`): the JS mouth logic can't be pytest-run, so a guard
+  asserts the console asset ships and keeps its speech-sync wiring (`onboundary`/`pulseWord`/`setSpeaking`/
+  `articulation`/`window.__face`) — the analogue of the public-surface guard for the one browser asset.
+- Gates: ruff clean · pyright strict 0 errors · pytest 444 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1388,8 +1406,11 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
   moves as it talks, live state (beliefs/companion/goals/energy), and a real runtime tuner (energy budget
   → `set_energy_budget`). Core stays stdlib-only; the browser supplies voice+3D at zero dependency cost.
   Pure `handle`/`route`/`snapshot` (socket-free, tested); thin `http.server` wrapper. Verified live.
-- **Still open (refinements, opportunistic):** (1) audio-reactive mouth from *real* TTS amplitude (Web
-  Audio) rather than the current envelope; (2) expose more tunable knobs live — grounded/insight/confidence
+- **Mouth synced to real speech (Increment 90):** `speechSynthesis` output isn't capturable by Web Audio,
+  so the mouth is driven by the utterance's real word boundaries (`onboundary`), gated by start/end, with a
+  gentle fallback where boundaries aren't delivered. Verified in-browser.
+- **Still open (refinements, opportunistic):** (1) show the reasoning live — a `trace` command + a
+  provenance/reflective-cycle panel (recommended next); (2) expose more tunable knobs live — grounded/insight/confidence
   thresholds, weighting policy, `_MAX_GOAL_REFLECTIONS` — each made injectable as we touch it; (3) show
   provenance/trace and the reflective cycle visually; (4) a perceiver/provider readout + switcher in the UI;
   (5) streaming replies. As we add each tunable, expose it via constructor/config, not a module constant.
@@ -1410,19 +1431,20 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Track E, step 2 — make the face *truly* speak, and surface Jarvis's reasoning live.** The backbone works
-(Increment 89): browser command center with voice in/out, the point-cloud face, live state, and a real
-runtime tuner. The two most impactful refinements, either as the next increment:
-- **Audio-reactive mouth (the showpiece):** route the TTS through Web Audio (`AudioContext` + `AnalyserNode`)
-  so the mouth opens to the *real* speech envelope instead of the current jittery approximation. If capturing
-  `speechSynthesis` output proves cross-browser-flaky, add a tiny server TTS-less path or drive the analyser
-  from a mic-echo — decide by probing. Pure JS in `console.html`; no Python change, no new dependency.
-- **Show the mind, not just the mouth:** render the reflective cycle and belief provenance in the UI — when
-  `reflect`/`say` runs, draw the Connect→Reflect→Hypothesise→Challenge→Learn chain and the evidence a belief
-  rests on (the data already comes back in `snapshot`/`reflect`'s `cycle`; add a `trace` command exposing
-  `trace_of`). This is where the "total control center" earns its name — you *see* it think.
-- Keep the discipline: any new command is a pure `handle` branch with a socket-free test; any new tunable is
-  injectable via constructor/config, never a module constant. No network in the default suite.
+**Track E, step 3 — show the mind, not just the mouth.** The face now talks in sync with real words
+(Increment 90). The next leap makes the "total control center" earn its name: render Jarvis's *reasoning*
+live, so you watch it think.
+- **A `trace` command** in `command_center.handle`: expose an episode's decision provenance (`trace_of` /
+  `trace`) as JSON — the ordered cognitive events (started → evidence/belief changes → completed) — and, for
+  `say`, why the working belief concluded (the evidence it rests on, its supporting/contradicting split).
+- **A reasoning panel** in `console.html`: when `say`/`reflect` runs, draw the belief's provenance and the
+  reflective chain Connect→Reflect→Hypothesise→Challenge→Learn (the `cycle` already comes back from
+  `reflect`). This is the honest counter-weight to the voice/face — the surface shows *grounds*, not vibes.
+- Keep the discipline: the new `trace` command is a **pure `handle` branch with a socket-free test**; the
+  panel is pure JS verified in the browser; the asset tripwire guards its wiring. No network in the suite;
+  §38 boundary intact (the panel renders derived state, it does not add cognition).
+- Alternatives if you'd rather: a **provider/perceiver switcher** in the UI (see and change the live LLM),
+  or **streaming replies**. Say which; otherwise `trace`/reasoning-panel is the recommended next.
 
 ---
 
