@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-25 (Increment 85)
+Last updated: 2026-08-25 (Increment 86)
 
 ---
 
@@ -1105,6 +1105,24 @@ with belief + episode events dispatched through the NervousSystem at each step.
   Track C/D) is below.
 - Gates: ruff clean · pyright strict 0 errors · pytest 397 passed.
 
+### Increment 86 — Track B design: the LLM→perception seam (no live API) ✅ (2026-08-25)
+- **Track B opened as a design increment** — the seam, not a live call. Three pieces (all infrastructure):
+  `LanguageModel` Protocol (`complete(prompt) -> str` — the single provider-swappable interface),
+  `LlmPerception` (a `PerceptionSource` that asks a model to read an observation into claims and turns each
+  into `Evidence`), and `ScriptedLanguageModel` (a canned-response stub proving the whole thing without a
+  network). No new dependency; nothing above the seam knows which model it is (Vision §32).
+- **§38 boundary enforced in `LlmPerception` (D33):** the model only *extracts candidate evidence* — the
+  claims a text makes and how strongly it asserts each (not truth). Confidence-of-belief is still derived
+  downstream; the executive still decides. Bad/empty/malformed output → honest silence (§37), never a
+  fabricated reading; out-of-range weights are skipped, never clamped (mirrors D7).
+- **Provider-swappable by injection (user requirement):** any real provider (OpenAI/Anthropic/Ollama)
+  wraps its SDK behind `LanguageModel` and drops into `LlmPerception` unchanged; `Jarvis(perception=…)`
+  is the only wiring. Verified end-to-end via the stub: two claims → a tentative belief at 0.26 with
+  "perceived via language model" provenance; swapping the model flips supporting↔contradicting with no
+  core change.
+- Next Track B step: a config-driven registry/factory to pick the provider by name; then a real adapter.
+- Gates: ruff clean · pyright strict 0 errors · pytest 406 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1228,6 +1246,14 @@ with belief + episode events dispatched through the NervousSystem at each step.
   the core-architecture principle (§38). Each stage is evidence-grounded, derived, revisable, auditable,
   and involves no LLM deciding — that (not the loop shape, which is standard) is what makes it novel.
   Build order: Connect (Increment 74) → Reflect → autonomous Hypothesise → Challenge → wire Learn/Act.
+- **D33** The LLM enters ONLY through a `LanguageModel` Protocol (`complete(prompt) -> str`) behind
+  `LlmPerception` (a `PerceptionSource`). The model *extracts candidate evidence* from text — the claims a
+  text makes and how strongly it asserts each — and NOTHING more: confidence-of-belief stays derived, the
+  executive stays the decider (§38). The provider is chosen at the composition root by injecting a
+  `LanguageModel` (user requirement: swappable by config), so no real provider is a dependency of the core
+  or the tests — a `ScriptedLanguageModel` stub stands in. Unreadable/out-of-range model output is dropped
+  (honest silence §37 / no clamping D7), never fabricated. Real provider SDKs live only inside a
+  `LanguageModel` implementation.
 
 ---
 
@@ -1259,13 +1285,13 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 
 ### Track B — perception → the LLM adapter (highest external impact, separate)
 - Seam done (Increments 63–68): `PerceptionSource`, streams, provenance, contested-belief resolution.
-- **Open:** an LLM-backed `PerceptionSource` (§32) — the piece that lets Jarvis understand real language.
-  Needs an explicit decision (which provider, where secrets live, offline/test story) before any code,
-  and must keep the §38 boundary (LLM produces evidence, never decides). **Flag when we want this; design first.**
-- **USER REQUIREMENT (2026-08-25): provider must be trivially swappable.** The adapter is provider-agnostic
-  behind the `PerceptionSource` Protocol; choose the concrete LLM/API via config (a small registry /
-  factory + settings), so switching provider or model is a config change, never a code change. Ship a
-  faked/stub adapter first so tests never need a live API; the real providers plug in behind the same seam.
+- **LLM seam done (Increment 86):** `LanguageModel` Protocol + `LlmPerception` (a `PerceptionSource`) +
+  `ScriptedLanguageModel` stub — provider-agnostic, §38 boundary held (D33), NO live API. Verified via stub.
+- **Open next:** (1) a config-driven registry/factory to select the provider by name/settings (the
+  swappable-by-config user requirement, made concrete); (2) a real provider adapter (an actual SDK behind
+  `LanguageModel`) — the first live-API increment, deciding provider + secret location + offline/CI story.
+- USER REQUIREMENT (2026-08-25): provider trivially swappable — satisfied structurally (inject a
+  `LanguageModel`); the registry makes it a settings change.
 
 ### Track C — §15 cognitive energy (self-contained, still open — CHOSEN NEXT 2026-08-25)
 - Per-episode cost (FULL > BRIEF), accumulate + expose read-only, later a budget that makes attention
@@ -1295,10 +1321,29 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ---
 
-## Next increment — a strategic fork (your call)
+## Next increment (recommended, not yet started)
+
+**Track B step 2 — a provider registry so the LLM is chosen by config (Vision §32; user requirement).**
+The seam exists (Increment 86); now make *which* model is used a settings choice, not a code edit — the
+developer's explicit requirement. Smallest honest step (still NO live API):
+- A tiny `language_model` registry/factory: `register(name, factory)` + `build_language_model(name,
+  settings)` returning a `LanguageModel`. Register the `ScriptedLanguageModel` under a name (e.g.
+  "scripted"/"stub"); real providers register themselves later. A `Jarvis`-level helper or the composition
+  root selects the perceiver from a config value.
+- Keep it truthful: unknown provider name → a clear error, never a silent fallback that hides
+  misconfiguration; the stub stays the default so tests/offline runs need no API. No dependency added.
+- Behaviour tests: building "scripted" returns a working `LanguageModel`; an unknown name errors; a
+  registered fake is selectable by name. (Then the following increment is the FIRST real adapter — an
+  actual SDK behind `LanguageModel` — which is where we decide provider + where the secret lives + the
+  offline/CI story. Flag it and we choose the provider then.)
+
+---
+
+## After that — remaining directions
 
 Track A (the reflective cycle) is complete and persistent; **Track C (§15 energy) has both its seams
-done** (cost visible + a fatigue budget, Increments 84–85). The remaining directions:
+done** (cost visible + a fatigue budget, Increments 84–85); **Track B's seam is done** (Increment 86,
+stub-backed). The remaining directions:
 
 - **Track B — an LLM-backed `PerceptionSource` (§32).** The highest external-value jump: it is what lets
   Jarvis understand *real* language instead of the toy keyword rule. Gated on an explicit design decision
