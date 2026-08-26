@@ -35,6 +35,7 @@ from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.perceiver_factory import (
     available_providers,
+    build_companion_perceiver,
     build_perceiver,
     describe,
 )
@@ -135,44 +136,65 @@ def _trace_steps(events: tuple[CognitiveEvent, ...]) -> list[Reply]:
     return steps
 
 
+def _augment_with_companion(result: Reply, learned: tuple[Belief, ...]) -> Reply:
+    """Fold what a turn taught Jarvis about the companion into the reply (Vision §5).
+
+    A conversation turn has two channels: reasoning about the world (the epistemic reply
+    already in ``result``) and learning about *you*. When the relational channel picked
+    something up, acknowledge it plainly and carry the traits so the UI can highlight
+    them; the Companion panel updates from the snapshot either way. Nothing learned →
+    the reply is unchanged (no invented intimacy).
+    """
+    if not learned:
+        return result
+    traits = [belief.explain().statement for belief in learned]
+    result["learned"] = traits
+    note = "I'll remember this about you: " + "; ".join(traits) + "."
+    result["reply"] = f"{result['reply']} {note}"
+    result["speak"] = True
+    return result
+
+
 def _say(jarvis: Jarvis, payload: Reply) -> Reply:
-    """Perceive what the companion said and reply with what Jarvis honestly concludes,
-    carrying the reasoning behind it (provenance + the episode's step trace).
+    """Hear what the companion said over both channels (Vision §5, §8): reason about the
+    world (provenance + step trace) AND learn about the person, then reply honestly.
     """
     text = str(payload.get("text", "")).strip()
     if not text:
         return {"reply": "I'm here — say something and I'll reason about it.", "speak": False}
     episode = jarvis.perceive(text, trigger=text)
+    learned = jarvis.note_companion(text)  # the relational channel (Vision §5)
     trace = _trace_steps(jarvis.trace_of(episode))
     belief = episode.working_belief
     if belief is None:
-        return {
+        result: Reply = {
             "reply": "I don't have enough grounded evidence to form a view on that yet.",
             "speak": True,
             "provenance": None,
             "trace": trace,
         }
-    explanation = belief.explain()
-    if explanation.supporting or explanation.contradicting:
+    elif (explanation := belief.explain()).supporting or explanation.contradicting:
         # A grounded belief: narrate it in the companion's own words (no internal label).
-        return {
+        result = {
             "reply": explanation.narrate(subject_of(explanation.statement)),
             "speak": True,
             "confidence": belief.confidence.value,
             "provenance": _provenance(belief),
             "trace": trace,
         }
-    # No evidence yet — honest, and phrased around what was actually said, not a
-    # machine "view" on a greeting. Still shows the (empty) provenance + trace.
-    return {
-        "reply": (
-            f'I can\'t ground a view on "{text}" yet — there\'s nothing in it I can '
-            "take as evidence. Tell me something with a claim in it and I'll reason from it."
-        ),
-        "speak": True,
-        "provenance": _provenance(belief),
-        "trace": trace,
-    }
+    else:
+        # No world-claim to weigh — honest, phrased around what was actually said. Still
+        # shows the (empty) provenance + trace; the companion note (if any) is appended.
+        result = {
+            "reply": (
+                f'I can\'t ground a view on "{text}" yet — there\'s nothing in it I can '
+                "take as evidence. Tell me something with a claim in it and I'll reason from it."
+            ),
+            "speak": True,
+            "provenance": _provenance(belief),
+            "trace": trace,
+        }
+    return _augment_with_companion(result, learned)
 
 
 def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -291,6 +313,9 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     except ValueError as error:
         return {"error": str(error)}
     jarvis.set_perception(source)
+    # Switch the relational perceiver to the same provider, so talking to Jarvis both
+    # reasons about the world and learns about you through one model (Vision §5).
+    jarvis.set_companion_perception(build_companion_perceiver(provider, model, base_url))
     if staged is not None:
         llm_config_store.persist(staged)  # survive a restart; never returns the key
     described = describe(jarvis.perception)

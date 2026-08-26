@@ -19,6 +19,7 @@ from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.belief_events import ContradictionDetected
 from jarvis.domain.events.domain_event import CognitiveEvent
+from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
@@ -59,6 +60,7 @@ from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
+from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace
 
@@ -90,6 +92,7 @@ class Jarvis:
         goals_store: BeliefRepository | None = None,
         subgoals_store: BeliefRepository | None = None,
         perception: PerceptionSource | None = None,
+        companion_perception: CompanionPerceptionSource | None = None,
         refutations_store: RefutationRepository | None = None,
         energy_costs: EnergyCosts | None = None,
         energy_budget: int | None = None,
@@ -105,6 +108,12 @@ class Jarvis:
         self._goals: BeliefRepository = goals_store or InMemoryBeliefStore()
         self._subgoals: BeliefRepository = subgoals_store or InMemoryBeliefStore()
         self._perception: PerceptionSource = perception or KeywordPerception()
+        # The relational channel (Vision §5): reads what the companion says into
+        # observations about *them*. Silent by default (needs an LLM to read free
+        # utterances into traits); swappable at runtime like the world perceiver.
+        self._companion_perception: CompanionPerceptionSource = (
+            companion_perception or SilentCompanionPerception()
+        )
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
         self._refutations: RefutationRepository = (
@@ -146,6 +155,33 @@ class Jarvis:
         still reasons, so the cognitive core is untouched.
         """
         self._perception = source
+
+    @property
+    def companion_perception(self) -> CompanionPerceptionSource:
+        """The relational perceiver: reads utterances into observations about the
+        companion (Vision §5). Read-only so a surface can report it; it never decides.
+        """
+        return self._companion_perception
+
+    def set_companion_perception(self, source: CompanionPerceptionSource) -> None:
+        """Swap the companion perceiver at runtime (Vision §5, §38), like the world one."""
+        self._companion_perception = source
+
+    def note_companion(self, utterance: str) -> tuple[Belief, ...]:
+        """Learn about the companion from what they said (Vision §5, §38).
+
+        The relational half of a conversation turn: the utterance is read into
+        observations about the companion, and each folds into the derived, revisable
+        belief about that trait -- so talking to Jarvis actually builds its model of
+        *you*, not only beliefs about the world. Returns the companion beliefs that were
+        touched (empty when the utterance revealed nothing, §37). It only *produces*
+        evidence; confidence is still derived and the belief remains contradictable.
+        """
+        learned: list[Belief] = []
+        for observation in self._companion_perception.read_companion(utterance):
+            belief, _ = self._record_companion(observation.trait, observation.evidence)
+            learned.append(belief)
+        return tuple(learned)
 
     @classmethod
     def persistent(cls, directory: str | Path) -> Jarvis:

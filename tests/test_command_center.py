@@ -15,6 +15,7 @@ import pytest
 
 from jarvis import Jarvis
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -79,6 +80,41 @@ class TestSay:
         result = handle(Jarvis(), "say", {"text": "zxqw"})
         reply = str(result["reply"]).lower()
         assert "enough" in reply or "evidence" in reply
+
+
+class _CompanionReader:
+    """A stand-in companion perceiver: reads any utterance as one learned trait."""
+
+    def read_companion(self, utterance: str) -> tuple[CompanionObservation, ...]:
+        return (
+            CompanionObservation(
+                trait="likes hiking",
+                evidence=Evidence(
+                    content=utterance,
+                    source=EvidenceSource.USER_STATEMENT,
+                    weight=Confidence(0.9),
+                    supports=True,
+                ),
+            ),
+        )
+
+
+class TestCompanionChannel:
+    def test_talking_teaches_jarvis_about_the_companion(self) -> None:
+        jarvis = Jarvis()
+        jarvis.set_companion_perception(_CompanionReader())
+        result = handle(jarvis, "say", {"text": "I went hiking this weekend"})
+        # The reply acknowledges what it learned, and the snapshot shows the trait.
+        assert "likes hiking" in str(result["reply"])
+        assert result["learned"] == ["likes hiking"]
+        state = cast("dict[str, object]", result["state"])
+        companion = cast("list[dict[str, object]]", state["companion"])
+        assert any(row["statement"] == "likes hiking" for row in companion)
+
+    def test_default_jarvis_learns_nothing_and_reply_is_unchanged(self) -> None:
+        result = handle(Jarvis(), "say", {"text": "hola jarvis"})
+        assert "learned" not in result
+        assert "remember this about you" not in str(result["reply"])
 
 
 class TestReasoning:

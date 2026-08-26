@@ -19,29 +19,28 @@ from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
-from jarvis.infrastructure.perceiver_factory import perceiver_from_settings
+from jarvis.infrastructure.perceiver_factory import (
+    companion_perceiver_from_settings,
+    perceiver_from_settings,
+)
 from jarvis.interface.command_center import Response, route
 from jarvis.jarvis import Jarvis
 
 
-def _perception_from_env() -> PerceptionSource:
-    """The perceiver named by ``JARVIS_LLM_*`` — an LLM-backed one for a real provider,
-    the keyword rule otherwise (no LLM in the judgment, §38). The command center can
-    still switch it at runtime.
-    """
-    return perceiver_from_settings(settings_from_env())
-
-
 def create_jarvis(home: str | Path | None = None) -> Jarvis:
-    """Build the Jarvis the command center drives (Vision §3, §32).
+    """Build the Jarvis the command center drives (Vision §3, §5, §32).
 
     With ``home`` set, every store is wired to JSON files under that directory so the
-    companion remembers across restarts; otherwise memory is in-process. The
-    perceiver comes from the environment either way.
+    companion remembers across restarts; otherwise memory is in-process. Both perceivers
+    — the world one and the relational one — come from ``JARVIS_LLM_*`` (an LLM pair for
+    a real provider, the keyword rule + silent companion otherwise). Either can still be
+    switched at runtime from the command center.
     """
-    perception = _perception_from_env()
+    settings = settings_from_env()
+    perception: PerceptionSource = perceiver_from_settings(settings)
+    companion_perception = companion_perceiver_from_settings(settings)
     if home is None:
-        return Jarvis(perception=perception)
+        return Jarvis(perception=perception, companion_perception=companion_perception)
     base = Path(home)
     base.mkdir(parents=True, exist_ok=True)
     return Jarvis(
@@ -54,6 +53,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
         subgoals_store=JsonBeliefStore(base / "subgoals.json"),
         refutations_store=JsonRefutationStore(base / "refutations.json"),
         perception=perception,
+        companion_perception=companion_perception,
     )
 
 

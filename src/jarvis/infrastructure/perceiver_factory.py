@@ -19,11 +19,14 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
+from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.language_model_registry import available, build_language_model
+from jarvis.infrastructure.llm_companion_perception import LlmCompanionPerception
 from jarvis.infrastructure.llm_perception import LlmPerception
 from jarvis.infrastructure.provider_settings import ProviderSettings
+from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 
 _PREFIX = "JARVIS_LLM_"
 
@@ -72,13 +75,46 @@ def perceiver_from_settings(settings: ProviderSettings) -> PerceptionSource:
     return LlmPerception(model, provider=settings.provider, model_name=settings.model)
 
 
+def companion_perceiver_from_settings(
+    settings: ProviderSettings,
+) -> CompanionPerceptionSource:
+    """The relational perceiver (Vision §5) for fully-formed settings.
+
+    Offline -> silent (the dumb rule cannot read free utterances into traits); any real
+    provider -> an LLM-backed companion perceiver over the same model as the world one.
+    """
+    if settings.provider in _OFFLINE:
+        return SilentCompanionPerception()
+    if not settings.model:
+        raise ValueError(
+            f"a model id is required for provider {settings.provider!r} "
+            "(e.g. llama-3.3-70b)"
+        )
+    return LlmCompanionPerception(build_language_model(settings))
+
+
+def _settings_from_ui(
+    provider: str, model: str, base_url: str | None, environ: Mapping[str, str] | None
+) -> ProviderSettings:
+    """Compose settings from the UI's non-secret choice, keying from the environment."""
+    env = environ if environ is not None else os.environ
+    return ProviderSettings(
+        provider=provider.strip().lower(),
+        model=model.strip(),
+        base_url=(base_url or None),
+        api_key=(env.get(f"{_PREFIX}API_KEY") or None),
+        timeout=float(env.get(f"{_PREFIX}TIMEOUT", "30")),
+        temperature=float(env.get(f"{_PREFIX}TEMPERATURE", "0")),
+    )
+
+
 def build_perceiver(
     provider: str,
     model: str = "",
     base_url: str | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> PerceptionSource:
-    """Build a perceiver from the UI's non-secret choice, keying it from the env.
+    """Build a world perceiver from the UI's non-secret choice, keying it from the env.
 
     The page supplies only the provider, model, and (optional) endpoint. The API key,
     timeout, and temperature come from `JARVIS_LLM_*`, so the secret never leaves the
@@ -87,13 +123,23 @@ def build_perceiver(
     name = provider.strip().lower()
     if name in _OFFLINE:
         return KeywordPerception()
-    env = environ if environ is not None else os.environ
-    settings = ProviderSettings(
-        provider=name,
-        model=model.strip(),
-        base_url=(base_url or None),
-        api_key=(env.get(f"{_PREFIX}API_KEY") or None),
-        timeout=float(env.get(f"{_PREFIX}TIMEOUT", "30")),
-        temperature=float(env.get(f"{_PREFIX}TEMPERATURE", "0")),
+    return perceiver_from_settings(_settings_from_ui(provider, model, base_url, environ))
+
+
+def build_companion_perceiver(
+    provider: str,
+    model: str = "",
+    base_url: str | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> CompanionPerceptionSource:
+    """Build the relational perceiver from the UI's non-secret choice (Vision §5).
+
+    Mirrors `build_perceiver`: offline -> silent; a real provider -> an LLM companion
+    perceiver over the same model, with the key read from the environment only.
+    """
+    name = provider.strip().lower()
+    if name in _OFFLINE:
+        return SilentCompanionPerception()
+    return companion_perceiver_from_settings(
+        _settings_from_ui(provider, model, base_url, environ)
     )
-    return perceiver_from_settings(settings)

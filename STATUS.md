@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 96)
+Last updated: 2026-08-26 (Increment 97)
 
 ---
 
@@ -1316,6 +1316,26 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - **Verified in a real browser:** sending "Hola Jarvis" flips `window.__face.speaking` to true with
   `mouthEnv ≈ 0.36` during the reply, then settles — the mouth articulates whether or not audio plays.
 - HTML/JS only; the console asset tripwire still guards the speech-sync wiring.
+
+### Increment 97 — the relational channel: talking to Jarvis teaches it about *you* ✅ (2026-08-26)
+- **The real gap behind "it doesn't know me": the chat only used ONE channel** (utterance → belief about a
+  *topic*) and never touched the companion model, so conversation taught Jarvis nothing about the person.
+  Now a turn feeds two channels — the epistemic one (world claims → beliefs) AND the **relational** one
+  (what the utterance reveals about *you* → the companion model), Vision §5.
+- New seam `domain/perception/companion_perception.py`: `CompanionPerceptionSource.read_companion(utterance)
+  → (CompanionObservation{trait, evidence}, …)`. Infra: `SilentCompanionPerception` (offline default — no
+  fabricated traits, §37) and `LlmCompanionPerception` (an LLM reads an utterance into stable facts about
+  the person; §38 boundary held — it *extracts*, confidence is still derived and the belief stays
+  contradictable). `Jarvis.note_companion()` folds each observation into the existing companion model
+  (`_record_companion`), so it's an ordinary revisable belief.
+- Wiring: `perceiver_factory` builds the companion perceiver from the same provider/model (secret from env);
+  the `perceiver` command and `server.py` set BOTH perceivers together; `_say` runs both channels and, when
+  it learned something, acknowledges it ("I'll remember this about you: …") and the Companion panel updates
+  from the snapshot. Requires an LLM perceiver — with the keyword rule the relational channel stays silent.
+- **Verified:** offline default learns nothing (honest); with a fake model, `note_companion` creates a real
+  companion belief and the command center surfaces it in the reply + snapshot. New tests
+  `tests/test_companion_perception.py` + `TestCompanionChannel`.
+- Gates: ruff clean · pytest 479 passed, 3 skipped.
 
 ---
 
