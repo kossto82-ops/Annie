@@ -129,6 +129,36 @@ Runnable end-to-end tours live in [`examples/main_loop.py`](examples/main_loop.p
 [`examples/resolving.py`](examples/resolving.py) (hear a contradiction → get curious → ask → resolve),
 and [`examples/reflecting.py`](examples/reflecting.py) (Jarvis notices a pattern in its own beliefs, reflects, hypothesises, challenges, and learns — unprompted).
 
+## Command center
+
+A local, dependency-free control surface — talk to Jarvis by text or voice, watch a point-cloud
+face react while it speaks, see its beliefs, goals and energy update live, and tune how hard it thinks:
+
+```bash
+python -m jarvis.interface        # then open the printed http://127.0.0.1:8765
+```
+
+The core stays stdlib-only; the browser supplies speech synthesis, speech recognition and the 3D face,
+so none of it costs a dependency. Set `JARVIS_LLM_*` (see below) for a real language model behind
+perception, and `JARVIS_HOME=./.jarvis` to keep memory on disk. Everything the page shows traces to
+real state — it is a window onto the core, never a second brain that invents replies.
+
+### A real language model (optional)
+
+Perception can be backed by any OpenAI-compatible provider (cloud or a local SLM) — chosen entirely by
+environment variables, no code change:
+
+```bash
+# Groq (cloud): a key from console.groq.com
+JARVIS_LLM_PROVIDER=groq JARVIS_LLM_MODEL=llama-3.3-70b-versatile JARVIS_LLM_API_KEY=gsk_... \
+  python -m jarvis.interface
+# or a fully-local model, no key:
+JARVIS_LLM_PROVIDER=ollama JARVIS_LLM_MODEL=llama3 python -m jarvis.interface
+```
+
+The model only *extracts candidate evidence* from language; confidence stays derived and the core stays
+the decider. The API secret lives only in `JARVIS_LLM_API_KEY`, never in code.
+
 ## Development
 
 Requires Python 3.13+.

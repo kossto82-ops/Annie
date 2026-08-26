@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-25 (Increment 88)
+Last updated: 2026-08-26 (Increment 89)
 
 ---
 
@@ -104,10 +104,14 @@ src/jarvis/
     services/goal_reflection.py          recurring_goals / reflection_effort (patterns over episodic goals)
     perception/perception_source.py      PerceptionSource (Protocol) — raw observation → Evidence (Vision §32)
   infrastructure/keyword_perception.py   KeywordPerception — dumb rule-based perceiver (NO LLM; §32/§37)
+  infrastructure/language_model.py       LanguageModel (Protocol) + registry/env_settings + OpenAI-compat adapter (§32)
+  interface/command_center.py            handle/route/snapshot — the command center's pure brain (§30/§40)
+  interface/server.py                    thin stdlib http.server wrapper; interface/console.html — the web UI
+  interface/__main__.py                  `python -m jarvis.interface` launches the command center
   (persistent() also wires JsonBeliefStore files: companion, actions, reversibility, goals, subgoals)
-examples/                                6 runnable tours (main_loop, goal_arc, goal_parts, perceiving,
-                                         conversation, resolving) — each guarded by tests/test_examples.py
-tests/                                   353 tests mirroring the above (+ public-surface & example guards)
+examples/                                7 runnable tours (main_loop, goal_arc, goal_parts, perceiving,
+                                         conversation, resolving, reflecting) + command_center launcher
+tests/                                   442 tests mirroring the above (+ public-surface & example guards)
 ```
 
 Conceptual flow implemented:
@@ -1162,6 +1166,37 @@ with belief + episode events dispatched through the NervousSystem at each step.
   ```
 - Gates: ruff clean · pyright strict 0 errors · pytest 422 passed, 2 skipped.
 
+### Increment 89 — the Command Center: a local web control surface (voice + 3D face + live state) ✅ (2026-08-26)
+- **Track E opens for real.** The developer wanted not a console but a *total* control center — talk to
+  Jarvis, hear it speak, watch a 3D face while it does, tune it live. Decision **D34**: the core stays
+  stdlib-only, so the rich surface lives where it costs nothing — a browser. A stdlib `http.server` serves
+  one self-contained page + a JSON bridge; the browser supplies `speechSynthesis` (Jarvis speaks),
+  `SpeechRecognition` (Jarvis listens), and a `<canvas>` point-cloud face (the 3D dots that move as it talks).
+- `src/jarvis/interface/command_center.py` — the **pure brain**: `handle(jarvis, command, payload)` maps a
+  command (`say`/`reflect`/`introspect`/`wonder`/`rest`/`energy_budget`/`state`) to a JSON reply by calling
+  Jarvis's ordinary methods (it invents nothing — casual free-text with the keyword perceiver honestly
+  answers "no evidence yet"; the LLM perceiver enriches it). `snapshot(jarvis)` is the live state. `route()`
+  maps HTTP method+path+body → `Response` with **no socket**, so the whole contract is unit-testable.
+- `src/jarvis/interface/server.py` — a **thin** `ThreadingHTTPServer` that only moves bytes; `create_jarvis`
+  wires persistence (JARVIS_HOME) + the env-selected perceiver (LLM if `JARVIS_LLM_*` set, else keyword).
+  `python -m jarvis.interface` (or `examples/command_center.py`) launches it. `console.html` is the UI.
+- **One small core addition:** `Jarvis.set_energy_budget(budget|None)` — a real runtime parameter the
+  control center tunes (Vision §15, §40), added to the public-surface guard.
+- **Verified in a real browser** against the running server (Vision §7 gate): page served, point-cloud face
+  painted (10k+ lit canvas pixels, zero JS console errors), `say` ran a real episode (episodes→1),
+  `energy_budget` tuned remaining→4 live, `reflect` returned its cycle; `speechSynthesis` + mic present.
+- Tests hermetic: `test_command_center.py` exercises `handle`/`route`/`snapshot` socket-free;
+  `test_command_center_server.py` binds a loopback port only under `JARVIS_UI_SMOKE=1` (like the live-LLM
+  test), so CI/offline stay green with zero network. §38 (D33) intact: no LLM in judgment.
+- **How to run it:**
+  ```
+  python -m jarvis.interface           # then open the printed http://127.0.0.1:8765
+  # with a real perceiver + persistent memory:
+  JARVIS_LLM_PROVIDER=groq JARVIS_LLM_MODEL=llama-3.3-70b-versatile JARVIS_LLM_API_KEY=gsk_... \
+  JARVIS_HOME=./.jarvis python -m jarvis.interface
+  ```
+- Gates: ruff clean · pyright strict 0 errors · pytest 442 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1293,6 +1328,14 @@ with belief + episode events dispatched through the NervousSystem at each step.
   or the tests — a `ScriptedLanguageModel` stub stands in. Unreadable/out-of-range model output is dropped
   (honest silence §37 / no clamping D7), never fabricated. Real provider SDKs live only inside a
   `LanguageModel` implementation.
+- **D34** The command center is a **local web app**, not a Python GUI: the core stays stdlib-only, so voice
+  (`speechSynthesis`/`SpeechRecognition`) and the 3D dot-face (`<canvas>`) live in the browser where they
+  cost nothing. A stdlib `http.server` serves one self-contained `console.html` + a JSON bridge; every
+  decision (`handle`/`route`/`snapshot`) is a **pure function** over a Jarvis (socket-free, unit-tested),
+  and the server only moves bytes. The bridge calls Jarvis's ordinary methods and invents nothing — it is a
+  window onto the core, not a second brain. Binding a socket in tests is opt-in (`JARVIS_UI_SMOKE=1`), so
+  CI/offline stay hermetic. The §38 boundary holds: no LLM in judgment; the browser's voice/vision are I/O,
+  not cognition.
 
 ---
 
@@ -1339,15 +1382,17 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 - Per-episode cost (FULL > BRIEF), accumulate + expose read-only, later a budget that makes attention
   *choose* BRIEF under load. Deepens Increment 33/34 attention. No deps. Starting now (Increment 84).
 
-### Track E — Command Center (chat with Jarvis + tune parameters) — USER REQUIREMENT (2026-08-25)
-- **A "command center" UI where the user can chat/talk with Jarvis and change parameters at runtime.**
-  Not yet built; captured so it is not lost. Needs, at minimum: (1) a conversational surface (text now,
-  voice later) that maps user turns → `perceive`/`think`/`ask_about`/`resolve` and Jarvis's state →
-  readable replies (introspect / reflect_cycle / state_summary); (2) live tuning of the tunable knobs —
-  grounded/insight/confidence thresholds, weighting policy, `_MAX_GOAL_REFLECTIONS`, the coming energy
-  budget — so they are *injectable/config-driven*, not hard-coded constants. Design note: as we add each
-  tunable, expose it via constructor/config rather than a module constant, so the command center can bind
-  to it later. Likely lands after Track B (real language) but the config-surface work starts opportunistically.
+### Track E — Command Center (chat with Jarvis + tune parameters) — USER REQUIREMENT — BACKBONE DONE (Increment 89)
+- **A total control center, in the browser (Increment 89, D34).** Web command center: chat (text + voice),
+  Jarvis speaks (`speechSynthesis`) and listens (`SpeechRecognition`), a `<canvas>` point-cloud face that
+  moves as it talks, live state (beliefs/companion/goals/energy), and a real runtime tuner (energy budget
+  → `set_energy_budget`). Core stays stdlib-only; the browser supplies voice+3D at zero dependency cost.
+  Pure `handle`/`route`/`snapshot` (socket-free, tested); thin `http.server` wrapper. Verified live.
+- **Still open (refinements, opportunistic):** (1) audio-reactive mouth from *real* TTS amplitude (Web
+  Audio) rather than the current envelope; (2) expose more tunable knobs live — grounded/insight/confidence
+  thresholds, weighting policy, `_MAX_GOAL_REFLECTIONS` — each made injectable as we touch it; (3) show
+  provenance/trace and the reflective cycle visually; (4) a perceiver/provider readout + switcher in the UI;
+  (5) streaming replies. As we add each tunable, expose it via constructor/config, not a module constant.
 
 ### Track D — smaller finish-offs (fold in opportunistically, not their own phase)
 - Unify the two `CognitiveEpisode` shapes (conclusion vs deliberation) — or document the split as final.
@@ -1365,19 +1410,19 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Track E begins — a minimal Command Center: talk to Jarvis + see/tune its state (Vision §30, §40; user
-requirement).** The LLM plumbing is done (86–88); the developer's other standing requirement is a place to
-chat with Jarvis and change parameters. Start with the smallest honest console REPL — no GUI yet, no new
-dependency. Smallest honest step:
-- `examples/command_center.py` (or `python -m jarvis.console`): a text loop that reads a line and routes it:
-  plain text → `perceive`/`think` and prints the conclusion; a few commands — `:introspect`, `:reflect`
-  (run `reflect_cycle`), `:state` (`state_summary`), `:energy`, `:help`, `:quit`. It builds the perceiver
-  via `language_model_from_env()` so it uses the real LLM when `JARVIS_LLM_*` is set, else the stub.
-- Tunable knobs first pass: let the console show and set the already-injectable config (energy costs/budget)
-  live — proving the "tune parameters" requirement end-to-end on what is already config-driven. Keep other
-  thresholds noted for making injectable as we touch them.
-- Deterministic/testable: factor the line-routing into a pure function (input line + Jarvis → reply string)
-  so it is unit-tested without stdin; the REPL wrapper is thin. No network in tests (stub default).
+**Track E, step 2 — make the face *truly* speak, and surface Jarvis's reasoning live.** The backbone works
+(Increment 89): browser command center with voice in/out, the point-cloud face, live state, and a real
+runtime tuner. The two most impactful refinements, either as the next increment:
+- **Audio-reactive mouth (the showpiece):** route the TTS through Web Audio (`AudioContext` + `AnalyserNode`)
+  so the mouth opens to the *real* speech envelope instead of the current jittery approximation. If capturing
+  `speechSynthesis` output proves cross-browser-flaky, add a tiny server TTS-less path or drive the analyser
+  from a mic-echo — decide by probing. Pure JS in `console.html`; no Python change, no new dependency.
+- **Show the mind, not just the mouth:** render the reflective cycle and belief provenance in the UI — when
+  `reflect`/`say` runs, draw the Connect→Reflect→Hypothesise→Challenge→Learn chain and the evidence a belief
+  rests on (the data already comes back in `snapshot`/`reflect`'s `cycle`; add a `trace` command exposing
+  `trace_of`). This is where the "total control center" earns its name — you *see* it think.
+- Keep the discipline: any new command is a pure `handle` branch with a socket-free test; any new tunable is
+  injectable via constructor/config, never a module constant. No network in the default suite.
 
 ---
 

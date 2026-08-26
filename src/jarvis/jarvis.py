@@ -205,6 +205,18 @@ class Jarvis:
         if self._energy_budget is not None:
             self._energy_available = self._energy_budget
 
+    def set_energy_budget(self, budget: int | None) -> None:
+        """Set (or clear) the recoverable energy budget at runtime (Vision §15, §40).
+
+        The seam a command center tunes to say how hard Jarvis should be willing to
+        think: a smaller budget makes it conserve sooner (answering briefly), a
+        larger one lets it run the full lifecycle for longer, and ``None`` clears the
+        budget so nothing constrains attention. Available energy is refilled to the
+        new budget — this sets capacity, it does not spend or penalise.
+        """
+        self._energy_budget = budget
+        self._energy_available = budget if budget is not None else 0
+
     def perceive(
         self, observation: str, trigger: str | None = None, goal: Goal | None = None
     ) -> CognitiveEpisode:

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jarvis — Command Center</title>
+<style>
+  :root {
+    --bg: #05070d; --panel: #0c111c; --panel2: #10182a; --edge: #1d2942;
+    --ink: #dfe9ff; --dim: #7f8db0; --teal: #38e6d0; --teal2: #1aa9c9;
+    --warn: #ff8f6b; --good: #57e39a; --violet: #9a7bff;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(1200px 800px at 30% -10%, #0b1426 0%, var(--bg) 60%);
+    background-color: var(--bg);
+    color: var(--ink);
+    font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 20px; border-bottom: 1px solid var(--edge);
+    background: linear-gradient(180deg, var(--panel2), var(--panel));
+  }
+  header .dot { width: 10px; height: 10px; border-radius: 50%;
+    background: var(--teal); box-shadow: 0 0 12px var(--teal); }
+  header h1 { font-size: 15px; letter-spacing: 2px; margin: 0; font-weight: 600; text-transform: uppercase; }
+  header .sub { color: var(--dim); font-size: 12px; letter-spacing: 1px; }
+  header .spacer { flex: 1; }
+  header .pill { font-size: 11px; color: var(--dim); border: 1px solid var(--edge);
+    padding: 3px 10px; border-radius: 999px; letter-spacing: .5px; }
+  header .pill b { color: var(--teal); font-weight: 600; }
+
+  main { display: grid; grid-template-columns: 1.15fr 0.85fr; min-height: 0; }
+  .stage { position: relative; border-right: 1px solid var(--edge);
+    display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+  #face { width: 100%; height: 100%; display: block; }
+  .stage .status { position: absolute; top: 16px; left: 20px; font-size: 12px;
+    letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
+  .stage .status b { color: var(--teal); }
+
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--edge); border-top: 1px solid var(--edge); }
+  .metric { background: var(--panel); padding: 12px 16px; }
+  .metric .k { font-size: 11px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
+  .metric .v { font-size: 20px; font-weight: 600; margin-top: 2px; }
+  .metric .v small { font-size: 12px; color: var(--dim); font-weight: 400; }
+  .bar { height: 6px; border-radius: 4px; background: #0a1120; margin-top: 8px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal2), var(--teal)); width: 0; transition: width .4s ease; }
+  .conserving .v { color: var(--warn); }
+
+  .right { display: grid; grid-template-rows: 1fr auto auto; min-height: 0; }
+  .chat { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; }
+  .msg.you { align-self: flex-end; background: linear-gradient(180deg, #16233d, #121c30);
+    border: 1px solid var(--edge); }
+  .msg.jarvis { align-self: flex-start; background: #0a1322; border: 1px solid #16243f;
+    border-left: 3px solid var(--teal2); }
+  .msg .who { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); margin-bottom: 3px; }
+  .msg .conf { font-size: 11px; color: var(--teal); margin-top: 5px; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--edge); }
+  .actions button { background: var(--panel2); color: var(--ink); border: 1px solid var(--edge);
+    padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; letter-spacing: .3px; }
+  .actions button:hover { border-color: var(--teal2); color: #fff; }
+
+  form.composer { display: flex; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--edge); background: var(--panel); }
+  form.composer input { flex: 1; background: #070c16; border: 1px solid var(--edge); color: var(--ink);
+    padding: 11px 14px; border-radius: 10px; font-size: 14px; outline: none; }
+  form.composer input:focus { border-color: var(--teal2); }
+  .iconbtn { width: 44px; border: 1px solid var(--edge); background: var(--panel2); border-radius: 10px;
+    cursor: pointer; color: var(--ink); font-size: 16px; }
+  .iconbtn.on { border-color: var(--teal); color: var(--teal); box-shadow: 0 0 10px rgba(56,230,208,.25) inset; }
+  .iconbtn:disabled { opacity: .35; cursor: not-allowed; }
+  .send { background: linear-gradient(180deg, var(--teal), var(--teal2)); color: #04121a;
+    border: none; font-weight: 700; padding: 0 18px; border-radius: 10px; cursor: pointer; letter-spacing: .5px; }
+
+  /* Left rail overlay panels on the stage */
+  .panels { position: absolute; right: 16px; top: 52px; width: 260px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: rgba(10,16,28,.82); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px;
+    backdrop-filter: blur(4px); }
+  .card h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 6px 0; font-size: 12px; }
+  .row .lbl { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .cbar { grid-column: 1 / -1; height: 4px; border-radius: 3px; background: #0a1120; overflow: hidden; }
+  .row .cbar > i { display: block; height: 100%; background: var(--teal); width: 0; }
+  .muted { color: var(--dim); font-size: 12px; font-style: italic; }
+  .tune label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); margin: 8px 0; }
+  .tune input[type=range] { flex: 1; accent-color: var(--teal); }
+  .tune .val { color: var(--teal); min-width: 34px; text-align: right; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } .stage { display: none; } }
+</style>
+</head>
+<body class="">
+  <header>
+    <span class="dot" id="pulse"></span>
+    <h1>Jarvis</h1><span class="sub">command center</span>
+    <span class="spacer"></span>
+    <span class="pill">perceiver <b id="perceiver">—</b></span>
+    <span class="pill">episodes <b id="epi">0</b></span>
+  </header>
+
+  <main>
+    <section class="stage">
+      <canvas id="face"></canvas>
+      <div class="status">state · <b id="mood">idle</b></div>
+
+      <div class="panels">
+        <div class="card">
+          <h3>Self-tendencies</h3>
+          <div id="self"><div class="muted">nothing noticed yet</div></div>
+        </div>
+        <div class="card">
+          <h3>Companion</h3>
+          <div id="companion"><div class="muted">unknown so far</div></div>
+        </div>
+        <div class="card tune">
+          <h3>Tune — how hard I think</h3>
+          <label><input type="checkbox" id="unbounded" checked /> think freely (no budget)</label>
+          <label>budget <input type="range" id="budget" min="3" max="60" step="1" value="15" disabled />
+            <span class="val" id="budgetval">∞</span></label>
+        </div>
+      </div>
+
+      <div class="metrics" id="metrics">
+        <div class="metric"><div class="k">Energy spent</div><div class="v" id="spent">0</div></div>
+        <div class="metric" id="remwrap"><div class="k">Energy left</div>
+          <div class="v" id="remaining">∞</div>
+          <div class="bar"><i id="rembar"></i></div></div>
+        <div class="metric"><div class="k">Recurring goals</div><div class="v" id="goals">0</div></div>
+      </div>
+    </section>
+
+    <section class="right">
+      <div class="chat" id="chat">
+        <div class="msg jarvis"><div class="who">Jarvis</div>I'm here. Tell me something, or ask — I'll reason from evidence, not invent. You can also speak: tap the mic.</div>
+      </div>
+      <div class="actions">
+        <button data-cmd="reflect">Reflect</button>
+        <button data-cmd="introspect">Introspect</button>
+        <button data-cmd="wonder">Wonder</button>
+        <button data-cmd="rest">Rest</button>
+      </div>
+      <form class="composer" id="composer">
+        <button type="button" class="iconbtn" id="mic" title="Speak">&#127908;</button>
+        <input id="text" placeholder="Say something to Jarvis…" autocomplete="off" />
+        <button type="button" class="iconbtn on" id="voice" title="Voice on/off">&#128266;</button>
+        <button class="send" type="submit">Send</button>
+      </form>
+    </section>
+  </main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+/* ---- talking to the core ------------------------------------------------ */
+async function api(cmd, payload) {
+  const res = await fetch("/api/" + cmd, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {})
+  });
+  return res.json();
+}
+
+/* ---- chat + state ------------------------------------------------------- */
+let voiceOn = true, thinking = false, speaking = false;
+
+function bubble(who, text, conf) {
+  const el = document.createElement("div");
+  el.className = "msg " + (who === "you" ? "you" : "jarvis");
+  const label = who === "you" ? "You" : "Jarvis";
+  el.innerHTML = '<div class="who"></div>';
+  el.firstChild.textContent = label;
+  el.appendChild(document.createTextNode(text));
+  if (typeof conf === "number") {
+    const c = document.createElement("div");
+    c.className = "conf";
+    c.textContent = "confidence " + conf.toFixed(2);
+    el.appendChild(c);
+  }
+  const chat = $("chat");
+  chat.appendChild(el);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function speak(text) {
+  if (!voiceOn || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.0; u.pitch = 0.95;
+    u.onstart = () => { speaking = true; };
+    u.onend = () => { speaking = false; };
+    window.speechSynthesis.speak(u);
+  } catch (e) { /* speech is a bonus, never a requirement */ }
+}
+
+function setMood(m) { $("mood").textContent = m; }
+
+function renderState(s) {
+  if (!s) return;
+  $("epi").textContent = s.episodes;
+  $("goals").textContent = s.goals.length;
+  const e = s.energy || {};
+  $("spent").textContent = e.spent;
+  const rem = e.remaining;
+  const wrap = $("remwrap");
+  if (rem === null || rem === undefined) {
+    $("remaining").innerHTML = '&#8734;';
+    $("rembar").style.width = "100%";
+    wrap.classList.remove("conserving");
+  } else {
+    $("remaining").textContent = rem;
+    const max = Math.max(rem, lastBudget || rem || 1);
+    $("rembar").style.width = Math.round(100 * rem / max) + "%";
+    wrap.classList.toggle("conserving", !!e.conserving);
+  }
+  renderList("self", s.self);
+  renderList("companion", s.companion);
+}
+
+function renderList(id, items) {
+  const box = $(id);
+  if (!items || items.length === 0) {
+    box.innerHTML = '<div class="muted">' + (id === "self" ? "nothing noticed yet" : "unknown so far") + '</div>';
+    return;
+  }
+  box.innerHTML = "";
+  items.forEach((it) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    const lbl = document.createElement("div");
+    lbl.className = "lbl"; lbl.title = it.statement; lbl.textContent = it.statement;
+    const val = document.createElement("div");
+    val.textContent = it.confidence.toFixed(2);
+    val.style.color = "var(--teal)";
+    const bar = document.createElement("div");
+    bar.className = "cbar";
+    const fill = document.createElement("i");
+    fill.style.width = Math.round(100 * it.confidence) + "%";
+    bar.appendChild(fill);
+    row.appendChild(lbl); row.appendChild(val); row.appendChild(bar);
+    box.appendChild(row);
+  });
+}
+
+async function converse(text) {
+  bubble("you", text);
+  thinking = true; setMood("thinking");
+  const data = await api("say", { text });
+  thinking = false; setMood("idle");
+  bubble("jarvis", data.reply, data.confidence);
+  renderState(data.state);
+  if (data.speak) speak(data.reply);
+}
+
+async function command(cmd) {
+  thinking = true; setMood(cmd);
+  const data = await api(cmd, {});
+  thinking = false; setMood("idle");
+  bubble("jarvis", data.reply || "(done)");
+  renderState(data.state);
+  if (data.speak) speak(data.reply);
+}
+
+/* ---- wire the controls -------------------------------------------------- */
+$("composer").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const t = $("text").value.trim();
+  if (!t) return;
+  $("text").value = "";
+  converse(t);
+});
+document.querySelectorAll(".actions button").forEach((b) =>
+  b.addEventListener("click", () => command(b.dataset.cmd)));
+$("voice").addEventListener("click", () => {
+  voiceOn = !voiceOn;
+  $("voice").classList.toggle("on", voiceOn);
+  if (!voiceOn && "speechSynthesis" in window) window.speechSynthesis.cancel();
+});
+
+/* energy budget tuning — a real runtime parameter change */
+let lastBudget = null;
+const unbounded = $("unbounded"), budget = $("budget"), budgetval = $("budgetval");
+function applyBudget() {
+  if (unbounded.checked) {
+    budget.disabled = true; budgetval.textContent = "∞"; lastBudget = null;
+    api("energy_budget", { budget: null }).then((d) => renderState(d.state));
+  } else {
+    budget.disabled = false; const v = parseInt(budget.value, 10);
+    budgetval.textContent = String(v); lastBudget = v;
+    api("energy_budget", { budget: v }).then((d) => renderState(d.state));
+  }
+}
+unbounded.addEventListener("change", applyBudget);
+budget.addEventListener("input", () => { budgetval.textContent = budget.value; });
+budget.addEventListener("change", applyBudget);
+
+/* ---- voice input (Web Speech API) --------------------------------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  const rec = new SR();
+  rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+  let listening = false;
+  rec.onresult = (e) => {
+    const said = e.results[0][0].transcript;
+    $("text").value = said; converse(said); $("text").value = "";
+  };
+  rec.onend = () => { listening = false; $("mic").classList.remove("on"); };
+  $("mic").addEventListener("click", () => {
+    if (listening) { rec.stop(); return; }
+    try { rec.start(); listening = true; $("mic").classList.add("on"); } catch (e) {}
+  });
+} else {
+  $("mic").disabled = true; $("mic").title = "Voice input not available in this browser";
+}
+
+/* ---- the point-cloud face ---------------------------------------------- */
+const canvas = $("face"), ctx = canvas.getContext("2d");
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  W = r.width; H = r.height;
+  canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+
+// Build points on a sphere (Fibonacci), classified into face regions.
+function buildPoints(n) {
+  const pts = [], gold = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (i / (n - 1)) * 2;          // 1 .. -1
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const th = gold * i;
+    const x = Math.cos(th) * r, z = Math.sin(th) * r;
+    let kind = "face";
+    const front = z > 0.35;
+    if (front && y > 0.12 && y < 0.42) {
+      if (x > 0.12 && x < 0.42) kind = "eyeR";
+      else if (x < -0.12 && x > -0.42) kind = "eyeL";
+    }
+    if (front && y > -0.5 && y < -0.16 && Math.abs(x) < 0.4) kind = "mouth";
+    pts.push({ x, y, z, kind, seed: Math.random() * 6.28 });
+  }
+  return pts;
+}
+const POINTS = buildPoints(1100);
+
+let angle = 0, mouthEnv = 0, mouthTarget = 0, blink = 0, lastBlink = 0;
+function frame(now) {
+  const t = now * 0.001;
+  angle += 0.0035;
+  const breathe = 1 + 0.02 * Math.sin(t * 1.4);
+  // mouth envelope: jittery while speaking, decays to rest otherwise
+  if (speaking) {
+    if (Math.random() < 0.25) mouthTarget = 0.25 + Math.random() * 0.75;
+  } else mouthTarget = 0;
+  mouthEnv += (mouthTarget - mouthEnv) * 0.35;
+  // blink roughly every ~4s
+  if (t - lastBlink > 3.5 + Math.random()) { lastBlink = t; blink = 1; }
+  blink = Math.max(0, blink - 0.08);
+
+  const hue = thinking ? 265 : 174;               // violet while thinking, teal at rest
+  const shimmer = thinking ? 0.5 : 0.0;
+  const scale = Math.min(W, H) * 0.34;
+  const cx = W / 2, cy = H / 2, FOV = 2.6;
+  const cosA = Math.cos(angle), sinA = Math.sin(angle);
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < POINTS.length; i++) {
+    const p = POINTS[i];
+    let px = p.x, py = p.y, pz = p.z;
+    if (p.kind === "mouth") py -= mouthEnv * 0.16 * (py + 0.16) * -6; // open downward
+    px *= breathe; py *= breathe; pz *= breathe;
+    const rx = px * cosA + pz * sinA;
+    const rz = -px * sinA + pz * cosA;
+    const ry = py;
+    const persp = FOV / (FOV - rz);
+    const sx = cx + rx * scale * persp;
+    const sy = cy - ry * scale * persp;
+    let a = 0.15 + 0.85 * ((rz + 1) / 2);          // depth fade
+    let light = 60;
+    if (p.kind === "eyeL" || p.kind === "eyeR") { light = 88; a *= (1 - 0.85 * blink); }
+    if (p.kind === "mouth") light = 70 + mouthEnv * 20;
+    a *= 0.5 + 0.5 * Math.abs(Math.sin(t * 2 + p.seed)) * (0.4 + shimmer);
+    const size = 1.3 * persp;
+    ctx.beginPath();
+    ctx.fillStyle = "hsla(" + hue + ",90%," + light + "%," + a.toFixed(3) + ")";
+    ctx.arc(sx, sy, size, 0, 6.283);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  // header pulse mirrors the mood
+  $("pulse").style.boxShadow = "0 0 " + (8 + mouthEnv * 18) + "px " +
+    (thinking ? "var(--violet)" : "var(--teal)");
+  requestAnimationFrame(frame);
+}
+
+/* ---- boot --------------------------------------------------------------- */
+async function boot() {
+  resize();
+  requestAnimationFrame(frame);
+  const d = await api("state", {});
+  renderState(d.state);
+  // best-effort perceiver readout: infer from whether the core is LLM-backed
+  $("perceiver").textContent = "ready";
+}
+boot();
+</script>
+</body>
+</html>

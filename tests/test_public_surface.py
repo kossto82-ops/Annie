@@ -49,6 +49,7 @@ _PUBLIC_METHODS = (
     "energy_remaining",
     "is_conserving",
     "rest",
+    "set_energy_budget",
     # Goals & relationship
     "recurring_goals",
     "reflection_effort",
