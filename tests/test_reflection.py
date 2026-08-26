@@ -275,3 +275,37 @@ class TestCuriosityWantsToReflect:
         )
         again = jarvis.feel_curious()
         assert again is None or again.reflect_on is None
+
+
+class TestActOnInsight:
+    def _with_learned_insight(self) -> Jarvis:
+        jarvis = Jarvis()
+        cause = "the client moved the deadline up"
+        for question in ("is the schedule at risk?", "should we cut scope?", "is morale ok?"):
+            jarvis.think(question, evidence=[_ev(cause)])
+        jarvis.learn_from_reflection()
+        return jarvis
+
+    def test_a_learned_insight_recommends_verifying_the_observation(self) -> None:
+        from jarvis.domain.enums.action_stance import ActionStance
+
+        jarvis = self._with_learned_insight()
+        recommendation = jarvis.act_on_insight()
+        assert recommendation is not None
+        # A brand-new verify action is asked-first (autonomy is earned).
+        assert recommendation.stance is ActionStance.ASK_FIRST
+
+    def test_no_learned_insight_recommends_nothing(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a", evidence=[_ev("observation A")])
+        jarvis.think("b", evidence=[_ev("observation B")])
+        assert jarvis.act_on_insight() is None
+
+    def test_an_unmined_pattern_alone_recommends_nothing(self) -> None:
+        # A load-bearing pattern that has not yet been learned is not yet actionable.
+        jarvis = Jarvis()
+        cause = "a shared observation"
+        jarvis.think("a", evidence=[_ev(cause)])
+        jarvis.think("b", evidence=[_ev(cause)])
+        assert jarvis.reflect() != ()
+        assert jarvis.act_on_insight() is None

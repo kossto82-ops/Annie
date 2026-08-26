@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-24 (Increment 81)
+Last updated: 2026-08-25 (Increment 82)
 
 ---
 
@@ -1053,6 +1053,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
   at all seven tours. Consolidation only — no behaviour change, all prior tests green.
 - Gates: ruff clean · pyright strict 0 errors · pytest 381 passed.
 
+### Increment 82 — Act: a learned insight reaches behaviour, the cycle is whole ✅ (2026-08-25)
+- **Cycle stage 6, the last** (… → Learn → **Act**). `jarvis.act_on_insight()` connects the reflective
+  cycle's output to behaviour: when Jarvis has confidently learned a common-cause insight, it proposes a
+  graded action — "verify that '{observation}' still holds", reversible — and returns the stance from the
+  existing `recommend_action` machinery, or None when there is no learned insight (Vision §27, §28, §31).
+- Honest & earned: a brand-new verify action is **ASK_FIRST** (no track record yet); experience with it
+  can later earn a SUGGEST. It only recommends — performs nothing (§28). An un-mined pattern (not yet
+  learned) is not yet actionable → None; a dethroned/absent insight recommends nothing. Verified.
+- Refactor: shared `_insight_trigger(observation)` used by both `learn_from_reflection` (to form the
+  belief) and `act_on_insight` (to find it), so the insight's identity stays in one place.
+- **Track A is now complete end to end: Remember → Connect → Reflect → Hypothesise → Challenge → Learn →
+  Act, self-triggered by curiosity, every stage derived/revisable/auditable, no LLM.**
+- Gates: ruff clean · pyright strict 0 errors · pytest 384 passed.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1196,7 +1210,7 @@ All prior deferred threads are folded in below so nothing is lost.
 | **Hypothesise (autonomous)** | ✅ done (Incr 76) | `hypothesise()` — a common-cause `HypothesisSet` brewed from `reflect()` |
 | **Challenge** | ✅ done (Incr 77) | `challenge()` names the falsifier; `refute()` dethrones by removing what it explained |
 | **Learn** | ✅ done (Incr 78) | `learn_from_reflection()` — a surviving insight becomes a belief; the loop closes |
-| Act | ✅ exists, ▶ WIRE NEXT | graded autonomy / stances — let a learned insight recommend an action |
+| **Act** | ✅ done (Incr 82) | `act_on_insight()` — a learned common cause recommends verifying the observation |
 | **`reflect_cycle()` — the whole loop in one call** | ✅ done (Incr 79) | runs Connect→…→Learn, returns `ReflectiveCycle` summary |
 | **Trigger the cycle autonomously** | ✅ done (Incr 80) | `feel_curious()` raises a reflect impulse on an un-mined pattern; `pursue()` runs the cycle |
 
@@ -1231,19 +1245,20 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Wire a learned insight to Act: a confident common cause can recommend attention (Vision §27, §28, §31).**
-The reflective cycle produces a learned common-cause belief, but that insight never reaches *behaviour* —
-the Act stage is built (`recommend_action`) yet unconnected to the cycle's output. A confident insight
-that one observation underpins several beliefs is exactly the kind of thing worth *doing* something about
-(e.g. verify or watch that observation). Smallest honest step:
-- `jarvis.act_on_insight()` (or fold into the cycle): when `learn_from_reflection()` has adopted a
-  confident common-cause belief, propose a graded action — e.g. "verify that '{observation}' still holds",
-  reversible — and return its `recommend_action` stance (SUGGEST/ASK_FIRST/WITHHOLD). None when there is
-  no learned insight. It only *recommends*; it performs nothing (autonomy is earned, §28).
-- Keep it truthful: the recommendation's confidence traces to the insight's; a dethroned/absent insight
-  recommends nothing. Reuse the existing action machinery; no LLM.
-- Behaviour tests: a learned insight yields an action recommendation naming the observation with a
-  sensible stance; no insight → none. This closes Remember→…→Learn→**Act** for the reflective cycle.
+**Persist the reflective cycle's refutations (Track D finish-off, Vision §3, §21).** Track A is complete,
+but `refute()` records counterexamples only in memory (`self._refutations`), so a dethroned hypothesis
+comes back after a restart — a real continuity gap now that the cycle matters. Everything else Jarvis
+learns persists; this should too. Smallest honest step:
+- Back `_refutations` with a small persistent store (a JSON file wired by `Jarvis.persistent`, an 8th
+  store), so a refuted `(observation, belief)` pair survives a restart; `reflect()`/`hypothesise()` read
+  it exactly as today. In-memory default stays for ephemeral `Jarvis()`.
+- Keep it truthful: only what was actually refuted persists; loading is additive; no behaviour change to
+  the derivation. A persistence test: refute, restart on the same dir, the hypothesis stays dethroned.
+- Behaviour tests: refutations round-trip through `Jarvis.persistent`; an ephemeral Jarvis is unchanged.
+
+*(Then the strategic fork, needing an explicit go: **Track B** — an LLM-backed `PerceptionSource` (§32,
+ biggest external impact, needs an API/secret design decision); or **Track C** — §15 cognitive energy
+ (self-contained). Both are open; say which when ready and we design Track B before any code.)*
 
 *(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
  and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:

@@ -622,9 +622,6 @@ class Jarvis:
         ):
             return None
         finding = self.reflect()[0]
-        trigger = (
-            f'"{finding.observation}" is a common cause behind several of my beliefs'
-        )
         evidence = [
             Evidence(
                 content=f"a belief rests on it: {statement}",
@@ -633,7 +630,36 @@ class Jarvis:
             )
             for statement in finding.beliefs
         ]
-        return self.think(trigger, evidence=evidence).working_belief
+        return self.think(
+            self._insight_trigger(finding.observation), evidence=evidence
+        ).working_belief
+
+    @staticmethod
+    def _insight_trigger(observation: str) -> str:
+        return f'"{observation}" is a common cause behind several of my beliefs'
+
+    def act_on_insight(self) -> ActionRecommendation | None:
+        """Let a learned insight reach behaviour (Vision §27, §28, §31) — cycle stage
+        six, Act. When Jarvis has confidently learned that one observation is a common
+        cause, it proposes a graded action to verify that observation still holds and
+        returns the recommended stance, or None when there is no such insight.
+
+        It only *recommends* — it performs nothing (autonomy is earned, §28). The
+        stance is derived from the existing action machinery; a brand-new action kind
+        is asked-first, and experience with it can later earn a suggestion.
+        """
+        for finding in self.reflect():
+            statement = working_statement(self._insight_trigger(finding.observation))
+            belief = self.beliefs.get_by_statement(statement)
+            if belief is not None and belief.confidence.value >= _INSIGHT_CONFIDENCE:
+                action = Action(
+                    description=f'verify that "{finding.observation}" still holds',
+                    expected="the observation is confirmed",
+                    confidence=belief.confidence,
+                    reversible=True,
+                )
+                return self.recommend_action(action)
+        return None
 
     def reflect_cycle(self) -> ReflectiveCycle:
         """Run the whole reflective cycle once and report what it produced (Vision
