@@ -266,14 +266,29 @@ function speak(text) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.0; u.pitch = 0.95;
-    // Drive the mouth from the REAL speech: a boundary fires as each word is spoken,
-    // so the face articulates in sync with what is actually being said.
-    u.onstart = () => setSpeaking(true);
+    // If real speech plays, each word boundary adds a pulse — the mouth syncs to the
+    // actual audio. But the visible reaction does NOT depend on this firing (many
+    // browsers/contexts deliver no audio); `articulate` guarantees movement.
     u.onboundary = () => pulseWord();
-    u.onend = () => setSpeaking(false);
-    u.onerror = () => setSpeaking(false);
     window.speechSynthesis.speak(u);
   } catch (e) { /* speech is a bonus, never a requirement */ }
+}
+
+// Make the face visibly "talk" for the length of a reply, with or without audio.
+// This is what you SEE when Jarvis answers; speech synthesis, when available, layers
+// real word-sync on top. Driven by a timer so a silent browser still shows a reaction.
+let articTimer = 0, articStop = 0;
+function articulate(text) {
+  const words = (text || "").trim().split(/\s+/).filter(Boolean).length || 1;
+  const ms = Math.min(7000, Math.max(1400, words * 240));
+  window.clearInterval(articTimer); window.clearTimeout(articStop);
+  setSpeaking(true);
+  pulseWord(0.85);
+  articTimer = window.setInterval(() => pulseWord(0.55 + Math.random() * 0.4), 170);
+  articStop = window.setTimeout(() => {
+    window.clearInterval(articTimer);
+    setSpeaking(false);
+  }, ms);
 }
 
 function setMood(m) { $("mood").textContent = m; }
@@ -444,16 +459,19 @@ async function converse(text) {
   bubble("jarvis", data.reply, data.confidence);
   renderState(data.state);
   renderReasoning(data.provenance, data.trace);
-  if (data.speak) speak(data.reply);
+  if (data.reply) articulate(data.reply);   // always react visibly
+  if (data.speak) speak(data.reply);         // audio when applicable
 }
 
 async function command(cmd) {
   thinking = true; setMood(cmd);
   const data = await api(cmd, {});
   thinking = false; setMood("idle");
-  bubble("jarvis", data.reply || "(done)");
+  const reply = data.reply || "(done)";
+  bubble("jarvis", reply);
   renderState(data.state);
   if (cmd === "reflect") renderCycle(data.cycle);
+  articulate(reply);                         // the face reacts to every command too
   if (data.speak) speak(data.reply);
 }
 

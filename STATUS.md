@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 95)
+Last updated: 2026-08-26 (Increment 96)
 
 ---
 
@@ -1304,6 +1304,18 @@ with belief + episode events dispatched through the NervousSystem at each step.
   succeeded") narrates the natural subject with real grounds; `"Working conclusion about"` appears in no
   reply or provenance. New guard test `test_the_internal_working_label_never_leaks_to_the_user`.
 - Gates: ruff clean · pytest 469 passed, 3 skipped.
+
+### Increment 96 — the face reacts when you talk to it, with or without audio ✅ (2026-08-26)
+- **Bug: the mouth only moved if `speechSynthesis` fired `onstart`/`onboundary`.** In a browser/context
+  with no audible speech (common), `speaking` never turned on → the face sat static while Jarvis replied,
+  reading as "it didn't react to me".
+- Fix: a timer-driven `articulate(text)` owns the visible "talking" state for the length of a reply
+  (word-count → duration, per-word pulses), called on every reply in `converse()` and `command()`. Real
+  speech, when available, still layers exact word-sync on top via `onboundary` — but the reaction no longer
+  depends on it. `speak()` no longer gates the visual on audio callbacks.
+- **Verified in a real browser:** sending "Hola Jarvis" flips `window.__face.speaking` to true with
+  `mouthEnv ≈ 0.36` during the reply, then settles — the mouth articulates whether or not audio plays.
+- HTML/JS only; the console asset tripwire still guards the speech-sync wiring.
 
 ---
 
