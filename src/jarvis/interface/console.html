@@ -92,6 +92,27 @@
   .tune label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); margin: 8px 0; }
   .tune input[type=range] { flex: 1; accent-color: var(--teal); }
   .tune .val { color: var(--teal); min-width: 34px; text-align: right; }
+  /* Reasoning panel — the mind, not just the mouth */
+  .reasoning { border-top: 1px solid var(--edge); background: var(--panel); padding: 12px 16px;
+    max-height: 34vh; overflow-y: auto; }
+  .reasoning h4 { margin: 12px 0 6px; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); }
+  .reasoning h4:first-child { margin-top: 0; }
+  .reasoning .claim { font-size: 13px; color: var(--ink); }
+  .reasoning .cbar { height: 5px; border-radius: 3px; background: #0a1120; overflow: hidden; margin: 6px 0 4px; }
+  .reasoning .cbar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal2), var(--teal)); }
+  .grounds { display: grid; gap: 6px; }
+  .ground { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+  .ground .txt { font-size: 12px; color: var(--ink); }
+  .ground .src { font-size: 10px; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); }
+  .ground .w { font-variant-numeric: tabular-nums; color: var(--teal); }
+  .ground.against .w { color: var(--warn); }
+  .steps, .cycle { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pill2 { font-size: 11px; color: var(--ink); background: #0a1322; border: 1px solid #16243f; border-radius: 999px; padding: 3px 10px; }
+  .pill2 b { color: var(--teal); font-weight: 600; }
+  .arrow { color: var(--dim); }
+  .stagechip { font-size: 11px; border: 1px solid var(--edge); border-radius: 8px; padding: 4px 10px; color: var(--dim); }
+  .stagechip.on { color: var(--ink); border-color: var(--teal2); }
+  .stagechip.on b { color: var(--teal); font-weight: 600; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } .stage { display: none; } }
 </style>
 </head>
@@ -124,6 +145,10 @@
           <label>budget <input type="range" id="budget" min="3" max="60" step="1" value="15" disabled />
             <span class="val" id="budgetval">∞</span></label>
         </div>
+      </div>
+
+      <div class="reasoning" id="reasoning">
+        <div class="muted">Jarvis's reasoning appears here — ask it something, or press Reflect.</div>
       </div>
 
       <div class="metrics" id="metrics">
@@ -253,6 +278,85 @@ function renderList(id, items) {
   });
 }
 
+/* ---- the reasoning panel: show the mind, not just the mouth ------------- */
+function h4(text) { const el = document.createElement("h4"); el.textContent = text; return el; }
+function trunc(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+
+function groundsBlock(title, list, against) {
+  const wrap = document.createElement("div");
+  wrap.appendChild(h4(title));
+  if (!list || list.length === 0) {
+    const m = document.createElement("div"); m.className = "muted"; m.textContent = "—";
+    wrap.appendChild(m); return wrap;
+  }
+  const g = document.createElement("div"); g.className = "grounds";
+  list.forEach((e) => {
+    const row = document.createElement("div"); row.className = "ground" + (against ? " against" : "");
+    const left = document.createElement("div");
+    const txt = document.createElement("div"); txt.className = "txt"; txt.textContent = e.content;
+    const src = document.createElement("div"); src.className = "src"; src.textContent = e.source;
+    left.appendChild(txt); left.appendChild(src);
+    const w = document.createElement("div"); w.className = "w"; w.textContent = e.weight.toFixed(2);
+    row.appendChild(left); row.appendChild(w); g.appendChild(row);
+  });
+  wrap.appendChild(g); return wrap;
+}
+
+function renderReasoning(prov, trace) {
+  const box = $("reasoning"); box.innerHTML = "";
+  if (prov) {
+    box.appendChild(h4("Why I say this"));
+    const claim = document.createElement("div"); claim.className = "claim"; claim.textContent = prov.statement;
+    box.appendChild(claim);
+    const bar = document.createElement("div"); bar.className = "cbar";
+    const fill = document.createElement("i"); fill.style.width = Math.round(100 * prov.confidence) + "%";
+    bar.appendChild(fill); box.appendChild(bar);
+    box.appendChild(groundsBlock("Grounds for", prov.supporting, false));
+    if (prov.contradicting && prov.contradicting.length) {
+      box.appendChild(groundsBlock("Against", prov.contradicting, true));
+    }
+  }
+  if (trace && trace.length) {
+    box.appendChild(h4("How I got there"));
+    const steps = document.createElement("div"); steps.className = "steps";
+    trace.forEach((s, i) => {
+      if (i > 0) { const a = document.createElement("span"); a.className = "pill2 arrow"; a.textContent = "→"; steps.appendChild(a); }
+      const p = document.createElement("span"); p.className = "pill2";
+      const b = document.createElement("b"); b.textContent = s.step; p.appendChild(b);
+      if (s.detail) p.appendChild(document.createTextNode(" " + trunc(s.detail, 42)));
+      steps.appendChild(p);
+    });
+    box.appendChild(steps);
+  }
+  if (!prov && (!trace || !trace.length)) {
+    box.innerHTML = '<div class="muted">No reasoning to show for that.</div>';
+  }
+}
+
+function renderCycle(cycle) {
+  const box = $("reasoning"); box.innerHTML = "";
+  box.appendChild(h4("Reflective cycle"));
+  const on = {
+    Connect: !!(cycle && cycle.observation), Reflect: !!(cycle && cycle.observation),
+    Hypothesise: !!(cycle && cycle.hypothesis), Challenge: !!(cycle && cycle.hypothesis),
+    Learn: !!(cycle && cycle.learned),
+  };
+  const row = document.createElement("div"); row.className = "cycle";
+  ["Connect", "Reflect", "Hypothesise", "Challenge", "Learn"].forEach((st, i) => {
+    if (i > 0) { const a = document.createElement("span"); a.className = "pill2 arrow"; a.textContent = "→"; row.appendChild(a); }
+    const chip = document.createElement("span"); chip.className = "stagechip" + (on[st] ? " on" : "");
+    const b = document.createElement("b"); b.textContent = st; chip.appendChild(b); row.appendChild(chip);
+  });
+  box.appendChild(row);
+  const detail = document.createElement("div"); detail.className = "claim"; detail.style.marginTop = "10px";
+  detail.textContent = cycle && cycle.observation
+    ? "Load-bearing: " + cycle.observation
+    : "Nothing connected strongly enough to reflect on yet.";
+  box.appendChild(detail);
+  if (cycle && cycle.hypothesis) { const m = document.createElement("div"); m.className = "muted"; m.textContent = "Hypothesis: " + cycle.hypothesis; box.appendChild(m); }
+  if (cycle && cycle.learned) { const m = document.createElement("div"); m.className = "muted"; m.textContent = "Learned: " + cycle.learned; box.appendChild(m); }
+}
+
 async function converse(text) {
   bubble("you", text);
   thinking = true; setMood("thinking");
@@ -260,6 +364,7 @@ async function converse(text) {
   thinking = false; setMood("idle");
   bubble("jarvis", data.reply, data.confidence);
   renderState(data.state);
+  renderReasoning(data.provenance, data.trace);
   if (data.speak) speak(data.reply);
 }
 
@@ -269,8 +374,12 @@ async function command(cmd) {
   thinking = false; setMood("idle");
   bubble("jarvis", data.reply || "(done)");
   renderState(data.state);
+  if (cmd === "reflect") renderCycle(data.cycle);
   if (data.speak) speak(data.reply);
 }
+
+// A small hook so the reasoning panel can be exercised and observed directly.
+window.__reason = { renderReasoning, renderCycle };
 
 /* ---- wire the controls -------------------------------------------------- */
 $("composer").addEventListener("submit", (ev) => {

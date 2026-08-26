@@ -77,6 +77,44 @@ class TestSay:
         assert "enough" in reply or "evidence" in reply
 
 
+class TestReasoning:
+    def test_say_carries_provenance_and_a_step_trace(self) -> None:
+        jarvis = Jarvis(perception=_YesPerception())
+        result = handle(jarvis, "say", {"text": "the deploy succeeded"})
+        prov = cast("dict[str, object]", result["provenance"])
+        assert isinstance(prov["confidence"], float)
+        supporting = cast("list[object]", prov["supporting"])
+        assert len(supporting) >= 1
+        first = cast("dict[str, object]", supporting[0])
+        assert set(first) == {"content", "source", "weight"}
+        trace = cast("list[object]", result["trace"])
+        # The episode must at least start and conclude, in order.
+        steps = [cast("dict[str, object]", s)["step"] for s in trace]
+        assert steps[0] == "started"
+        assert steps[-1] == "concluded"
+
+    def test_ungrounded_say_still_returns_a_trace_and_empty_grounds(self) -> None:
+        # With no evidence Jarvis still forms an (empty) working belief and concludes
+        # honestly — the panel shows a real trace with no grounds, not a fabrication.
+        result = handle(Jarvis(), "say", {"text": "zxqw"})
+        prov = cast("dict[str, object]", result["provenance"])
+        assert prov["supporting"] == []
+        assert isinstance(result["trace"], list)
+
+    def test_explain_returns_the_grounds_for_a_held_belief(self) -> None:
+        jarvis = Jarvis(perception=_YesPerception())
+        handle(jarvis, "say", {"text": "coffee helps me focus"})
+        result = handle(jarvis, "explain", {"topic": "coffee helps me focus"})
+        prov = result["provenance"]
+        assert isinstance(prov, dict)
+        assert prov["statement"]
+
+    def test_explain_is_honest_about_an_unknown_topic(self) -> None:
+        result = handle(Jarvis(), "explain", {"topic": "the meaning of life"})
+        assert result["provenance"] is None
+        assert "don't hold a view" in str(result["reply"])
+
+
 class TestState:
     def test_state_command_returns_only_the_snapshot(self) -> None:
         result = handle(Jarvis(), "state", {})

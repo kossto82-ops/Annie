@@ -21,6 +21,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from jarvis.domain.entities.belief import Belief
+from jarvis.domain.events.belief_events import (
+    BeliefStrengthened,
+    BeliefWeakened,
+    ContradictionDetected,
+)
+from jarvis.domain.events.domain_event import CognitiveEvent
+from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
+from jarvis.domain.events.evidence_events import EvidenceAdded
+from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.executive.executive_controller import working_statement
 from jarvis.jarvis import Jarvis
 
 _CONSOLE_HTML = Path(__file__).with_name("console.html")
@@ -66,22 +77,99 @@ def snapshot(jarvis: Jarvis) -> Reply:
     }
 
 
+def _evidence_json(evidence: Evidence) -> Reply:
+    """One piece of evidence as the panel renders it — content, provenance, weight."""
+    return {
+        "content": evidence.content,
+        "source": evidence.source.name,
+        "weight": evidence.weight.value,
+    }
+
+
+def _provenance(belief: Belief) -> Reply:
+    """Why a belief is held: its derived confidence and the evidence for and against
+    it (Vision §8, §40) — the grounds the reasoning panel shows, so the surface
+    reveals *why*, not just *what*.
+    """
+    explanation = belief.explain()
+    return {
+        "statement": explanation.statement,
+        "confidence": explanation.confidence.value,
+        "supporting": [_evidence_json(e) for e in explanation.supporting],
+        "contradicting": [_evidence_json(e) for e in explanation.contradicting],
+    }
+
+
+def _trace_steps(events: tuple[CognitiveEvent, ...]) -> list[Reply]:
+    """An episode's cognitive events as ordered, human-readable steps (Vision §26) —
+    the chain the panel draws so you can watch the reasoning, not just read the reply.
+    """
+    steps: list[Reply] = []
+    for event in events:
+        if isinstance(event, EpisodeStarted):
+            steps.append({"step": "started", "detail": event.trigger})
+        elif isinstance(event, EvidenceAdded):
+            steps.append(
+                {"step": "weighed evidence", "detail": "for" if event.supports else "against"}
+            )
+        elif isinstance(event, BeliefStrengthened):
+            steps.append({"step": "belief strengthened", "detail": f"{event.confidence.value:.2f}"})
+        elif isinstance(event, BeliefWeakened):
+            steps.append({"step": "belief weakened", "detail": f"{event.confidence.value:.2f}"})
+        elif isinstance(event, ContradictionDetected):
+            steps.append({"step": "contradiction noted", "detail": "a held belief was opposed"})
+        elif isinstance(event, EpisodeCompleted):
+            steps.append({"step": "concluded", "detail": event.result})
+        else:
+            steps.append({"step": type(event).__name__, "detail": ""})
+    return steps
+
+
 def _say(jarvis: Jarvis, payload: Reply) -> Reply:
-    """Perceive what the companion said and reply with what Jarvis honestly concludes."""
+    """Perceive what the companion said and reply with what Jarvis honestly concludes,
+    carrying the reasoning behind it (provenance + the episode's step trace).
+    """
     text = str(payload.get("text", "")).strip()
     if not text:
         return {"reply": "I'm here — say something and I'll reason about it.", "speak": False}
     episode = jarvis.perceive(text, trigger=text)
+    trace = _trace_steps(jarvis.trace_of(episode))
     belief = episode.working_belief
     if belief is not None:
         return {
             "reply": belief.explain().narrate(),
             "speak": True,
             "confidence": belief.confidence.value,
+            "provenance": _provenance(belief),
+            "trace": trace,
         }
     return {
         "reply": "I don't have enough grounded evidence to form a view on that yet.",
         "speak": True,
+        "provenance": None,
+        "trace": trace,
+    }
+
+
+def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Explain what Jarvis believes about a topic and *why* (Vision §8) — a stateless
+    'why?' over the working belief it already holds, or an honest "no view yet".
+    """
+    topic = str(payload.get("topic", "")).strip()
+    if not topic:
+        return {"reply": "Name a topic and I'll explain what I believe about it.", "speak": False}
+    belief = jarvis.beliefs.get_by_statement(working_statement(topic))
+    if belief is None:
+        return {
+            "reply": f'I don\'t hold a view on "{topic}" yet.',
+            "speak": True,
+            "provenance": None,
+        }
+    return {
+        "reply": belief.explain().narrate(),
+        "speak": True,
+        "confidence": belief.confidence.value,
+        "provenance": _provenance(belief),
     }
 
 
@@ -152,6 +240,7 @@ def _state(_jarvis: Jarvis, _payload: Reply) -> Reply:
 
 _COMMANDS: dict[str, Command] = {
     "say": _say,
+    "explain": _explain,
     "reflect": _reflect,
     "introspect": _introspect,
     "wonder": _wonder,

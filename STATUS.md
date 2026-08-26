@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 90)
+Last updated: 2026-08-26 (Increment 91)
 
 ---
 
@@ -1215,6 +1215,28 @@ with belief + episode events dispatched through the NervousSystem at each step.
   `articulation`/`window.__face`) — the analogue of the public-surface guard for the one browser asset.
 - Gates: ruff clean · pyright strict 0 errors · pytest 444 passed, 3 skipped.
 
+### Increment 91 — show the mind: a reasoning panel (provenance + step trace + reflective cycle) ✅ (2026-08-26)
+- **The counter-weight to the voice and face: the surface now shows *grounds*, not vibes.** `say` carries
+  the reasoning behind its reply — the working belief's provenance (`_provenance`: statement, derived
+  confidence, and the evidence *for* and *against* with source + weight) and the episode's step trace
+  (`_trace_steps`: started → weighed evidence for/against → belief strengthened/weakened → contradiction
+  noted → concluded, from the real `CognitiveEvent`s via `trace_of`). A new **`explain` command** answers a
+  stateless "why do you believe X?" over the held working belief. Both are pure `handle` branches, invent
+  nothing, and are unit-tested socket-free.
+- `console.html` gains a **reasoning panel**: after `say`/`explain` it renders the claim + a confidence bar,
+  a "Grounds for" list and (when present) an "Against" list, and the step trace as a pill chain; after
+  `reflect` it draws the Connect→Reflect→Hypothesise→Challenge→Learn chain, lighting the stages the cycle
+  actually produced. A `window.__reason` hook exposes `renderReasoning`/`renderCycle` for verification.
+- **Verified in a real browser** against the running server: a real cue phrase ("… definitely succeeded")
+  filled the panel — Why / Grounds (1 evidence row) / step trace with started+weighed+concluded; a populated
+  cycle lit all five stages; a for/against provenance rendered the confidence bar (62%), the "Against" row,
+  and four step pills. Zero JS console errors. (An honest note: two `say`s of the *same* text update one
+  belief, so Reflect correctly found nothing load-bearing — the panel truthfully showed all stages off.)
+- **Tripwire** extended (`tests/test_console_asset.py`): guards `renderReasoning`/`renderCycle`/`Grounds
+  for`/`window.__reason` so the panel wiring can't silently rot. §38 intact — the panel renders *derived
+  state*, it adds no cognition.
+- Gates: ruff clean · pyright strict 0 errors · pytest 449 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1409,8 +1431,10 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 - **Mouth synced to real speech (Increment 90):** `speechSynthesis` output isn't capturable by Web Audio,
   so the mouth is driven by the utterance's real word boundaries (`onboundary`), gated by start/end, with a
   gentle fallback where boundaries aren't delivered. Verified in-browser.
-- **Still open (refinements, opportunistic):** (1) show the reasoning live — a `trace` command + a
-  provenance/reflective-cycle panel (recommended next); (2) expose more tunable knobs live — grounded/insight/confidence
+- **Reasoning shown live (Increment 91):** a reasoning panel renders belief provenance (grounds for/against
+  + confidence), the episode's step trace, and the reflective cycle; an `explain` command answers "why?".
+- **Still open (refinements, opportunistic):** (1) a provider/perceiver switcher in the UI (see + change the
+  live LLM); streaming replies; (2) expose more tunable knobs live — grounded/insight/confidence
   thresholds, weighting policy, `_MAX_GOAL_REFLECTIONS` — each made injectable as we touch it; (3) show
   provenance/trace and the reflective cycle visually; (4) a perceiver/provider readout + switcher in the UI;
   (5) streaming replies. As we add each tunable, expose it via constructor/config, not a module constant.
@@ -1431,20 +1455,21 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**Track E, step 3 — show the mind, not just the mouth.** The face now talks in sync with real words
-(Increment 90). The next leap makes the "total control center" earn its name: render Jarvis's *reasoning*
-live, so you watch it think.
-- **A `trace` command** in `command_center.handle`: expose an episode's decision provenance (`trace_of` /
-  `trace`) as JSON — the ordered cognitive events (started → evidence/belief changes → completed) — and, for
-  `say`, why the working belief concluded (the evidence it rests on, its supporting/contradicting split).
-- **A reasoning panel** in `console.html`: when `say`/`reflect` runs, draw the belief's provenance and the
-  reflective chain Connect→Reflect→Hypothesise→Challenge→Learn (the `cycle` already comes back from
-  `reflect`). This is the honest counter-weight to the voice/face — the surface shows *grounds*, not vibes.
-- Keep the discipline: the new `trace` command is a **pure `handle` branch with a socket-free test**; the
-  panel is pure JS verified in the browser; the asset tripwire guards its wiring. No network in the suite;
-  §38 boundary intact (the panel renders derived state, it does not add cognition).
-- Alternatives if you'd rather: a **provider/perceiver switcher** in the UI (see and change the live LLM),
-  or **streaming replies**. Say which; otherwise `trace`/reasoning-panel is the recommended next.
+**The command center now has voice, a synced face, live state, tuning, and a reasoning panel (Increments
+89–91).** The natural next moves — pick one:
+- **A provider/perceiver switcher in the UI (recommended):** show which perceiver is live (keyword vs a real
+  LLM) and let the developer point it at any registered provider at runtime — the open registry (Increment
+  87) already makes every provider config, so this is the UI binding for the "swap LLM easily" requirement.
+  Needs a small read surface (current provider) and a `set_perceiver`/config command; keep the secret in the
+  env, never in the page. Pure `handle` branches + socket-free tests; browser-verified.
+- **Or Track B for real:** stop pretending with the keyword perceiver — run the command center against a live
+  Groq/Ollama model end to end (the plumbing exists since Increment 88) and watch real language ground real
+  beliefs, with the reasoning panel showing the LLM-extracted evidence. This is a *usage/validation* step,
+  not new code; the honest deliverable is a documented live run + any rough edges it surfaces.
+- **Or polish:** streaming replies; a mic-driven "push to talk" affordance; persistence on by default.
+- Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
+  constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
+  §38 boundary intact (the LLM extracts candidate evidence, it never decides).
 
 ---
 

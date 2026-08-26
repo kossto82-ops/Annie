@@ -29,3 +29,10 @@ def test_the_mouth_is_driven_by_real_speech_boundaries() -> None:
         assert marker in html, f"speech-sync wiring lost its {marker!r}"
     # The observable hook the browser check drives.
     assert "window.__face" in html
+
+
+def test_the_reasoning_panel_is_wired() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    # The panel that shows the mind: provenance grounds + the step trace + the cycle.
+    for marker in ("renderReasoning", "renderCycle", "Grounds for", "window.__reason"):
+        assert marker in html, f"reasoning panel lost its {marker!r}"
