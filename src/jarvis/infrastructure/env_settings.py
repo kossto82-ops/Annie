@@ -13,6 +13,7 @@ in.
     JARVIS_LLM_API_KEY    bearer credential (omit for keyless local SLMs)
     JARVIS_LLM_TIMEOUT    seconds (default 30)
     JARVIS_LLM_TEMPERATURE  default 0
+    JARVIS_LLM_REASONING_EFFORT  optional; for reasoning models (e.g. gpt-oss "low")
 """
 
 from __future__ import annotations
@@ -45,6 +46,7 @@ def settings_from_env(environ: Mapping[str, str] | None = None) -> ProviderSetti
         api_key=(env.get(f"{_PREFIX}API_KEY") or None),
         timeout=float(env.get(f"{_PREFIX}TIMEOUT", "30")),
         temperature=float(env.get(f"{_PREFIX}TEMPERATURE", "0")),
+        reasoning_effort=(env.get(f"{_PREFIX}REASONING_EFFORT") or None),
     )
 
 

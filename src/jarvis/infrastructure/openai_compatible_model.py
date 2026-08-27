@@ -59,13 +59,15 @@ class OpenAiCompatibleModel:
         headers = {"Content-Type": "application/json", "User-Agent": "Jarvis/1.0"}
         if settings.api_key:  # local SLMs may need no key
             headers["Authorization"] = f"Bearer {settings.api_key}"
-        body = json.dumps(
-            {
-                "model": settings.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": settings.temperature,
-            }
-        ).encode("utf-8")
+        request_body: dict[str, Any] = {
+            "model": settings.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": settings.temperature,
+            "max_tokens": settings.max_tokens,
+        }
+        if settings.reasoning_effort:  # only for reasoning models, when configured
+            request_body["reasoning_effort"] = settings.reasoning_effort
+        body = json.dumps(request_body).encode("utf-8")
         return _extract_message(self._transport(url, headers, body))
 
 

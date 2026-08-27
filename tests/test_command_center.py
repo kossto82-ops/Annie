@@ -117,6 +117,69 @@ class TestCompanionChannel:
         assert "remember this about you" not in str(result["reply"])
 
 
+class _MultiTraitReader:
+    """A companion perceiver that reads a document into two fixed traits (offline)."""
+
+    def read_companion(self, utterance: str) -> tuple[CompanionObservation, ...]:
+        def obs(trait: str) -> CompanionObservation:
+            return CompanionObservation(
+                trait=trait,
+                evidence=Evidence(
+                    content=utterance,
+                    source=EvidenceSource.USER_STATEMENT,
+                    weight=Confidence(0.8),
+                    supports=True,
+                ),
+            )
+
+        return (obs("works in customer service and IT"), obs("values honesty"))
+
+
+class TestLearn:
+    def test_it_folds_a_profile_into_the_companion_model(self) -> None:
+        jarvis = Jarvis()
+        jarvis.set_companion_perception(_MultiTraitReader())
+        doc = (
+            "## Work\nRaúl works in customer service and IT.\n\n"
+            "## Values\nRaúl values honesty and clear thinking above all else."
+        )
+        result = handle(jarvis, "learn", {"text": doc})
+        learned = cast("list[str]", result["learned"])
+        assert len(learned) == 2
+        assert "Learned 2 things" in str(result["reply"])
+        # The traits are now real companion beliefs the snapshot exposes.
+        state = cast("dict[str, object]", result["state"])
+        assert len(cast("list[object]", state["companion"])) == 2
+
+    def test_learning_with_no_llm_reports_it_cannot_extract(self) -> None:
+        result = handle(Jarvis(), "learn", {"text": "## Me\nI am a curious person who builds."})
+        assert result["learned"] == []
+        assert "LLM perceiver" in str(result["reply"])
+
+    def test_empty_text_just_asks(self) -> None:
+        result = handle(Jarvis(), "learn", {"text": "   "})
+        assert result["speak"] is False
+        assert "learned" not in result
+
+
+class TestGreeting:
+    def test_offline_greeting_is_warm_not_robotic(self) -> None:
+        result = handle(Jarvis(), "greeting", {})
+        reply = str(result["reply"])
+        assert reply.strip() != ""
+        assert result["speak"] is False
+        # The old robotic opener is gone.
+        assert "reason from evidence, not invent" not in reply
+
+    def test_greeting_shifts_once_it_knows_you(self) -> None:
+        jarvis = Jarvis()
+        jarvis.set_companion_perception(_CompanionReader())
+        handle(jarvis, "say", {"text": "I went hiking"})  # teach it something
+        result = handle(jarvis, "greeting", {})
+        # With something remembered, the default greeting acknowledges the return.
+        assert "again" in str(result["reply"]).lower()
+
+
 class _UpperVoice:
     """A stand-in renderer: proves the reply is passed through jarvis.voice."""
 
@@ -164,7 +227,7 @@ class TestReasoning:
         assert prov["statement"] == "the build passed"
         ungrounded = handle(Jarvis(), "say", {"text": "hola jarvis"})
         assert "Working conclusion about" not in json.dumps(ungrounded)
-        assert "hola jarvis" in str(ungrounded["reply"])
+        assert str(ungrounded["reply"]).strip() != ""  # a warm reply, and no leak
 
     def test_ungrounded_say_still_returns_a_trace_and_empty_grounds(self) -> None:
         # With no evidence Jarvis still forms an (empty) working belief and concludes

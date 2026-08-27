@@ -23,3 +23,11 @@ class ProviderSettings:
     api_key: str | None = None  # bearer credential; omit for keyless local SLMs
     timeout: float = 30.0
     temperature: float = 0.0
+    # A generous default output budget: reasoning models (e.g. gpt-oss) spend part of it
+    # on hidden reasoning, and a small budget leaves empty content on long inputs, so this
+    # is deliberately roomy rather than the provider's tiny default.
+    max_tokens: int = 3072
+    # Optional reasoning budget for reasoning models (e.g. gpt-oss "low"/"medium"/"high").
+    # Sent only when set, so it stays provider-agnostic; "low" makes such models reliably
+    # return content (not spend it all on hidden reasoning) and uses far fewer tokens.
+    reasoning_effort: str | None = None

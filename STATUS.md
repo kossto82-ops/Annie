@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-26 (Increment 98)
+Last updated: 2026-08-27 (Increment 99)
 
 ---
 
@@ -1360,6 +1360,24 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Gates: ruff clean · pytest 491 passed, 3 skipped (new `tests/test_response_renderer.py` + loader/UA/voice
   tests). Note: reply *scaffolding* is now localized; stored companion traits remain canonical English (panel
   shows English traits, chat is in-language) — a later polish.
+
+### Increment 99 — teach Jarvis about you: profile ingestion, warm greeting, robust extraction ✅ (2026-08-27)
+- **A deliberate way to "teach" Jarvis who you are** — the `learn` command reads a pasted profile through
+  the relational channel in ONE pass into the companion model (Vision §5). The memory it builds lives in
+  Jarvis (`companion.json`), NOT the model — the LLM only *extracts*; beliefs are revisable and survive a
+  provider switch (verified: 58 beliefs persisted). New "Teach Jarvis about you" card in Tools.
+- **Conversation feels like a companion, not a verdict engine:** `_say` now leads with what it learned about
+  you ("Got it — I'll remember: …") for self-disclosure, narrates a grounded world-belief otherwise, and —
+  when there's nothing to weigh — invites warmly instead of "I can't ground a view".
+- **A warm, memory-grounded opening** replaces the robotic banner: the `greeting` command phrases a
+  personalized hello from the companion model (by name, offering to resume a project) in the user's language;
+  friendly default when offline. Verified live: *"¡Hola …! ¿Listo para seguir …?"*.
+- **Robust LLM extraction (real Groq bugs fixed):** tolerant JSON parsing (strips ```json fences / prose);
+  `max_tokens` (3072 default) so reasoning models don't return empty content on long inputs; optional
+  `reasoning_effort` (`JARVIS_LLM_REASONING_EFFORT`, e.g. gpt-oss "low") for reliable content + far fewer
+  tokens; a clear rate-limit (429) message. Ollama is supported/swappable but `qwen3:4b` is ~3 min/call on
+  this CPU box — not viable interactively yet; `JARVIS_LLM_TIMEOUT` is configurable for slower local models.
+- Gates: ruff clean · pytest 497 passed, 3 skipped.
 
 ---
 

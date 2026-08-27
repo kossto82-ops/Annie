@@ -15,13 +15,13 @@ yields no observations (honest silence, §37) rather than an invented trait.
 
 from __future__ import annotations
 
-import json
 from typing import Any, cast
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.infrastructure.json_extraction import extract_json_array
 from jarvis.infrastructure.language_model import LanguageModel
 
 _INSTRUCTIONS = (
@@ -52,12 +52,9 @@ class LlmCompanionPerception:
 
     @staticmethod
     def _to_observations(raw: str, utterance: str) -> tuple[CompanionObservation, ...]:
-        try:
-            parsed: Any = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
+        parsed = extract_json_array(raw)
+        if parsed is None:
             return ()  # unreadable output -> stay silent (Vision §37)
-        if not isinstance(parsed, list):
-            return ()
         observations: list[CompanionObservation] = []
         for item in cast("list[Any]", parsed):
             observation = _item_to_observation(item, utterance)

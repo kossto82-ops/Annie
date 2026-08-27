@@ -116,6 +116,10 @@
     border: 1px solid var(--edge); color: var(--ink); padding: 5px 8px; border-radius: 8px;
     font-size: 12px; outline: none; min-width: 0; }
   .tune select:focus, .tune input[type=text]:focus, .tune input[type=password]:focus { border-color: var(--teal2); }
+  .tune textarea { width: 100%; background: #070c16; border: 1px solid var(--edge); color: var(--ink);
+    padding: 8px; border-radius: 8px; font-size: 12px; outline: none; resize: vertical;
+    font-family: inherit; margin: 4px 0 6px; }
+  .tune textarea:focus { border-color: var(--teal2); }
   .switch { width: 100%; margin: 4px 0 6px; background: var(--panel2); color: var(--ink);
     border: 1px solid var(--edge); padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; }
   .switch:hover { border-color: var(--teal2); color: #fff; }
@@ -173,9 +177,7 @@
     </section>
 
     <section class="right">
-      <div class="chat" id="chat">
-        <div class="msg jarvis"><div class="who">Jarvis</div>I'm here. Tell me something, or ask — I'll reason from evidence, not invent. You can also speak: tap the mic.</div>
-      </div>
+      <div class="chat" id="chat"></div>
       <div class="actions">
         <button data-cmd="reflect">Reflect</button>
         <button data-cmd="introspect">Introspect</button>
@@ -222,6 +224,13 @@
         <button type="button" id="applyperceiver" class="switch">Switch perceiver</button>
         <div class="muted">The key is saved to the server's <b>.env</b> (git-ignored) and never shown
           back. Leave it blank to keep the one already configured.</div>
+      </div>
+      <div class="card tune">
+        <h3>Teach Jarvis about you</h3>
+        <textarea id="profile" rows="5" placeholder="Paste a short profile or notes about yourself — Jarvis reads it into what it remembers about you. Needs an LLM perceiver."></textarea>
+        <button type="button" id="learnbtn" class="switch">Learn about me</button>
+        <div class="muted">Each section becomes a revisable belief in the Companion model — you can
+          correct it later just by telling Jarvis.</div>
       </div>
     </div>
   </aside>
@@ -514,6 +523,22 @@ budget.addEventListener("change", applyBudget);
 /* perceiver switch — runtime provider/perceiver change (secret stays server-side) */
 $("applyperceiver").addEventListener("click", applyPerceiver);
 
+/* teach Jarvis about you — fold a pasted profile into the companion model */
+async function learnAboutMe() {
+  const text = $("profile").value.trim();
+  if (!text) return;
+  const btn = $("learnbtn");
+  btn.disabled = true; btn.textContent = "Learning…";
+  try {
+    const data = await api("learn", { text });
+    bubble("jarvis", data.reply || "(done)");
+    renderState(data.state);
+  } finally {
+    btn.disabled = false; btn.textContent = "Learn about me";
+  }
+}
+$("learnbtn").addEventListener("click", learnAboutMe);
+
 /* tools & configuration drawer — a separate window so the face stays unobscured */
 function setDrawer(open) {
   $("drawer").classList.toggle("open", open);
@@ -664,6 +689,14 @@ async function boot() {
   requestAnimationFrame(frame);
   const d = await api("state", {});
   renderState(d.state);   // sets the live perceiver readout + populates the switcher
+  // A warm opening, grounded in what Jarvis remembers (falls back gracefully).
+  try {
+    const g = await api("greeting", {});
+    bubble("jarvis", g.reply || "Hi — I'm Jarvis.");
+    articulate(g.reply || "");
+  } catch (e) {
+    bubble("jarvis", "Hi — I'm Jarvis.");
+  }
 }
 boot();
 </script>

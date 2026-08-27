@@ -51,6 +51,13 @@ class TestLlmCompanionPerception:
     def test_empty_utterance_stays_silent(self) -> None:
         assert LlmCompanionPerception(_FakeModel("[]")).read_companion("  ") == ()
 
+    def test_a_fenced_or_wrapped_json_array_is_still_read(self) -> None:
+        # Reasoning models often wrap the array in a ```json fence or prose.
+        fenced = '```json\n[{"trait": "likes hiking", "supports": true, "weight": 0.7}]\n```'
+        observations = LlmCompanionPerception(_FakeModel(fenced)).read_companion("...")
+        assert len(observations) == 1
+        assert observations[0].trait == "likes hiking"
+
 
 class _ScriptedCompanion(CompanionPerceptionSource):
     """Yields fixed observations, for testing the Jarvis-level wiring offline."""

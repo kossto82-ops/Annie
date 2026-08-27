@@ -33,6 +33,8 @@ from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import llm_config_store
+from jarvis.infrastructure.env_settings import settings_from_env
+from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.perceiver_factory import (
     available_providers,
     build_companion_perceiver,
@@ -137,79 +139,78 @@ def _trace_steps(events: tuple[CognitiveEvent, ...]) -> list[Reply]:
     return steps
 
 
-def _augment_with_companion(result: Reply, learned: tuple[Belief, ...]) -> Reply:
-    """Fold what a turn taught Jarvis about the companion into the reply (Vision §5).
-
-    A conversation turn has two channels: reasoning about the world (the epistemic reply
-    already in ``result``) and learning about *you*. When the relational channel picked
-    something up, acknowledge it plainly and carry the traits so the UI can highlight
-    them; the Companion panel updates from the snapshot either way. Nothing learned →
-    the reply is unchanged (no invented intimacy).
-    """
-    if not learned:
-        return result
-    traits = [belief.explain().statement for belief in learned]
-    result["learned"] = traits
-    note = "I'll remember this about you: " + "; ".join(traits) + "."
-    result["reply"] = f"{result['reply']} {note}"
-    result["speak"] = True
-    return result
+def _provider_error(error: Exception) -> str:
+    """A clear, actionable message for a language-model failure (Vision §37)."""
+    code = getattr(error, "code", None)
+    if code == 429:
+        return (
+            "The language model is rate-limited right now (too many tokens this minute). "
+            "Wait a minute and try again, or use a local provider like Ollama."
+        )
+    return (
+        f"I couldn't reach the language model ({type(error).__name__}). "
+        "Check the provider, model, and API key in Tools — or switch to the keyword perceiver."
+    )
 
 
 def _say(jarvis: Jarvis, payload: Reply) -> Reply:
-    """Hear what the companion said over both channels (Vision §5, §8): reason about the
-    world (provenance + step trace) AND learn about the person, then reply honestly.
+    """Hear what the companion said over both channels (Vision §5, §8): learn about the
+    person AND reason about the world, then reply as a companion — not a verdict engine.
+
+    Priority is relational: if the turn taught Jarvis something about *you*, it leads with
+    acknowledging that (this is how you "teach" it — it remembers, §5). Otherwise it
+    narrates a grounded world-belief, or — when there is nothing to weigh — says so warmly
+    and invites more, never scolding "I can't ground a view".
     """
     text = str(payload.get("text", "")).strip()
     if not text:
-        return {"reply": "I'm here — say something and I'll reason about it.", "speak": False}
+        return {"reply": "I'm here — tell me something, or ask.", "speak": False}
     try:
         # Both channels touch the language model when an LLM perceiver is active; a
         # provider/network/credential failure here must not 500 — surface it clearly.
         episode = jarvis.perceive(text, trigger=text)
         learned = jarvis.note_companion(text)  # the relational channel (Vision §5)
     except Exception as error:  # noqa: BLE001 - the external-provider boundary
-        return {
-            "reply": (
-                f"I couldn't reach the language model ({type(error).__name__}). "
-                "Check the provider, model, and API key in Tools — or switch back to the "
-                "keyword perceiver."
-            ),
-            "speak": True,
-            "provenance": None,
-            "trace": [],
-        }
+        return {"reply": _provider_error(error), "speak": True, "provenance": None, "trace": []}
     trace = _trace_steps(jarvis.trace_of(episode))
     belief = episode.working_belief
-    if belief is None:
+    explanation = belief.explain() if belief is not None else None
+    grounded = explanation is not None and bool(
+        explanation.supporting or explanation.contradicting
+    )
+    provenance = _provenance(belief) if belief is not None else None
+
+    if learned:
+        # Self-disclosure — lead with what Jarvis now remembers about you (the "training").
+        traits = [b.explain().statement for b in learned]
         result: Reply = {
-            "reply": "I don't have enough grounded evidence to form a view on that yet.",
+            "reply": "Got it — I'll remember this about you: " + "; ".join(traits) + ".",
             "speak": True,
-            "provenance": None,
+            "learned": traits,
+            "provenance": provenance,
             "trace": trace,
         }
-    elif (explanation := belief.explain()).supporting or explanation.contradicting:
-        # A grounded belief: narrate it in the companion's own words (no internal label).
+    elif grounded and explanation is not None:
+        # A grounded belief about the world: narrate it in plain words (no internal label).
         result = {
             "reply": explanation.narrate(subject_of(explanation.statement)),
             "speak": True,
-            "confidence": belief.confidence.value,
-            "provenance": _provenance(belief),
+            "confidence": belief.confidence.value if belief is not None else 0.0,
+            "provenance": provenance,
             "trace": trace,
         }
     else:
-        # No world-claim to weigh — honest, phrased around what was actually said. Still
-        # shows the (empty) provenance + trace; the companion note (if any) is appended.
+        # Nothing to weigh — warm and honest, and it invites you to teach it (§37), rather
+        # than scolding. It still carries the (empty) provenance + trace for the panel.
         result = {
             "reply": (
-                f'I can\'t ground a view on "{text}" yet — there\'s nothing in it I can '
-                "take as evidence. Tell me something with a claim in it and I'll reason from it."
+                "I don't have enough to form a view on that yet. Tell me more about it — "
+                "or about yourself — and I'll reason from what you share."
             ),
             "speak": True,
-            "provenance": _provenance(belief),
+            "provenance": provenance,
             "trace": trace,
         }
-    result = _augment_with_companion(result, learned)
     # Voice the decided reply in the companion's language (identity offline, Vision §40).
     result["reply"] = jarvis.voice.phrase(str(result["reply"]), like=text)
     return result
@@ -358,6 +359,76 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     }
 
 
+def _learn(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Teach Jarvis about the companion from a pasted profile/notes (Vision §5, §38).
+
+    The deliberate way to "train" Jarvis on who you are: the whole text is read through
+    the relational channel in ONE pass (cheap, and it respects a provider's per-minute
+    limits) into the companion model as ordinary, revisable beliefs. Needs an LLM
+    perceiver — the keyword rule can't read prose into traits. A provider failure is
+    surfaced, not a crash.
+    """
+    text = str(payload.get("text", "")).strip()
+    if not text:
+        return {"reply": "Paste something about yourself and I'll learn it.", "speak": False}
+    try:
+        learned = jarvis.note_companion(text)
+    except Exception as error:  # noqa: BLE001 - the external-provider boundary
+        return {"reply": _provider_error(error), "speak": False}
+    traits = [belief.explain().statement for belief in learned]
+    if not traits:
+        reply = (
+            "I read that, but extracted nothing about you — make sure an LLM perceiver "
+            "is active in Tools (the keyword rule can't read prose)."
+        )
+    else:
+        reply = f"Learned {len(traits)} things about you. You can see them under Companion."
+    return {"reply": reply, "speak": False, "learned": traits}
+
+
+def _greeting_prompt(facts: list[str], goals: list[str]) -> str:
+    """The prompt that voices a warm opening from what Jarvis remembers (memory is
+    Jarvis's; the model only phrases it).
+    """
+    known = "; ".join(facts[:15]) if facts else "nothing yet"
+    ongoing = "; ".join(goals[:5]) if goals else "none noted"
+    return (
+        "You are Jarvis, greeting your companion at the start of a session. "
+        f"What you remember about them: {known}. Ongoing goals/projects: {ongoing}. "
+        "Write ONE short, warm, natural greeting (at most two sentences). Address them "
+        "by name if you know it. If a current project is evident, offer to continue it. "
+        "Reply in the language the person appears to use. Output ONLY the greeting."
+    )
+
+
+def _greeting(jarvis: Jarvis, _payload: Reply) -> Reply:
+    """A warm opening, grounded in what Jarvis remembers about the companion (Vision §5).
+
+    When an LLM is active it phrases a personalized greeting from the companion model
+    (by name, offering to resume a project); otherwise a friendly default. The memory it
+    draws on lives in Jarvis, not the model — the model only voices it (§38). Never a
+    crash: any failure falls back to the default greeting.
+    """
+    facts = [belief.explain().statement for belief in jarvis.companion.beliefs()]
+    goals = [goal for goal, _ in jarvis.state_summary().recurring_goals]
+    if describe(jarvis.perception).get("kind") == "llm":
+        try:
+            model = build_language_model(settings_from_env())
+            spoken = model.complete(_greeting_prompt(facts, goals)).strip()
+            if spoken:
+                return {"reply": spoken, "speak": False}
+        except Exception:  # noqa: BLE001 - a greeting must never break the page
+            pass
+    if facts:
+        reply = "Good to see you again. What are we working on today?"
+    else:
+        reply = (
+            "Hi — I'm Jarvis. Tell me what you're working on, or a bit about yourself, "
+            "and I'll remember it and reason it through with you."
+        )
+    return {"reply": reply, "speak": False}
+
+
 def _state(_jarvis: Jarvis, _payload: Reply) -> Reply:
     """Just the live snapshot (added by :func:`handle`); no side effects."""
     return {}
@@ -372,6 +443,8 @@ _COMMANDS: dict[str, Command] = {
     "rest": _rest,
     "energy_budget": _energy_budget,
     "perceiver": _perceiver,
+    "learn": _learn,
+    "greeting": _greeting,
     "state": _state,
 }
 

@@ -15,12 +15,12 @@ decides. A model that returns nothing usable yields no evidence (honest silence,
 
 from __future__ import annotations
 
-import json
 from typing import Any, cast
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.infrastructure.json_extraction import extract_json_array
 from jarvis.infrastructure.language_model import LanguageModel
 
 _INSTRUCTIONS = (
@@ -66,12 +66,9 @@ class LlmPerception:
 
     @staticmethod
     def _to_evidence(raw: str) -> tuple[Evidence, ...]:
-        try:
-            parsed: Any = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
+        parsed = extract_json_array(raw)
+        if parsed is None:
             return ()  # unreadable output -> stay silent (Vision §37)
-        if not isinstance(parsed, list):
-            return ()
         evidence: list[Evidence] = []
         for claim in cast("list[Any]", parsed):
             piece = _claim_to_evidence(claim)

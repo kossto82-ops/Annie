@@ -118,6 +118,7 @@ def _settings_from_ui(
         api_key=(env.get(f"{_PREFIX}API_KEY") or None),
         timeout=float(env.get(f"{_PREFIX}TIMEOUT", "30")),
         temperature=float(env.get(f"{_PREFIX}TEMPERATURE", "0")),
+        reasoning_effort=(env.get(f"{_PREFIX}REASONING_EFFORT") or None),
     )
 
 
