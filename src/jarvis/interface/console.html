@@ -350,10 +350,18 @@ function renderPerceiver(p) {
       const opt = document.createElement("option");
       opt.value = name; opt.textContent = name; sel.appendChild(opt);
     });
-    if (p.kind === "llm" && p.model) $("model").value = p.model;
     perceiverLoaded = true;
   }
-  if (p.provider) sel.value = p.provider;   // reflect the live provider
+  // Reflect the live perceiver — but NEVER while the user is editing the switcher, or
+  // the dropdown snaps back to the live provider while the model field keeps the value
+  // being typed, and a Switch then sends a mismatched (provider, model) pair. Keeping
+  // the two in lockstep is the whole point: provider and its model must always agree.
+  const editing = [sel, $("model"), $("apikey")].indexOf(document.activeElement) !== -1;
+  if (p.provider && !editing) {
+    sel.value = p.provider;
+    $("model").value = (p.kind === "llm" && p.model) ? p.model
+      : (p.kind === "keyword" ? "" : $("model").value);
+  }
 }
 
 // Picking a provider auto-fills its remembered model, so you never retype it.
