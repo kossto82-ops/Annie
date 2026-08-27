@@ -12,6 +12,7 @@ gets here. The default renderer changes nothing at all.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Protocol, runtime_checkable
 
 
@@ -21,6 +22,10 @@ class ResponseRenderer(Protocol):
 
     def phrase(self, reply: str, like: str) -> str:
         """Return ``reply`` reworded to match ``like`` (e.g. its language)."""
+        ...
+
+    def phrase_stream(self, reply: str, like: str) -> Iterator[str]:
+        """Yield the reworded reply in pieces as they are produced (for streaming)."""
         ...
 
 
@@ -33,3 +38,6 @@ class IdentityRenderer:
 
     def phrase(self, reply: str, like: str) -> str:
         return reply
+
+    def phrase_stream(self, reply: str, like: str) -> Iterator[str]:
+        yield reply  # nothing to stream — the reply is already final

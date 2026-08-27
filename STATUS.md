@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-27 (Increment 100)
+Last updated: 2026-08-27 (Increment 101)
 
 ---
 
@@ -1383,6 +1383,22 @@ with belief + episode events dispatched through the NervousSystem at each step.
 - Added `nvidia` → `https://integrate.api.nvidia.com/v1` to the open registry, so NVIDIA NIM models (e.g.
   `nvidia/nemotron-3.5-lightning-30b-a3b`) are selectable like any other provider — key entered in the
   panel, never in code. One-line registry entry; the generic OpenAI-compatible adapter handles the rest.
+
+### Increment 101 — polish: streaming replies, push-to-talk, persistent by default ✅ (2026-08-27)
+- **Streaming replies.** The reply now arrives token by token instead of all at once. New seam:
+  `LanguageModel.stream()` (OpenAiCompatibleModel parses SSE `data:` deltas — correctly skipping gpt-oss
+  `reasoning` deltas and taking `content`), `ResponseRenderer.phrase_stream()` (Identity yields once; the
+  LLM voice streams the translated reply, falling back to a single phrasing, then to the original — §37/§38).
+  `command_center.stream_say()` yields `meta` (provenance/trace/learned/state) then `chunk`s then `done`;
+  `server` serves it at `POST /api/stream/say` as newline-delimited JSON, flushed as it arrives. The UI
+  reads the stream and fills the bubble live, with a non-streaming fallback. Verified live vs Groq: the
+  bubble fills with the translated Spanish reply.
+- **Push to talk.** The mic is now hold-to-talk (pointerdown starts, release sends), following the browser
+  language (`navigator.language`) instead of hard-coded en-US.
+- **Persistent by default.** `run()` defaults `home="./.jarvis"` so memory survives restarts unless
+  `JARVIS_HOME` is explicitly empty (in-memory).
+- Gates: ruff clean · pytest 505 passed, 3 skipped (new stream tests for the model, renderer, and
+  `stream_say`); console asset tripwire intact; zero JS console errors in-browser.
 
 ---
 

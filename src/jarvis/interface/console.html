@@ -257,7 +257,9 @@ function bubble(who, text, conf) {
   const label = who === "you" ? "You" : "Jarvis";
   el.innerHTML = '<div class="who"></div>';
   el.firstChild.textContent = label;
-  el.appendChild(document.createTextNode(text));
+  const textNode = document.createTextNode(text || "");
+  el.appendChild(textNode);
+  el._textNode = textNode;   // so a streamed reply can append into it
   if (typeof conf === "number") {
     const c = document.createElement("div");
     c.className = "conf";
@@ -266,6 +268,14 @@ function bubble(who, text, conf) {
   }
   const chat = $("chat");
   chat.appendChild(el);
+  chat.scrollTop = chat.scrollHeight;
+  return el;
+}
+
+function appendToBubble(el, text) {
+  if (!el || !el._textNode) return;
+  el._textNode.textContent += text;
+  const chat = $("chat");
   chat.scrollTop = chat.scrollHeight;
 }
 
@@ -463,13 +473,62 @@ function renderCycle(cycle) {
 async function converse(text) {
   bubble("you", text);
   thinking = true; setMood("thinking");
-  const data = await api("say", { text });
-  thinking = false; setMood("idle");
-  bubble("jarvis", data.reply, data.confidence);
-  renderState(data.state);
-  renderReasoning(data.provenance, data.trace);
-  if (data.reply) articulate(data.reply);   // always react visibly
-  if (data.speak) speak(data.reply);         // audio when applicable
+  try {
+    await converseStreaming(text);
+  } catch (e) {
+    // Streaming unavailable — fall back to a single round-trip.
+    const data = await api("say", { text });
+    bubble("jarvis", data.reply, data.confidence);
+    renderState(data.state);
+    renderReasoning(data.provenance, data.trace);
+    if (data.reply) articulate(data.reply);
+    if (data.speak) speak(data.reply);
+  } finally {
+    thinking = false; setMood("idle");
+  }
+}
+
+async function converseStreaming(text) {
+  const res = await fetch("/api/stream/say", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+  if (!res.ok || !res.body) throw new Error("no stream");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "", el = null, speakFlag = false, full = "";
+  const handle = (evt) => {
+    if (evt.event === "meta") {
+      const m = evt.data || {};
+      renderState(m.state);
+      renderReasoning(m.provenance, m.trace);
+      speakFlag = !!m.speak;
+      thinking = false; setMood("idle");
+      el = bubble("jarvis", "");   // empty bubble to stream into
+    } else if (evt.event === "chunk") {
+      if (!el) el = bubble("jarvis", "");
+      full += evt.data.text; appendToBubble(el, evt.data.text);
+    } else if (evt.event === "done") {
+      if (evt.data && evt.data.reply) {         // non-streamed / fallback reply
+        if (!el) el = bubble("jarvis", "");
+        if (!full) { full = evt.data.reply; appendToBubble(el, full); }
+        if (evt.data.provenance !== undefined) renderReasoning(evt.data.provenance, evt.data.trace);
+        if (evt.data.speak !== undefined) speakFlag = !!evt.data.speak;
+      }
+    }
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (line) { try { handle(JSON.parse(line)); } catch (e) {} }
+    }
+  }
+  if (full) { articulate(full); if (speakFlag) speak(full); }
 }
 
 async function command(cmd) {
@@ -552,21 +611,35 @@ $("drawerclose").addEventListener("click", () => setDrawer(false));
 $("scrim").addEventListener("click", () => setDrawer(false));
 document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setDrawer(false); });
 
-/* ---- voice input (Web Speech API) --------------------------------------- */
+/* ---- voice input (Web Speech API) — push to talk ------------------------ */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 if (SR) {
   const rec = new SR();
-  rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
-  let listening = false;
+  rec.lang = navigator.language || "en-US";   // follow the browser's language
+  rec.interimResults = false; rec.maxAlternatives = 1;
+  let held = false;
+  const mic = $("mic");
+  mic.title = "Hold to talk";
   rec.onresult = (e) => {
     const said = e.results[0][0].transcript;
-    $("text").value = said; converse(said); $("text").value = "";
+    if (said && said.trim()) converse(said.trim());
   };
-  rec.onend = () => { listening = false; $("mic").classList.remove("on"); };
-  $("mic").addEventListener("click", () => {
-    if (listening) { rec.stop(); return; }
-    try { rec.start(); listening = true; $("mic").classList.add("on"); } catch (e) {}
-  });
+  rec.onend = () => { held = false; mic.classList.remove("on"); };
+  rec.onerror = () => { held = false; mic.classList.remove("on"); };
+  // Press-and-hold: start on press, stop (and send) on release.
+  const startHold = (ev) => {
+    ev.preventDefault();
+    if (held) return;
+    try { rec.start(); held = true; mic.classList.add("on"); } catch (e) {}
+  };
+  const endHold = (ev) => {
+    if (ev) ev.preventDefault();
+    if (held) { try { rec.stop(); } catch (e) {} }
+  };
+  mic.addEventListener("pointerdown", startHold);
+  mic.addEventListener("pointerup", endHold);
+  mic.addEventListener("pointerleave", endHold);
+  mic.addEventListener("pointercancel", endHold);
 } else {
   $("mic").disabled = true; $("mic").title = "Voice input not available in this browser";
 }

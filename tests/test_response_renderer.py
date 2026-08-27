@@ -52,3 +52,31 @@ class TestLlmResponseRenderer:
 
     def test_an_empty_reply_is_returned_as_is(self) -> None:
         assert LlmResponseRenderer(_FakeModel("x")).phrase("", like="ok") == ""
+
+
+class _StreamingModel:
+    """A model that streams fixed deltas (and can complete for the fallback)."""
+
+    def __init__(self, deltas: list[str]) -> None:
+        self._deltas = deltas
+
+    def complete(self, prompt: str) -> str:
+        return "".join(self._deltas)
+
+    def stream(self, prompt: str):  # type: ignore[no-untyped-def]
+        yield from self._deltas
+
+
+class TestPhraseStream:
+    def test_identity_streams_the_reply_once(self) -> None:
+        assert list(IdentityRenderer().phrase_stream("Noted.", like="ok")) == ["Noted."]
+
+    def test_llm_streams_model_deltas(self) -> None:
+        model = _StreamingModel(["Man", "tengo", " X"])
+        pieces = list(LlmResponseRenderer(model).phrase_stream("I hold X.", like="dime"))
+        assert "".join(pieces) == "Mantengo X"
+
+    def test_llm_falls_back_to_one_phrasing_without_streaming(self) -> None:
+        # _FakeModel has no .stream -> a single phrased chunk.
+        pieces = list(LlmResponseRenderer(_FakeModel("Hola")).phrase_stream("Hi", like="es"))
+        assert pieces == ["Hola"]

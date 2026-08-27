@@ -12,6 +12,8 @@ so the voice can never swallow or distort what Jarvis actually concluded.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from jarvis.infrastructure.language_model import LanguageModel
 
 _INSTRUCTIONS = (
@@ -32,11 +34,41 @@ class LlmResponseRenderer:
         text = reply.strip()
         if not text:
             return reply
-        prompt = (
-            f"{_INSTRUCTIONS}\n\nUser's message: {like}\n\nAssistant's reply: {text}"
-        )
         try:
-            rendered = self._model.complete(prompt).strip()
+            rendered = self._model.complete(self._prompt(text, like)).strip()
         except Exception:  # noqa: BLE001 - presentation must never break the reply
             return reply
         return rendered or reply
+
+    def phrase_stream(self, reply: str, like: str) -> Iterator[str]:
+        """Stream the reworded reply token by token when the model supports it.
+
+        Falls back to a single non-streaming phrasing when the model can't stream, and to
+        the original reply if streaming errors before producing anything — the voice can
+        never drop or distort the decided reply (§37, §38).
+        """
+        text = reply.strip()
+        if not text:
+            yield reply
+            return
+        streamer = getattr(self._model, "stream", None)
+        if not callable(streamer):
+            yield self.phrase(reply, like)
+            return
+        produced = False
+        try:
+            for piece in streamer(self._prompt(text, like)):
+                if piece:
+                    produced = True
+                    yield piece
+        except Exception:  # noqa: BLE001 - presentation must never break the reply
+            if not produced:
+                # Streaming failed before any content — try a single phrasing so the
+                # reply is still voiced (phrase() itself falls back to the original).
+                yield self.phrase(reply, like)
+            return
+        if not produced:
+            yield self.phrase(reply, like)
+
+    def _prompt(self, text: str, like: str) -> str:
+        return f"{_INSTRUCTIONS}\n\nUser's message: {like}\n\nAssistant's reply: {text}"

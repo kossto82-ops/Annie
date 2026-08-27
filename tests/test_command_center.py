@@ -8,6 +8,7 @@ it is exercised directly here. The socket in `server.py` only moves these bytes.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
 
@@ -19,7 +20,7 @@ from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
-from jarvis.interface.command_center import handle, route, snapshot
+from jarvis.interface.command_center import handle, route, snapshot, stream_say
 
 
 class _YesPerception(PerceptionSource):
@@ -186,6 +187,9 @@ class _UpperVoice:
     def phrase(self, reply: str, like: str) -> str:
         return reply.upper()
 
+    def phrase_stream(self, reply: str, like: str) -> Iterator[str]:
+        yield reply.upper()
+
 
 class TestVoice:
     def test_say_replies_are_voiced_through_the_renderer(self) -> None:
@@ -198,6 +202,33 @@ class TestVoice:
         result = handle(Jarvis(), "say", {"text": "the deploy definitely succeeded"})
         # IdentityRenderer default: canonical English reply, unchanged.
         assert "I hold" in str(result["reply"])
+
+
+class TestStreamSay:
+    def test_it_emits_meta_then_chunks_then_done(self) -> None:
+        jarvis = Jarvis(perception=_YesPerception())
+        events = list(stream_say(jarvis, {"text": "the deploy passed"}))
+        kinds = [name for name, _ in events]
+        assert kinds[0] == "meta"
+        assert kinds[-1] == "done"
+        assert "chunk" in kinds
+        # Meta carries the reasoning + live state; the reply is assembled from chunks.
+        meta = dict(events[0][1])
+        assert "state" in meta and "provenance" in meta
+        full = "".join(str(d["text"]) for name, d in events if name == "chunk")
+        assert full.strip() != ""
+        assert str(events[-1][1]["reply"]) == full
+
+    def test_chunks_are_voiced_through_the_renderer(self) -> None:
+        jarvis = Jarvis()
+        jarvis.set_voice(_UpperVoice())
+        events = list(stream_say(jarvis, {"text": "hola"}))
+        full = "".join(str(d["text"]) for name, d in events if name == "chunk")
+        assert full == full.upper() and full.strip() != ""
+
+    def test_empty_text_yields_a_single_done(self) -> None:
+        events = list(stream_say(Jarvis(), {"text": "   "}))
+        assert [name for name, _ in events] == ["done"]
 
 
 class TestReasoning:

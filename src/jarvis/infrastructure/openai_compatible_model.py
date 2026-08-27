@@ -15,6 +15,7 @@ into a decision, is `LlmPerception`'s job (Vision §38, D33).
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from typing import Any, Protocol, cast
 
 from jarvis.infrastructure.provider_settings import ProviderSettings
@@ -27,6 +28,13 @@ class Transport(Protocol):
         ...
 
 
+class StreamTransport(Protocol):
+    """Sends an HTTP POST and yields the response body's lines as they arrive."""
+
+    def __call__(self, url: str, headers: dict[str, str], body: bytes) -> Iterator[bytes]:
+        ...
+
+
 def _urllib_transport(url: str, headers: dict[str, str], body: bytes, timeout: float) -> str:
     import urllib.request
 
@@ -36,29 +44,55 @@ def _urllib_transport(url: str, headers: dict[str, str], body: bytes, timeout: f
     return payload.decode("utf-8")
 
 
+def _urllib_stream_transport(
+    url: str, headers: dict[str, str], body: bytes, timeout: float
+) -> Iterator[bytes]:
+    import urllib.request
+
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        yield from response  # the file-like response yields one line at a time
+
+
 class OpenAiCompatibleModel:
     """Talks to any OpenAI-compatible chat-completions endpoint."""
 
     def __init__(
-        self, settings: ProviderSettings, transport: Transport | None = None
+        self,
+        settings: ProviderSettings,
+        transport: Transport | None = None,
+        stream_transport: StreamTransport | None = None,
     ) -> None:
         if not settings.base_url:
             raise ValueError("an OpenAI-compatible provider needs a base_url")
         self._settings = settings
         self._base_url = settings.base_url
         self._transport: Transport = transport or self._default_transport
+        self._stream_transport: StreamTransport = (
+            stream_transport or self._default_stream_transport
+        )
 
     def _default_transport(self, url: str, headers: dict[str, str], body: bytes) -> str:
         return _urllib_transport(url, headers, body, self._settings.timeout)
 
-    def complete(self, prompt: str) -> str:
-        settings = self._settings
-        url = f"{self._base_url.rstrip('/')}/chat/completions"
+    def _default_stream_transport(
+        self, url: str, headers: dict[str, str], body: bytes
+    ) -> Iterator[bytes]:
+        return _urllib_stream_transport(url, headers, body, self._settings.timeout)
+
+    def _url(self) -> str:
+        return f"{self._base_url.rstrip('/')}/chat/completions"
+
+    def _headers(self) -> dict[str, str]:
         # A real User-Agent is required: some providers front their API with Cloudflare,
         # which blocks the default `Python-urllib` signature with a 403 (error 1010).
         headers = {"Content-Type": "application/json", "User-Agent": "Jarvis/1.0"}
-        if settings.api_key:  # local SLMs may need no key
-            headers["Authorization"] = f"Bearer {settings.api_key}"
+        if self._settings.api_key:  # local SLMs may need no key
+            headers["Authorization"] = f"Bearer {self._settings.api_key}"
+        return headers
+
+    def _request_body(self, prompt: str, *, stream: bool) -> bytes:
+        settings = self._settings
         request_body: dict[str, Any] = {
             "model": settings.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -67,8 +101,58 @@ class OpenAiCompatibleModel:
         }
         if settings.reasoning_effort:  # only for reasoning models, when configured
             request_body["reasoning_effort"] = settings.reasoning_effort
-        body = json.dumps(request_body).encode("utf-8")
-        return _extract_message(self._transport(url, headers, body))
+        if stream:
+            request_body["stream"] = True
+        return json.dumps(request_body).encode("utf-8")
+
+    def complete(self, prompt: str) -> str:
+        body = self._request_body(prompt, stream=False)
+        return _extract_message(self._transport(self._url(), self._headers(), body))
+
+    def stream(self, prompt: str) -> Iterator[str]:
+        """Yield the assistant's reply as content deltas arrive (SSE).
+
+        Parses OpenAI-style ``data:`` lines and yields each ``choices[0].delta.content``.
+        Malformed lines are skipped; ``[DONE]`` ends the stream — so a partial or messy
+        stream degrades to whatever content did arrive, never an exception mid-reply.
+        """
+        lines = self._stream_transport(
+            self._url(), self._headers(), self._request_body(prompt, stream=True)
+        )
+        for raw_line in lines:
+            piece = _delta_from_sse_line(raw_line)
+            if piece:
+                yield piece
+
+
+def _delta_from_sse_line(raw_line: bytes) -> str:
+    """The content delta in one SSE line, or '' for keep-alives / non-content lines."""
+    try:
+        line = raw_line.decode("utf-8").strip()
+    except (UnicodeDecodeError, AttributeError):
+        return ""
+    if not line.startswith("data:"):
+        return ""
+    data = line[len("data:") :].strip()
+    if not data or data == "[DONE]":
+        return ""
+    try:
+        parsed: Any = json.loads(data)
+    except (json.JSONDecodeError, TypeError):
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    choices: Any = cast("dict[str, Any]", parsed).get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first: Any = cast("list[Any]", choices)[0]
+    if not isinstance(first, dict):
+        return ""
+    delta: Any = cast("dict[str, Any]", first).get("delta")
+    if not isinstance(delta, dict):
+        return ""
+    content: Any = cast("dict[str, Any]", delta).get("content")
+    return content if isinstance(content, str) else ""
 
 
 def _extract_message(raw: str) -> str:

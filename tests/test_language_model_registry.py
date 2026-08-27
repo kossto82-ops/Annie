@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 
@@ -99,6 +100,36 @@ class TestOpenAiCompatibleModel:
         )
         OpenAiCompatibleModel(settings, transport=transport).complete("hi")
         assert "Authorization" not in transport.headers
+
+
+class TestStream:
+    def test_it_yields_content_deltas_from_sse_lines(self) -> None:
+        sse = [
+            b'data: {"choices":[{"delta":{"content":"Hola"}}]}\n',
+            b"\n",  # keep-alive / blank
+            b': comment\n',
+            b'data: {"choices":[{"delta":{"content":" Roberto"}}]}\n',
+            b"data: [DONE]\n",
+        ]
+        settings = ProviderSettings(
+            provider="groq", model="m", base_url="https://api.groq.com/openai/v1"
+        )
+        model = OpenAiCompatibleModel(settings, stream_transport=lambda url, h, b: iter(sse))
+        assert list(model.stream("hi")) == ["Hola", " Roberto"]
+
+    def test_the_stream_request_sets_stream_true(self) -> None:
+        captured: dict[str, object] = {}
+
+        def transport(url: str, headers: dict[str, str], body: bytes) -> object:
+            captured["body"] = json.loads(body)
+            return iter(())
+
+        settings = ProviderSettings(
+            provider="groq", model="m", base_url="https://api.groq.com/openai/v1"
+        )
+        model = OpenAiCompatibleModel(settings, stream_transport=transport)  # type: ignore[arg-type]
+        list(model.stream("hi"))
+        assert cast("dict[str, object]", captured["body"])["stream"] is True
 
     def test_no_base_url_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="needs a base_url"):

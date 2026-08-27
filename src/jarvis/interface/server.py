@@ -10,6 +10,7 @@ persistent memory under a home directory so the companion remembers across resta
 
 from __future__ import annotations
 
+import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -25,7 +26,7 @@ from jarvis.infrastructure.perceiver_factory import (
     perceiver_from_settings,
     renderer_from_settings,
 )
-from jarvis.interface.command_center import Response, route
+from jarvis.interface.command_center import Response, parse_body, route, stream_say
 from jarvis.jarvis import Jarvis
 
 
@@ -73,7 +74,28 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 (stdlib dispatch name)
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length > 0 else b""
-        self._respond(route(self.jarvis, "POST", self.path, body))
+        if self.path.split("?", 1)[0].rstrip("/") == "/api/stream/say":
+            self._stream_say(body)
+        else:
+            self._respond(route(self.jarvis, "POST", self.path, body))
+
+    def _stream_say(self, body: bytes) -> None:
+        """Stream a `say` turn as newline-delimited JSON events, flushed as they arrive.
+
+        The reply appears token by token instead of all at once. No Content-Length: the
+        body streams until the handler returns and the connection closes.
+        """
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        try:
+            for event, data in stream_say(self.jarvis, parse_body(body)):
+                line = json.dumps({"event": event, "data": data}).encode("utf-8") + b"\n"
+                self.wfile.write(line)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the client navigated away mid-stream; nothing to do
 
     def _respond(self, response: Response) -> None:
         self.send_response(response.status)
@@ -107,8 +129,13 @@ def create_server(
     return ThreadingHTTPServer((host, port), make_handler(jarvis))
 
 
-def run(host: str = "127.0.0.1", port: int = 8765, home: str | Path | None = None) -> None:
-    """Serve the command center until interrupted (Ctrl-C)."""
+def run(host: str = "127.0.0.1", port: int = 8765, home: str | Path | None = "./.jarvis") -> None:
+    """Serve the command center until interrupted (Ctrl-C).
+
+    Persistence is on by default: memory lives under ``./.jarvis`` so the companion
+    remembers across restarts. Pass ``home=None`` (or an empty ``JARVIS_HOME``) for an
+    in-memory session that forgets on exit.
+    """
     # Resume a saved provider/model/key so a restart keeps whatever was configured in
     # the panel (the read-back half of the .env persistence). Real env vars still win.
     load_env_file()

@@ -16,7 +16,7 @@ The socket lives in :mod:`jarvis.interface.server` and only carries these bytes.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -166,12 +166,22 @@ def _say(jarvis: Jarvis, payload: Reply) -> Reply:
     if not text:
         return {"reply": "I'm here — tell me something, or ask.", "speak": False}
     try:
-        # Both channels touch the language model when an LLM perceiver is active; a
-        # provider/network/credential failure here must not 500 — surface it clearly.
-        episode = jarvis.perceive(text, trigger=text)
-        learned = jarvis.note_companion(text)  # the relational channel (Vision §5)
+        result = _say_core(jarvis, text)
     except Exception as error:  # noqa: BLE001 - the external-provider boundary
         return {"reply": _provider_error(error), "speak": True, "provenance": None, "trace": []}
+    # Voice the decided reply in the companion's language (identity offline, Vision §40).
+    result["reply"] = jarvis.voice.phrase(str(result["reply"]), like=text)
+    return result
+
+
+def _say_core(jarvis: Jarvis, text: str) -> Reply:
+    """Run both channels and build the reply in canonical form — everything except the
+    final voicing (Vision §5, §8). Shared by the plain and streaming paths; may raise on
+    a provider failure (the caller decides how to surface it).
+    """
+    # Both channels touch the language model when an LLM perceiver is active.
+    episode = jarvis.perceive(text, trigger=text)
+    learned = jarvis.note_companion(text)  # the relational channel (Vision §5)
     trace = _trace_steps(jarvis.trace_of(episode))
     belief = episode.working_belief
     explanation = belief.explain() if belief is not None else None
@@ -183,37 +193,68 @@ def _say(jarvis: Jarvis, payload: Reply) -> Reply:
     if learned:
         # Self-disclosure — lead with what Jarvis now remembers about you (the "training").
         traits = [b.explain().statement for b in learned]
-        result: Reply = {
+        return {
             "reply": "Got it — I'll remember this about you: " + "; ".join(traits) + ".",
             "speak": True,
             "learned": traits,
             "provenance": provenance,
             "trace": trace,
         }
-    elif grounded and explanation is not None:
+    if grounded and explanation is not None:
         # A grounded belief about the world: narrate it in plain words (no internal label).
-        result = {
+        return {
             "reply": explanation.narrate(subject_of(explanation.statement)),
             "speak": True,
             "confidence": belief.confidence.value if belief is not None else 0.0,
             "provenance": provenance,
             "trace": trace,
         }
-    else:
-        # Nothing to weigh — warm and honest, and it invites you to teach it (§37), rather
-        # than scolding. It still carries the (empty) provenance + trace for the panel.
-        result = {
-            "reply": (
-                "I don't have enough to form a view on that yet. Tell me more about it — "
-                "or about yourself — and I'll reason from what you share."
-            ),
-            "speak": True,
-            "provenance": provenance,
-            "trace": trace,
-        }
-    # Voice the decided reply in the companion's language (identity offline, Vision §40).
-    result["reply"] = jarvis.voice.phrase(str(result["reply"]), like=text)
-    return result
+    # Nothing to weigh — warm and honest, and it invites you to teach it (§37), rather than
+    # scolding. It still carries the (empty) provenance + trace for the panel.
+    return {
+        "reply": (
+            "I don't have enough to form a view on that yet. Tell me more about it — "
+            "or about yourself — and I'll reason from what you share."
+        ),
+        "speak": True,
+        "provenance": provenance,
+        "trace": trace,
+    }
+
+
+# One streamed event: an event name and its JSON-ready data.
+StreamEvent = tuple[str, Reply]
+
+
+def stream_say(jarvis: Jarvis, payload: Reply) -> Iterator[StreamEvent]:
+    """Stream a `say` turn as events: metadata first, then the reply token by token.
+
+    Yields ``("meta", …)`` (provenance, trace, learned, live state) once the reasoning is
+    done, then ``("chunk", {"text": …})`` as the voice renders the reply (all at once when
+    the model can't stream), then ``("done", {"reply": full})``. A provider failure or
+    empty input yields a single ``("done", …)`` with a clear reply — never a broken stream.
+    """
+    text = str(payload.get("text", "")).strip()
+    if not text:
+        yield ("done", {"reply": "I'm here — tell me something, or ask.", "speak": False})
+        return
+    try:
+        result = _say_core(jarvis, text)
+    except Exception as error:  # noqa: BLE001 - the external-provider boundary
+        yield (
+            "done",
+            {"reply": _provider_error(error), "speak": True, "provenance": None, "trace": []},
+        )
+        return
+    canonical = str(result["reply"])
+    meta = {key: value for key, value in result.items() if key != "reply"}
+    meta["state"] = snapshot(jarvis)
+    yield ("meta", meta)
+    voiced: list[str] = []
+    for piece in jarvis.voice.phrase_stream(canonical, like=text):
+        voiced.append(piece)
+        yield ("chunk", {"text": piece})
+    yield ("done", {"reply": "".join(voiced)})
 
 
 def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -473,6 +514,11 @@ def _parse(body: bytes) -> Reply:
         # Malformed or non-UTF-8 body -> empty payload, never a 500.
         return {}
     return cast("Reply", loaded) if isinstance(loaded, dict) else {}
+
+
+def parse_body(body: bytes) -> Reply:
+    """Public wrapper over the request-body parser, for the streaming server path."""
+    return _parse(body)
 
 
 def _json(payload: Reply) -> bytes:
