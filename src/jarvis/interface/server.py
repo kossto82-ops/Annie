@@ -43,7 +43,11 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     perception: PerceptionSource = perceiver_from_settings(settings)
     companion_perception = companion_perceiver_from_settings(settings)
     if home is None:
-        jarvis = Jarvis(perception=perception, companion_perception=companion_perception)
+        jarvis = Jarvis(
+            perception=perception,
+            companion_perception=companion_perception,
+            enable_recall=True,
+        )
     else:
         base = Path(home)
         base.mkdir(parents=True, exist_ok=True)
@@ -58,6 +62,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             refutations_store=JsonRefutationStore(base / "refutations.json"),
             perception=perception,
             companion_perception=companion_perception,
+            enable_recall=True,
         )
     jarvis.set_voice(renderer_from_settings(settings))  # reply in the user's language
     return jarvis

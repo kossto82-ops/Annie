@@ -24,6 +24,7 @@ from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
+from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.curiosity import wonder
@@ -60,6 +61,7 @@ from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
+from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.nervous_system.nervous_system import NervousSystem
@@ -97,6 +99,7 @@ class Jarvis:
         refutations_store: RefutationRepository | None = None,
         energy_costs: EnergyCosts | None = None,
         energy_budget: int | None = None,
+        enable_recall: bool = False,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -137,8 +140,24 @@ class Jarvis:
         self._energy_available = energy_budget if energy_budget is not None else 0
         self._trace = EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
+        # Optional long-term-memory recall (Vision §3): when enabled, a deterministic
+        # lexical retriever over Jarvis's own stores lets an episode answer from what
+        # it remembers instead of a blank "insufficient evidence". Off by default, so
+        # the offline core is unchanged (D8); the command center turns it on. A
+        # semantic retriever can replace it behind the same Protocol later (D11).
+        memory_retriever: MemoryRetriever | None = (
+            LexicalMemoryRetriever(
+                self.beliefs, self.episodes, self.companion, self._goals
+            )
+            if enable_recall
+            else None
+        )
         self._executive = ExecutiveController(
-            self.nervous_system, self.beliefs, self.episodes, self.companion
+            self.nervous_system,
+            self.beliefs,
+            self.episodes,
+            self.companion,
+            memory_retriever,
         )
 
     @property

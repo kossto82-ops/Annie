@@ -25,6 +25,7 @@ from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.domain.value_objects.goal import Goal
+from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 
 
 class InvalidStateTransition(RuntimeError):
@@ -64,6 +65,7 @@ class CognitiveEpisode:
     goal: Goal | None = None
     _working_belief: Belief | None = field(default=None, repr=False)
     _evidence_request: EvidenceRequest | None = field(default=None, repr=False)
+    _recalled: tuple[RecalledMemory, ...] = field(default=(), repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
     )
@@ -123,6 +125,26 @@ class CognitiveEpisode:
         if self._working_belief is None:
             return None
         return self._working_belief.explain()
+
+    def recall(self, memories: tuple[RecalledMemory, ...]) -> None:
+        """Attach the memories retrieval surfaced as relevant to this trigger.
+
+        This is *recalled context*, not truth: it drives how the episode is
+        answered (Vision §3), and deliberately does NOT become evidence for the
+        working belief -- remembering that a topic was discussed says nothing about
+        whether a conclusion about it is true (memory is not truth, Vision §22).
+        Confidence stays derived only from evidence that bears on the belief.
+        """
+        if self.state.is_terminal:
+            raise InvalidStateTransition(
+                f"Episode {self.id} is {self.state.value}; cannot recall into it"
+            )
+        self._recalled = memories
+
+    @property
+    def recalled_memories(self) -> tuple[RecalledMemory, ...]:
+        """The memories judged relevant to this episode's trigger (Vision §3)."""
+        return self._recalled
 
     def attach_evidence_request(self, request: EvidenceRequest) -> None:
         """Record what evidence this episode is missing (Vision §16, §37)."""

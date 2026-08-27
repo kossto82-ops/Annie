@@ -22,9 +22,11 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
@@ -34,6 +36,7 @@ from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
+from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.nervous_system.nervous_system import NervousSystem
 
@@ -44,6 +47,12 @@ GROUNDED_CONFIDENCE_THRESHOLD = 0.5
 # A grounded conclusion resting on evidence with little temporal spread may be
 # overfitting to a recent burst (Vision §11); below this stability it is flagged.
 LOW_STABILITY_THRESHOLD = 0.2
+
+# A recalled memory must share at least this fraction of the query's words to be
+# worth surfacing -- a deliberately conservative floor so a single common word
+# ("the", "que") does not read as a relevant memory. Tunable; superseded once a
+# semantic retriever can judge relevance by meaning rather than surface overlap.
+_MIN_RECALL_RELEVANCE = 0.2
 
 # When Jarvis holds a self-belief this confident that it concludes without enough
 # evidence, it changes how it handles an ungrounded question (Vision §20 learning).
@@ -97,11 +106,16 @@ class ExecutiveController:
         beliefs: BeliefRepository,
         episodes: EpisodeRepository,
         companion: CompanionModel,
+        memory_retriever: MemoryRetriever | None = None,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
         self._episodes = episodes
         self._companion = companion
+        # Optional: surfaces relevant memories to *answer from*, distinct from the
+        # evidence that grounds a belief (Vision §3, §22). Absent -> behaviour is
+        # exactly as before recall existed.
+        self._memory_retriever = memory_retriever
 
     def run(
         self,
@@ -135,6 +149,7 @@ class ExecutiveController:
             self._seed_from_companion(episode)
             for piece in pieces:
                 episode.observe(piece)
+            self._recall_into(episode)
         self._beliefs.save(belief)
         self._flush(episode)  # dispatch evidence/belief events
 
@@ -262,6 +277,43 @@ class ExecutiveController:
                 source=EvidenceSource.SYSTEM_OBSERVATION,
                 weight=relevant.confidence,
             )
+        )
+
+    def _recall_into(self, episode: CognitiveEpisode) -> None:
+        """Surface memories bearing on the trigger, to answer from (Vision §3).
+
+        Recalled context, not belief-evidence (Vision §22): it lets the surface
+        answer from what Jarvis remembers instead of a blank "insufficient
+        evidence", without touching the belief's derived confidence. The belief
+        the episode is *currently* forming about this exact trigger is filtered
+        out -- echoing it back as "memory" would be circular, not recall.
+        """
+        if self._memory_retriever is None:
+            return
+        relevant: list[RecalledMemory] = []
+        seen: set[str] = set()
+        # Results come ranked most-relevant first, so the first time a given content
+        # appears is its strongest match; later duplicates (e.g. the same text held
+        # both as a world belief and an episode) are dropped.
+        for memory in self._memory_retriever.recall(episode.trigger):
+            if memory.relevance < _MIN_RECALL_RELEVANCE:
+                continue
+            if self._is_about_current(memory, episode.trigger):
+                continue
+            key = memory.content.strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            relevant.append(memory)
+        if relevant:
+            episode.recall(tuple(relevant))
+
+    @staticmethod
+    def _is_about_current(memory: RecalledMemory, trigger: str) -> bool:
+        """True when a recalled item just restates the episode's own trigger."""
+        return (
+            memory.kind in (MemoryKind.WORLD_BELIEF, MemoryKind.GOAL)
+            and memory.content.strip().lower() == trigger.strip().lower()
         )
 
     def _reflect(self, belief: Belief) -> None:

@@ -32,6 +32,7 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.env_settings import settings_from_env
@@ -47,6 +48,11 @@ from jarvis.infrastructure.perceiver_factory import (
 from jarvis.jarvis import Jarvis
 
 _OFFLINE_PERCEIVERS = frozenset({"", "keyword", "scripted", "stub"})
+
+# At or above this recall relevance (share of the query's words a memory matched),
+# Jarvis answers from memory confidently; below it, it offers the related memory but
+# is honest that it may not bear directly on the question (Vision §3, §37).
+_STRONG_RECALL = 0.6
 
 _CONSOLE_HTML = Path(__file__).with_name("console.html")
 
@@ -117,6 +123,46 @@ def _provenance(belief: Belief) -> Reply:
         "confidence": explanation.confidence.value,
         "supporting": [_evidence_json(e) for e in explanation.supporting],
         "contradicting": [_evidence_json(e) for e in explanation.contradicting],
+    }
+
+
+def _recalled_json(memory: RecalledMemory) -> Reply:
+    """One recalled memory as the panel renders it — content, kind, source, match."""
+    return {
+        "content": memory.content,
+        "kind": memory.kind.name,
+        "provenance": memory.provenance,
+        "relevance": memory.relevance,
+    }
+
+
+def _memory_reply(
+    recalled: tuple[RecalledMemory, ...], provenance: Reply | None, trace: list[Reply]
+) -> Reply:
+    """Answer from what Jarvis remembers when it holds no grounded view (Vision §3).
+
+    A distinct cognitive stance from belief and from ignorance: it reports remembered
+    context, clearly as memory (never asserted as a fresh conclusion, §22). A strong
+    match answers directly; a weak one offers the related memory but stays honest that
+    it may not settle the question (§37).
+    """
+    contents = "; ".join(memory.content for memory in recalled[:3])
+    if recalled[0].relevance >= _STRONG_RECALL:
+        reply = f"This connects to what I remember — {contents}."
+        stance = "memory"
+    else:
+        reply = (
+            "I don't hold a firm view on that, but I remember something related — "
+            f"{contents}. I don't find that we settled it, though."
+        )
+        stance = "partial_memory"
+    return {
+        "reply": reply,
+        "speak": True,
+        "stance": stance,
+        "recalled": [_recalled_json(memory) for memory in recalled],
+        "provenance": provenance,
+        "trace": trace,
     }
 
 
@@ -215,8 +261,13 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
             "provenance": provenance,
             "trace": trace,
         }
-    # Nothing to weigh — warm and honest, and it invites you to teach it (§37), rather than
-    # scolding. It still carries the (empty) provenance + trace for the panel.
+    recalled = episode.recalled_memories
+    if recalled:
+        # No grounded belief, but memory bears on this: answer from what Jarvis
+        # remembers rather than falling back to "insufficient evidence" (Vision §3).
+        return _memory_reply(recalled, provenance, trace)
+    # Nothing to weigh and nothing recalled — warm and honest, and it invites you to
+    # teach it (§37), rather than scolding. Carries the (empty) provenance + trace.
     return {
         "reply": (
             "I don't have enough to form a view on that yet. Tell me more about it — "
