@@ -223,15 +223,34 @@ def _trace_steps(events: tuple[CognitiveEvent, ...]) -> list[Reply]:
 
 
 def _provider_error(error: Exception) -> str:
-    """A clear, actionable message for a language-model failure (Vision §37)."""
+    """A clear, actionable message for a language-model failure (Vision §37).
+
+    Surfaces the HTTP status and what it usually means, so a provider misconfiguration
+    is self-diagnosing instead of an opaque "HTTPError": 401/403 point at the key or
+    an unauthorised model, 404 at a wrong model id (NVIDIA ids look like 'nvidia/…').
+    """
     code = getattr(error, "code", None)
     if code == 429:
         return (
             "The language model is rate-limited right now (too many tokens this minute). "
             "Wait a minute and try again, or use a local provider like Ollama."
         )
+    if code in (401, 403):
+        return (
+            f"The provider rejected the request ({code} — authorization failed). The API "
+            "key isn't accepted for this model, or the model isn't enabled for your key. "
+            "Check the key and model in Tools (get a fresh key from the model's page if "
+            "needed), or switch to the keyword perceiver."
+        )
+    if code == 404:
+        return (
+            f"The provider returned {code} (not found) for that model — the model id is "
+            "almost certainly wrong. Fix it in Tools; NVIDIA ids look like "
+            "'nvidia/nemotron-3.5-lightning-30b-a3b', with the 'nvidia/' prefix."
+        )
+    detail = f"HTTP {code}" if code is not None else type(error).__name__
     return (
-        f"I couldn't reach the language model ({type(error).__name__}). "
+        f"I couldn't reach the language model ({detail}). "
         "Check the provider, model, and API key in Tools — or switch to the keyword perceiver."
     )
 
