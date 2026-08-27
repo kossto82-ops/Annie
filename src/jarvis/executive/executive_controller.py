@@ -13,6 +13,7 @@ conclusion is grounded, tentative, or withheld.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
@@ -53,6 +54,32 @@ LOW_STABILITY_THRESHOLD = 0.2
 # ("the", "que") does not read as a relevant memory. Tunable; superseded once a
 # semantic retriever can judge relevance by meaning rather than surface overlap.
 _MIN_RECALL_RELEVANCE = 0.2
+
+# When the companion asks about *themselves*, what Jarvis knows about them is fully
+# relevant regardless of shared words ("who am I?" shares nothing with "is named
+# Raúl"). Surface-token recall cannot bridge that, so a self-question consults the
+# companion model directly. This is a bounded, tunable heuristic for *when to look
+# there*, not a judgement of truth; a semantic retriever supersedes it (D11).
+_WORD = re.compile(r"\w+")
+_SELF_REFERENCE = frozenset(
+    {"me", "mi", "mí", "yo", "soy", "mío", "mía", "conmigo", "my", "i", "myself", "mine"}
+)
+_QUESTION_CUES = frozenset(
+    {
+        "que", "qué", "cual", "cuál", "como", "cómo", "quien", "quién", "cuando",
+        "cuándo", "donde", "dónde", "sabes", "conoces", "recuerdas", "what", "who",
+        "how", "which", "when", "where", "do", "does", "did", "know", "remember",
+    }
+)
+# How many companion traits to surface for a self-question -- the most confident few.
+_MAX_SELF_QUESTION_TRAITS = 3
+
+
+def _looks_like_self_question(text: str) -> bool:
+    """True when the companion is asking Jarvis about the companion themselves."""
+    tokens = set(_WORD.findall(text.lower()))
+    is_question = text.strip().endswith("?") or bool(tokens & _QUESTION_CUES)
+    return is_question and bool(tokens & _SELF_REFERENCE)
 
 # When Jarvis holds a self-belief this confident that it concludes without enough
 # evidence, it changes how it handles an ungrounded question (Vision §20 learning).
@@ -305,8 +332,43 @@ class ExecutiveController:
                 continue
             seen.add(key)
             relevant.append(memory)
+        # A question about the companion themselves is answered from the companion
+        # model directly, since surface-token recall cannot bridge "who am I?" to a
+        # trait like "is named Raúl" (Vision §5).
+        if _looks_like_self_question(episode.trigger):
+            for memory in self._companion_traits():
+                key = memory.content.strip().lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                relevant.append(memory)
         if relevant:
+            # Sort so the most relevant leads regardless of the order sources were
+            # gathered in (companion traits carry full relevance to a self-question).
+            relevant.sort(
+                key=lambda m: (-m.relevance, -(m.source_confidence or 0.0), m.content)
+            )
             episode.recall(tuple(relevant))
+
+    def _companion_traits(self) -> list[RecalledMemory]:
+        """What Jarvis knows about the companion, as recalled memories (most confident
+        first) -- fully relevant to a question the companion asks about themselves.
+        """
+        traits = sorted(
+            self._companion.beliefs(),
+            key=lambda belief: belief.confidence.value,
+            reverse=True,
+        )
+        return [
+            RecalledMemory(
+                content=belief.statement,
+                kind=MemoryKind.COMPANION_TRAIT,
+                provenance="companion trait",
+                relevance=1.0,
+                source_confidence=belief.confidence.value,
+            )
+            for belief in traits[:_MAX_SELF_QUESTION_TRAITS]
+        ]
 
     @staticmethod
     def _is_about_current(memory: RecalledMemory, trigger: str) -> bool:

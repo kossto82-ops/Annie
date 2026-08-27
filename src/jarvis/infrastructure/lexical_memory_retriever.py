@@ -24,6 +24,7 @@ import re
 from collections.abc import Iterator
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
+from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
@@ -66,6 +67,25 @@ def _goal_subject(statement: str) -> str:
     return statement
 
 
+def _looks_like_question(text: str) -> bool:
+    """A question is something Jarvis was asked, not knowledge it can recall.
+
+    Recalling a past question ("do you know my name?") as if it were an answer is
+    noise, so question-shaped memories are not offered as recall.
+    """
+    return text.strip().endswith("?")
+
+
+def _evidence_text(belief: Belief) -> str:
+    """The words behind a belief -- the observations that formed it.
+
+    A belief is often findable by the phrasing that taught it ("me llamo Raúl")
+    even when its statement is worded differently ("is named Raúl"). Matching the
+    evidence, not only the statement, bridges that gap (still surface tokens, D11).
+    """
+    return " ".join(evidence.content for evidence in belief.evidence)
+
+
 class LexicalMemoryRetriever:
     """Ranks Jarvis's stored memories by token overlap with a query."""
 
@@ -105,11 +125,20 @@ class LexicalMemoryRetriever:
         return tuple(scored[: max(0, limit)])
 
     def _candidates(self) -> Iterator[_Candidate]:
-        """Every memory that could match, as (match_text, content, kind, note, conf)."""
+        """Every memory that could match, as (match_text, content, kind, note, conf).
+
+        Belief-backed memories match on both their statement and the words that
+        formed them (the evidence), so a belief can be recalled by how it was
+        taught. Question-shaped memories are skipped -- a past question is not
+        knowledge to recall.
+        """
         for belief in self._beliefs.all_beliefs():
             subject = subject_of(belief.statement)
+            if _looks_like_question(subject):
+                continue
+            match_text = f"{subject} {_evidence_text(belief)}"
             yield (
-                subject,
+                match_text,
                 subject,
                 MemoryKind.WORLD_BELIEF,
                 "world belief",
@@ -120,6 +149,8 @@ class LexicalMemoryRetriever:
             # goal it was toward -- what a person recognises as "what we talked
             # about". The internal decision text ("Insufficient evidence …") is
             # machine bookkeeping and would make a poor thing to recall.
+            if _looks_like_question(record.trigger):
+                continue
             match_text = (
                 record.trigger
                 if record.goal is None
@@ -133,8 +164,9 @@ class LexicalMemoryRetriever:
                 record.conclusion_confidence.value,
             )
         for belief in self._companion.beliefs():
+            match_text = f"{belief.statement} {_evidence_text(belief)}"
             yield (
-                belief.statement,
+                match_text,
                 belief.statement,
                 MemoryKind.COMPANION_TRAIT,
                 "companion trait",
@@ -142,4 +174,5 @@ class LexicalMemoryRetriever:
             )
         for belief in self._goals.all_beliefs():
             subject = _goal_subject(belief.statement)
-            yield (subject, subject, MemoryKind.GOAL, "goal", belief.confidence.value)
+            match_text = f"{subject} {_evidence_text(belief)}"
+            yield (match_text, subject, MemoryKind.GOAL, "goal", belief.confidence.value)

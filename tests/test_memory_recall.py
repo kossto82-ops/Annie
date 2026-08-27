@@ -14,9 +14,26 @@ from jarvis.domain.aggregates.cognitive_episode import (
     CognitiveEpisode,
     InvalidStateTransition,
 )
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
+from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.interface.command_center import handle
+
+
+def _knows_name(jarvis: Jarvis) -> None:
+    """Teach Jarvis the companion's name the way the LLM companion channel would:
+    a trait grounded in the person's own words.
+    """
+    jarvis.observe_companion(
+        "is named Raúl",
+        Evidence(
+            content="me llamo Raúl",
+            source=EvidenceSource.USER_STATEMENT,
+            weight=Confidence(0.9),
+        ),
+    )
 
 _PRIOR = "we are building Jarvis as a companion"
 _QUESTION = "what are we building with Jarvis"
@@ -94,6 +111,31 @@ class TestJarvisRecallWiring:
         episode = jarvis.perceive(_QUESTION)
         assert episode.working_belief is not None
         assert episode.working_belief.confidence.value == 0.0
+
+
+class TestSelfQuestionsConsultTheCompanion:
+    def test_self_questions_surface_the_companion_trait_regardless_of_wording(self) -> None:
+        jarvis = Jarvis(enable_recall=True)
+        _knows_name(jarvis)
+        for question in ("sabes mi nombre?", "quien soy?", "cual es mi nombre?"):
+            episode = jarvis.perceive(question, trigger=question)
+            contents = [memory.content for memory in episode.recalled_memories]
+            assert "is named Raúl" in contents, question
+
+    def test_say_answers_a_self_question_from_the_companion_model(self) -> None:
+        jarvis = Jarvis(enable_recall=True)
+        _knows_name(jarvis)
+        result = handle(jarvis, "say", {"text": "sabes mi nombre?"})
+        assert result.get("stance") in {"memory", "partial_memory"}
+        assert "Raúl" in str(result["reply"])
+
+    def test_a_world_question_does_not_dump_companion_traits(self) -> None:
+        jarvis = Jarvis(enable_recall=True)
+        _knows_name(jarvis)
+        episode = jarvis.perceive(
+            "what is the capital of France?", trigger="what is the capital of France?"
+        )
+        assert episode.recalled_memories == ()
 
 
 class TestSayAnswersFromMemory:

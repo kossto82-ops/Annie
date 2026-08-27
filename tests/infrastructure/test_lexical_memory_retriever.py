@@ -123,6 +123,28 @@ class TestRecall:
         # The remembered *utterance* (trigger) is surfaced, not the internal decision.
         assert hits[0].content == "me llamo Raúl"
 
+    def test_a_companion_trait_is_found_by_the_words_that_taught_it(self) -> None:
+        # The trait is worded in English ("is named Raúl") but was taught in Spanish
+        # ("me llamo Raúl"); recall matches the evidence, not only the statement.
+        companion = CompanionModel(InMemoryBeliefStore())
+        companion.observe(
+            "is named Raúl",
+            Evidence(
+                content="me llamo Raúl",
+                source=EvidenceSource.USER_STATEMENT,
+                weight=Confidence(0.9),
+            ),
+        )
+        hits = _retriever(companion=companion).recall("como me llamo")
+        assert [h.kind for h in hits] == [MemoryKind.COMPANION_TRAIT]
+        assert hits[0].content == "is named Raúl"
+
+    def test_a_past_question_is_not_recalled_as_knowledge(self) -> None:
+        # Recalling a previous question as if it were an answer is noise, not memory.
+        episodes = InMemoryEpisodeStore()
+        episodes.record(_episode("sabes mi nombre?", "Insufficient evidence."))
+        assert _retriever(episodes=episodes).recall("cual es mi nombre") == ()
+
     def test_it_surfaces_a_goal_by_its_own_words(self) -> None:
         goals = InMemoryBeliefStore()
         goals.save(_belief("The goal 'ship Jarvis' is reachable"))
