@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-27 (Increment 102)
+Last updated: 2026-08-27 (Increment 103)
 
 ---
 
@@ -1413,6 +1413,21 @@ with belief + episode events dispatched through the NervousSystem at each step.
   but is ~50 s/call (~2.5 min/message) on this CPU — usable for testing; Groq is one click away in Tools
   (its key is saved) for speed.
 - Gates: ruff clean · pytest 509 passed, 3 skipped (new per-provider-key tests).
+
+### Increment 103 — per-provider model memory + fix Groq switch (untranslated replies) ✅ (2026-08-27)
+- **Switching to Groq "didn't work": two causes, both fixed.** (1) The reply came back untranslated
+  (English) because `reasoning_effort=low` had been dropped when testing Ollama — gpt-oss then spends its
+  budget on hidden reasoning and returns empty content, so the voice fell back to the canonical English.
+  Restored it (verified Ollama tolerates/ignores the param, so it can stay global). (2) The model field kept
+  the previous provider's model (e.g. `qwen3:8b`) → Groq 404.
+- **Model is now remembered PER provider** (`JARVIS_LLM_MODEL_<PROVIDER>`), mirroring the per-provider keys:
+  `resolve_model()` + `model_var()`; the `perceiver` command recalls a provider's model when none is typed;
+  `saved_models()` rides in the snapshot so the UI **auto-fills the model field when you pick a provider**.
+  Switching Groq ↔ Ollama now restores each one's key AND model with no retyping.
+- Verified live: `models: {groq: openai/gpt-oss-20b, ollama: qwen3:8b}`; a Groq turn replies in Spanish;
+  switching back to a provider recalls its saved model. (The intermittent English seen while testing was
+  Groq free-tier TPM under heavy probing, not a bug — `reasoning_effort=low` also lowers token use.)
+- Gates: ruff clean · pytest 512 passed, 3 skipped (per-provider model tests + recall-on-switch).
 
 ---
 

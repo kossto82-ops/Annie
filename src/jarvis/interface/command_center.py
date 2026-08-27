@@ -16,6 +16,7 @@ The socket lives in :mod:`jarvis.interface.server` and only carries these bytes.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +42,7 @@ from jarvis.infrastructure.perceiver_factory import (
     build_perceiver,
     build_renderer,
     describe,
+    saved_models,
 )
 from jarvis.jarvis import Jarvis
 
@@ -72,7 +74,11 @@ def snapshot(jarvis: Jarvis) -> Reply:
     summary = jarvis.state_summary()
     return {
         "episodes": summary.episode_count,
-        "perceiver": {**describe(jarvis.perception), "available": list(available_providers())},
+        "perceiver": {
+            **describe(jarvis.perception),
+            "available": list(available_providers()),
+            "models": saved_models(),  # per-provider remembered model, for UI auto-fill
+        },
         "energy": {
             "spent": jarvis.energy_spent(),
             "remaining": jarvis.energy_remaining(),
@@ -358,7 +364,11 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     provider = str(payload.get("provider", "")).strip()
     if not provider:
         return {"reply": "Name a provider to switch the perceiver.", "speak": False}
-    model = str(payload.get("model", "")).strip()
+    # If no model is typed, recall the one this provider used last (per-provider memory),
+    # so switching back to a provider doesn't require retyping its model.
+    model = str(payload.get("model", "")).strip() or llm_config_store.resolve_model(
+        provider.lower(), os.environ
+    )
     base_url = str(payload.get("base_url", "")).strip() or None
     # The API key is write-only from the page: it is applied to the live process and
     # saved to .env, but never echoed back in any reply or snapshot.

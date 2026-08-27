@@ -12,13 +12,14 @@ from jarvis.infrastructure import llm_config_store
 
 
 class TestStage:
-    def test_it_sets_only_non_empty_values_with_a_per_provider_key(self) -> None:
+    def test_it_stores_model_and_key_under_the_providers_own_slots(self) -> None:
         env: dict[str, str] = {}
         updates = llm_config_store.stage("groq", "llama-3.3-70b", None, "gsk_secret", environ=env)
         assert env["JARVIS_LLM_PROVIDER"] == "groq"
-        assert env["JARVIS_LLM_MODEL"] == "llama-3.3-70b"
-        # The key is stored under the provider's own slot, not the shared one.
+        # Model and key are both stored per-provider, not in the shared slots.
+        assert env["JARVIS_LLM_MODEL_GROQ"] == "llama-3.3-70b"
         assert env["JARVIS_LLM_KEY_GROQ"] == "gsk_secret"
+        assert "JARVIS_LLM_MODEL" not in env
         assert "JARVIS_LLM_API_KEY" not in env
         assert "JARVIS_LLM_BASE_URL" not in env  # empty base_url left untouched
         assert updates["JARVIS_LLM_KEY_GROQ"] == "gsk_secret"
@@ -47,6 +48,16 @@ class TestPerProviderKeys:
 
     def test_a_keyless_provider_resolves_to_none(self) -> None:
         assert llm_config_store.resolve_api_key("ollama", {}) is None
+
+    def test_each_provider_keeps_its_own_model(self) -> None:
+        env: dict[str, str] = {}
+        llm_config_store.stage("groq", "openai/gpt-oss-20b", None, "", environ=env)
+        llm_config_store.stage("ollama", "qwen3:8b", None, "", environ=env)
+        assert llm_config_store.resolve_model("groq", env) == "openai/gpt-oss-20b"
+        assert llm_config_store.resolve_model("ollama", env) == "qwen3:8b"
+
+    def test_model_falls_back_to_the_legacy_single_model(self) -> None:
+        assert llm_config_store.resolve_model("groq", {"JARVIS_LLM_MODEL": "m"}) == "m"
 
 
 class TestPersist:

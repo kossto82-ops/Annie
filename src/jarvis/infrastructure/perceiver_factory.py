@@ -24,7 +24,7 @@ from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.language_model_registry import available, build_language_model
 from jarvis.infrastructure.llm_companion_perception import LlmCompanionPerception
-from jarvis.infrastructure.llm_config_store import resolve_api_key
+from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_model
 from jarvis.infrastructure.llm_perception import LlmPerception
 from jarvis.infrastructure.llm_response_renderer import LlmResponseRenderer
 from jarvis.infrastructure.provider_settings import ProviderSettings
@@ -44,6 +44,19 @@ def available_providers() -> tuple[str, ...]:
     """
     real = tuple(p for p in available() if p not in _OFFLINE)
     return (KEYWORD, *real)
+
+
+def saved_models(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Each provider's remembered model, so the UI can auto-fill the model field when
+    you pick a provider (mirrors the per-provider key memory).
+    """
+    env = environ if environ is not None else os.environ
+    prefix = f"{_PREFIX}MODEL_"
+    return {
+        name[len(prefix) :].lower(): value
+        for name, value in env.items()
+        if name.startswith(prefix) and value
+    }
 
 
 def describe(source: PerceptionSource) -> dict[str, str | None]:
@@ -115,7 +128,7 @@ def _settings_from_ui(
     name = provider.strip().lower()
     return ProviderSettings(
         provider=name,
-        model=model.strip(),
+        model=model.strip() or resolve_model(name, env),  # recall the remembered model
         base_url=(base_url or None),
         api_key=resolve_api_key(name, env),  # this provider's stored key
         timeout=float(env.get(f"{_PREFIX}TIMEOUT", "30")),

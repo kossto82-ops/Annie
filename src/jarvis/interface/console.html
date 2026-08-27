@@ -337,10 +337,12 @@ function renderState(s) {
 
 /* ---- which perceiver is live, and switching it -------------------------- */
 let perceiverLoaded = false;
+let savedModels = {};   // provider -> remembered model, for auto-fill on switch
 function renderPerceiver(p) {
   if (!p) return;
   const label = p.kind === "keyword" ? "keyword" : (p.model || p.provider || p.kind);
   $("perceiver").textContent = label;
+  savedModels = p.models || {};
   const sel = $("provider");
   if (!perceiverLoaded && Array.isArray(p.available)) {
     sel.innerHTML = "";
@@ -352,6 +354,13 @@ function renderPerceiver(p) {
     perceiverLoaded = true;
   }
   if (p.provider) sel.value = p.provider;   // reflect the live provider
+}
+
+// Picking a provider auto-fills its remembered model, so you never retype it.
+function onProviderChange() {
+  const provider = $("provider").value;
+  const remembered = savedModels[provider];
+  $("model").value = remembered || (provider === "keyword" ? "" : $("model").value);
 }
 
 async function applyPerceiver() {
@@ -581,6 +590,7 @@ budget.addEventListener("change", applyBudget);
 
 /* perceiver switch — runtime provider/perceiver change (secret stays server-side) */
 $("applyperceiver").addEventListener("click", applyPerceiver);
+$("provider").addEventListener("change", onProviderChange);
 
 /* teach Jarvis about you — fold a pasted profile into the companion model */
 async function learnAboutMe() {

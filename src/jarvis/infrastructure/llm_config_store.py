@@ -26,19 +26,34 @@ _DEFAULT_ENV_FILE = ".env"
 _LEGACY_KEY = f"{_PREFIX}API_KEY"
 
 
+def _slug(provider: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "_", provider.upper()).strip("_")
+
+
 def key_var(provider: str) -> str:
     """The env var that holds ``provider``'s API key — one slot PER provider.
 
     So a Groq key and an NVIDIA key coexist (`JARVIS_LLM_KEY_GROQ`, `JARVIS_LLM_KEY_NVIDIA`)
     and switching providers reuses each without re-entering it.
     """
-    slug = re.sub(r"[^A-Z0-9]+", "_", provider.upper()).strip("_")
-    return f"{_PREFIX}KEY_{slug}"
+    return f"{_PREFIX}KEY_{_slug(provider)}"
+
+
+def model_var(provider: str) -> str:
+    """The env var that holds ``provider``'s last model — one slot PER provider, so
+    switching back to a provider restores its model without retyping it.
+    """
+    return f"{_PREFIX}MODEL_{_slug(provider)}"
 
 
 def resolve_api_key(provider: str, environ: Mapping[str, str]) -> str | None:
     """The stored key for ``provider``: its own slot, else the legacy single key."""
     return environ.get(key_var(provider)) or environ.get(_LEGACY_KEY) or None
+
+
+def resolve_model(provider: str, environ: Mapping[str, str]) -> str:
+    """The stored model for ``provider``: its own slot, else the legacy single model."""
+    return environ.get(model_var(provider)) or environ.get(f"{_PREFIX}MODEL") or ""
 
 
 def _updates(
@@ -51,13 +66,13 @@ def _updates(
     """
     updates: dict[str, str] = {}
     if provider:
-        updates[f"{_PREFIX}PROVIDER"] = provider
-    if model:
-        updates[f"{_PREFIX}MODEL"] = model
+        updates[f"{_PREFIX}PROVIDER"] = provider  # the active provider
+    if model and provider:
+        updates[model_var(provider)] = model  # remembered per provider
     if base_url:
         updates[f"{_PREFIX}BASE_URL"] = base_url
     if api_key and provider:
-        updates[key_var(provider)] = api_key
+        updates[key_var(provider)] = api_key  # remembered per provider
     return updates
 
 

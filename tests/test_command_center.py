@@ -349,7 +349,10 @@ class TestPerceiver:
         # Every switch now stages into the process env and persists to .env; point that
         # file at a temp path and revert the JARVIS_LLM_* vars so no test leaks config.
         monkeypatch.setenv("JARVIS_ENV_FILE", str(tmp_path / ".env"))
-        for var in ("PROVIDER", "MODEL", "BASE_URL", "API_KEY", "KEY_GROQ", "KEY_NVIDIA"):
+        for var in (
+            "PROVIDER", "MODEL", "BASE_URL", "API_KEY",
+            "KEY_GROQ", "KEY_NVIDIA", "MODEL_GROQ", "MODEL_NVIDIA", "MODEL_OLLAMA",
+        ):
             monkeypatch.delenv(f"JARVIS_LLM_{var}", raising=False)
 
     def test_snapshot_reports_the_live_perceiver_and_available_ones(self) -> None:
@@ -408,14 +411,26 @@ class TestPerceiver:
         assert "error" in result
         assert not (tmp_path / ".env").exists()  # nothing half-formed was written
 
-    def test_switching_the_model_persists_without_re_entering_the_key(
-        self, tmp_path: Path
-    ) -> None:
-        # Fixing just the model (no key) must take effect AND survive a restart.
-        handle(Jarvis(), "perceiver", {"provider": "groq", "model": "wrong-model"})
+    def test_switching_the_model_persists_per_provider(self, tmp_path: Path) -> None:
+        # Fixing just the model (no key) must take effect AND survive a restart,
+        # stored under the provider's own slot.
+        handle(Jarvis(), "perceiver", {"provider": "groq", "model": "some-model"})
         env_text = (tmp_path / ".env").read_text(encoding="utf-8")
-        assert "JARVIS_LLM_MODEL=wrong-model" in env_text
+        assert "JARVIS_LLM_MODEL_GROQ=some-model" in env_text
         assert "JARVIS_LLM_PROVIDER=groq" in env_text
+
+    def test_switching_back_recalls_the_saved_model(self) -> None:
+        jarvis = Jarvis()
+        handle(jarvis, "perceiver", {"provider": "groq", "model": "gpt-oss"})
+        handle(jarvis, "perceiver", {"provider": "keyword"})
+        # Switch back to groq WITHOUT typing a model — it recalls the saved one.
+        result = handle(jarvis, "perceiver", {"provider": "groq"})
+        state = cast("dict[str, object]", result["state"])
+        perceiver = cast("dict[str, object]", state["perceiver"])
+        assert perceiver["model"] == "gpt-oss"
+        # The snapshot exposes saved models so the UI can auto-fill the field.
+        models = cast("dict[str, str]", perceiver["models"])
+        assert models.get("groq") == "gpt-oss"
 
 
 class TestUnknownCommand:

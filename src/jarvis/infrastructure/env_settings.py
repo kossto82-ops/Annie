@@ -23,7 +23,7 @@ from collections.abc import Mapping
 
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.language_model_registry import build_language_model
-from jarvis.infrastructure.llm_config_store import resolve_api_key
+from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_model
 from jarvis.infrastructure.provider_settings import ProviderSettings
 
 _PREFIX = "JARVIS_LLM_"
@@ -34,7 +34,7 @@ def settings_from_env(environ: Mapping[str, str] | None = None) -> ProviderSetti
     """Assemble `ProviderSettings` from `JARVIS_LLM_*`. Defaults to the offline stub."""
     env = environ if environ is not None else os.environ
     provider = env.get(f"{_PREFIX}PROVIDER", "scripted").strip() or "scripted"
-    model = env.get(f"{_PREFIX}MODEL", "").strip()
+    model = resolve_model(provider, env).strip()  # this provider's remembered model
     if provider not in _OFFLINE_PROVIDERS and not model:
         raise ValueError(
             f"{_PREFIX}MODEL is required for provider {provider!r} "
