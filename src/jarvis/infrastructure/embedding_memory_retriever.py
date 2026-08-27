@@ -28,10 +28,11 @@ from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.memory_candidates import gather_candidates
 from jarvis.infrastructure.text_embedder import TextEmbedder
 
-# Below this cosine similarity a memory is not meaning-close enough to surface. Embedding
-# thresholds are model-specific; this is a conservative default for a normalised model
-# like bge-m3 and is tunable (the same role the token-overlap floor plays for lexical).
-_MIN_SIMILARITY = 0.5
+# Below this cosine similarity a memory is not meaning-close enough to surface.
+# Calibrated against real bge-m3: identity-related queries score ~0.46-0.67 and clearly
+# unrelated ones ~0.29-0.37, so 0.45 separates them. Model-specific and tunable (the
+# same role the token-overlap floor plays for lexical recall).
+_MIN_SIMILARITY = 0.45
 
 
 def _cosine(a: tuple[float, ...], b: tuple[float, ...]) -> float:
