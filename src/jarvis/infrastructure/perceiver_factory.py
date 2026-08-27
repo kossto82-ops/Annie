@@ -29,12 +29,18 @@ from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_mode
 from jarvis.infrastructure.llm_perception import LlmPerception
 from jarvis.infrastructure.llm_reasoner import LlmReasoner
 from jarvis.infrastructure.llm_response_renderer import LlmResponseRenderer
+from jarvis.infrastructure.openai_compatible_embedder import OpenAiCompatibleEmbedder
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
+from jarvis.infrastructure.text_embedder import TextEmbedder
 
 _PREFIX = "JARVIS_LLM_"
+_EMBED_PREFIX = "JARVIS_EMBED_"
+# Embeddings default to a local ollama, independent of the chat provider: you can chat
+# with a hosted model and still recall by meaning with a local embedder (e.g. bge-m3).
+_DEFAULT_EMBED_BASE_URL = "http://localhost:11434/v1"
 
 # Provider names that mean "no LLM in the judgment": use the keyword rule (Vision §38).
 KEYWORD = "keyword"
@@ -133,6 +139,27 @@ def reasoner_from_settings(settings: ProviderSettings) -> Reasoner:
     if settings.provider in _OFFLINE or not settings.model:
         return SilentReasoner()
     return LlmReasoner(build_language_model(settings))
+
+
+def build_embedder(environ: Mapping[str, str] | None = None) -> TextEmbedder | None:
+    """Build the embedder for semantic recall from ``JARVIS_EMBED_*``, or None.
+
+    Independent of the chat provider (Vision §3, D11): set ``JARVIS_EMBED_MODEL`` (e.g.
+    ``bge-m3``) to enable meaning-based recall; the endpoint defaults to a local ollama.
+    Absent model -> None -> recall stays lexical. Building only constructs the adapter;
+    no network call happens until a recall embeds something.
+    """
+    env = environ if environ is not None else os.environ
+    model = (env.get(f"{_EMBED_PREFIX}MODEL") or "").strip()
+    if not model:
+        return None
+    base_url = (env.get(f"{_EMBED_PREFIX}BASE_URL") or _DEFAULT_EMBED_BASE_URL).strip()
+    return OpenAiCompatibleEmbedder(
+        base_url=base_url,
+        model=model,
+        api_key=(env.get(f"{_EMBED_PREFIX}API_KEY") or None),
+        timeout=float(env.get(f"{_EMBED_PREFIX}TIMEOUT", "60")),
+    )
 
 
 def _settings_from_ui(

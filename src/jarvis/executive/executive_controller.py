@@ -159,6 +159,10 @@ class ExecutiveController:
         """Swap the reasoner at runtime (matches the active provider, Vision §38)."""
         self._reasoner = reasoner
 
+    def set_memory_retriever(self, retriever: MemoryRetriever | None) -> None:
+        """Swap the memory retriever at runtime -- e.g. lexical -> embedding (D11)."""
+        self._memory_retriever = retriever
+
     def run(
         self,
         episode: CognitiveEpisode,

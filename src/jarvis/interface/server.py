@@ -22,6 +22,7 @@ from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.llm_config_store import load_env_file
 from jarvis.infrastructure.perceiver_factory import (
+    build_embedder,
     companion_perceiver_from_settings,
     perceiver_from_settings,
     reasoner_from_settings,
@@ -69,6 +70,11 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             reasoner=reasoner,
         )
     jarvis.set_voice(renderer_from_settings(settings))  # reply in the user's language
+    # Upgrade recall to meaning-based when an embedder is configured (e.g. bge-m3 on a
+    # local ollama), independent of the chat provider; otherwise recall stays lexical.
+    embedder = build_embedder()
+    if embedder is not None:
+        jarvis.enable_embedding_recall(embedder)
     return jarvis
 
 

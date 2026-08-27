@@ -55,6 +55,7 @@ from jarvis.executive.executive_controller import (
     subject_of,
     working_statement,
 )
+from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.in_memory_refutation_store import InMemoryRefutationStore
@@ -65,6 +66,7 @@ from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
+from jarvis.infrastructure.text_embedder import TextEmbedder
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace
 
@@ -171,6 +173,28 @@ class Jarvis:
         from the same model that perceives and voices. ``None`` disables reasoning.
         """
         self._executive.set_reasoner(reasoner)
+
+    def enable_embedding_recall(self, embedder: TextEmbedder) -> None:
+        """Upgrade recall from surface tokens to *meaning* (Vision §3, D11).
+
+        Installs an embedding-backed retriever over Jarvis's own stores, with a lexical
+        retriever as its fallback so a local embedder outage degrades to token recall
+        rather than none (Vision §37). The retriever only surfaces candidates; the
+        executive still decides. Replaces whatever retriever was active.
+        """
+        lexical = LexicalMemoryRetriever(
+            self.beliefs, self.episodes, self.companion, self._goals
+        )
+        self._executive.set_memory_retriever(
+            EmbeddingMemoryRetriever(
+                self.beliefs,
+                self.episodes,
+                self.companion,
+                self._goals,
+                embedder,
+                fallback=lexical,
+            )
+        )
 
     @property
     def perception(self) -> PerceptionSource:
