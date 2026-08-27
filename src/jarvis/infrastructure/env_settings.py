@@ -23,6 +23,7 @@ from collections.abc import Mapping
 
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.language_model_registry import build_language_model
+from jarvis.infrastructure.llm_config_store import resolve_api_key
 from jarvis.infrastructure.provider_settings import ProviderSettings
 
 _PREFIX = "JARVIS_LLM_"
@@ -43,7 +44,7 @@ def settings_from_env(environ: Mapping[str, str] | None = None) -> ProviderSetti
         provider=provider,
         model=model,
         base_url=(env.get(f"{_PREFIX}BASE_URL") or None),
-        api_key=(env.get(f"{_PREFIX}API_KEY") or None),
+        api_key=resolve_api_key(provider, env),  # this provider's stored key
         timeout=float(env.get(f"{_PREFIX}TIMEOUT", "30")),
         temperature=float(env.get(f"{_PREFIX}TEMPERATURE", "0")),
         reasoning_effort=(env.get(f"{_PREFIX}REASONING_EFFORT") or None),

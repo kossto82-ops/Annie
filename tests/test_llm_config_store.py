@@ -12,14 +12,41 @@ from jarvis.infrastructure import llm_config_store
 
 
 class TestStage:
-    def test_it_sets_only_non_empty_values(self) -> None:
+    def test_it_sets_only_non_empty_values_with_a_per_provider_key(self) -> None:
         env: dict[str, str] = {}
         updates = llm_config_store.stage("groq", "llama-3.3-70b", None, "gsk_secret", environ=env)
         assert env["JARVIS_LLM_PROVIDER"] == "groq"
         assert env["JARVIS_LLM_MODEL"] == "llama-3.3-70b"
-        assert env["JARVIS_LLM_API_KEY"] == "gsk_secret"
+        # The key is stored under the provider's own slot, not the shared one.
+        assert env["JARVIS_LLM_KEY_GROQ"] == "gsk_secret"
+        assert "JARVIS_LLM_API_KEY" not in env
         assert "JARVIS_LLM_BASE_URL" not in env  # empty base_url left untouched
-        assert updates["JARVIS_LLM_API_KEY"] == "gsk_secret"
+        assert updates["JARVIS_LLM_KEY_GROQ"] == "gsk_secret"
+
+
+class TestPerProviderKeys:
+    def test_each_provider_keeps_its_own_key(self) -> None:
+        env: dict[str, str] = {}
+        llm_config_store.stage("groq", "m1", None, "gsk_groq", environ=env)
+        llm_config_store.stage("nvidia", "m2", None, "nvapi_x", environ=env)
+        # Switching to nvidia did NOT overwrite the groq key — both persist.
+        assert env["JARVIS_LLM_KEY_GROQ"] == "gsk_groq"
+        assert env["JARVIS_LLM_KEY_NVIDIA"] == "nvapi_x"
+        assert llm_config_store.resolve_api_key("groq", env) == "gsk_groq"
+        assert llm_config_store.resolve_api_key("nvidia", env) == "nvapi_x"
+
+    def test_switching_back_reuses_the_stored_key(self) -> None:
+        env = {"JARVIS_LLM_KEY_GROQ": "gsk_groq", "JARVIS_LLM_KEY_NVIDIA": "nvapi_x"}
+        # No key passed on the switch — the stored one is resolved.
+        llm_config_store.stage("groq", "m1", None, "", environ=env)
+        assert llm_config_store.resolve_api_key("groq", env) == "gsk_groq"
+
+    def test_legacy_single_key_is_the_fallback(self) -> None:
+        env = {"JARVIS_LLM_API_KEY": "old_shared"}
+        assert llm_config_store.resolve_api_key("groq", env) == "old_shared"
+
+    def test_a_keyless_provider_resolves_to_none(self) -> None:
+        assert llm_config_store.resolve_api_key("ollama", {}) is None
 
 
 class TestPersist:

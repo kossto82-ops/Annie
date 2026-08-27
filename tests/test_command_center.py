@@ -349,7 +349,7 @@ class TestPerceiver:
         # Every switch now stages into the process env and persists to .env; point that
         # file at a temp path and revert the JARVIS_LLM_* vars so no test leaks config.
         monkeypatch.setenv("JARVIS_ENV_FILE", str(tmp_path / ".env"))
-        for var in ("PROVIDER", "MODEL", "BASE_URL", "API_KEY"):
+        for var in ("PROVIDER", "MODEL", "BASE_URL", "API_KEY", "KEY_GROQ", "KEY_NVIDIA"):
             monkeypatch.delenv(f"JARVIS_LLM_{var}", raising=False)
 
     def test_snapshot_reports_the_live_perceiver_and_available_ones(self) -> None:
@@ -395,8 +395,8 @@ class TestPerceiver:
             "perceiver",
             {"provider": "groq", "model": "llama-3.3-70b", "api_key": secret},
         )
-        # The key is persisted for a restart...
-        assert "JARVIS_LLM_API_KEY=" + secret in (tmp_path / ".env").read_text(encoding="utf-8")
+        # The key is persisted for a restart, under the provider's own slot...
+        assert "JARVIS_LLM_KEY_GROQ=" + secret in (tmp_path / ".env").read_text(encoding="utf-8")
         # ...but never echoed back anywhere in the reply or the live snapshot.
         assert result["saved"] is True
         assert secret not in json.dumps(result)

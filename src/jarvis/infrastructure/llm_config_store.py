@@ -16,28 +16,49 @@ The ``.env`` file is git-ignored. This module never logs a value.
 from __future__ import annotations
 
 import os
-from collections.abc import MutableMapping
+import re
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
 
 _PREFIX = "JARVIS_LLM_"
 _ENV_FILE_VAR = "JARVIS_ENV_FILE"
 _DEFAULT_ENV_FILE = ".env"
+_LEGACY_KEY = f"{_PREFIX}API_KEY"
 
-# The config keys the surface may set, mapped from the perceiver command's fields.
-_FIELDS: dict[str, str] = {
-    "provider": f"{_PREFIX}PROVIDER",
-    "model": f"{_PREFIX}MODEL",
-    "base_url": f"{_PREFIX}BASE_URL",
-    "api_key": f"{_PREFIX}API_KEY",
-}
+
+def key_var(provider: str) -> str:
+    """The env var that holds ``provider``'s API key — one slot PER provider.
+
+    So a Groq key and an NVIDIA key coexist (`JARVIS_LLM_KEY_GROQ`, `JARVIS_LLM_KEY_NVIDIA`)
+    and switching providers reuses each without re-entering it.
+    """
+    slug = re.sub(r"[^A-Z0-9]+", "_", provider.upper()).strip("_")
+    return f"{_PREFIX}KEY_{slug}"
+
+
+def resolve_api_key(provider: str, environ: Mapping[str, str]) -> str | None:
+    """The stored key for ``provider``: its own slot, else the legacy single key."""
+    return environ.get(key_var(provider)) or environ.get(_LEGACY_KEY) or None
 
 
 def _updates(
     provider: str, model: str, base_url: str | None, api_key: str
 ) -> dict[str, str]:
-    """The non-empty ``JARVIS_LLM_*`` values to set. Empty fields are left untouched."""
-    values = {"provider": provider, "model": model, "base_url": base_url or "", "api_key": api_key}
-    return {_FIELDS[name]: value for name, value in values.items() if value}
+    """The non-empty ``JARVIS_LLM_*`` values to set. Empty fields are left untouched.
+
+    A provided key is stored under this provider's own slot (`key_var`), never the shared
+    one — so it persists alongside other providers' keys instead of overwriting them.
+    """
+    updates: dict[str, str] = {}
+    if provider:
+        updates[f"{_PREFIX}PROVIDER"] = provider
+    if model:
+        updates[f"{_PREFIX}MODEL"] = model
+    if base_url:
+        updates[f"{_PREFIX}BASE_URL"] = base_url
+    if api_key and provider:
+        updates[key_var(provider)] = api_key
+    return updates
 
 
 def stage(

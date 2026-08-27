@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-27 (Increment 101)
+Last updated: 2026-08-27 (Increment 102)
 
 ---
 
@@ -1399,6 +1399,20 @@ with belief + episode events dispatched through the NervousSystem at each step.
   `JARVIS_HOME` is explicitly empty (in-memory).
 - Gates: ruff clean · pytest 505 passed, 3 skipped (new stream tests for the model, renderer, and
   `stream_say`); console asset tripwire intact; zero JS console errors in-browser.
+
+### Increment 102 — per-provider API keys (no re-entry on switch) ✅ (2026-08-27)
+- **Each provider's key is stored in its own slot** — `JARVIS_LLM_KEY_<PROVIDER>` (e.g. `JARVIS_LLM_KEY_GROQ`,
+  `JARVIS_LLM_KEY_NVIDIA`) — so switching Groq → NVIDIA → local and back reuses each saved key without
+  re-entering it. `llm_config_store.key_var()` / `resolve_api_key()` own the scheme; `env_settings` and the
+  perceiver factory resolve the active provider's key (falling back to the legacy single `JARVIS_LLM_API_KEY`
+  for old `.env` files). The panel still only ever writes the key server-side, never reads it back.
+- Verified: staging a Groq key then an NVIDIA key keeps both; switching back resolves the stored key with no
+  prompt. (The dev `.env` groq key was migrated to `JARVIS_LLM_KEY_GROQ`.)
+- **Local Ollama left running for testing:** switched the active perceiver to `ollama` / `qwen3:8b` with a
+  raised `JARVIS_LLM_TIMEOUT=300`. It works end-to-end (extracts traits incl. the name, replies in Spanish)
+  but is ~50 s/call (~2.5 min/message) on this CPU — usable for testing; Groq is one click away in Tools
+  (its key is saved) for speed.
+- Gates: ruff clean · pytest 509 passed, 3 skipped (new per-provider-key tests).
 
 ---
 

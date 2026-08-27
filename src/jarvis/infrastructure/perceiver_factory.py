@@ -24,6 +24,7 @@ from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.language_model_registry import available, build_language_model
 from jarvis.infrastructure.llm_companion_perception import LlmCompanionPerception
+from jarvis.infrastructure.llm_config_store import resolve_api_key
 from jarvis.infrastructure.llm_perception import LlmPerception
 from jarvis.infrastructure.llm_response_renderer import LlmResponseRenderer
 from jarvis.infrastructure.provider_settings import ProviderSettings
@@ -111,11 +112,12 @@ def _settings_from_ui(
 ) -> ProviderSettings:
     """Compose settings from the UI's non-secret choice, keying from the environment."""
     env = environ if environ is not None else os.environ
+    name = provider.strip().lower()
     return ProviderSettings(
-        provider=provider.strip().lower(),
+        provider=name,
         model=model.strip(),
         base_url=(base_url or None),
-        api_key=(env.get(f"{_PREFIX}API_KEY") or None),
+        api_key=resolve_api_key(name, env),  # this provider's stored key
         timeout=float(env.get(f"{_PREFIX}TIMEOUT", "30")),
         temperature=float(env.get(f"{_PREFIX}TEMPERATURE", "0")),
         reasoning_effort=(env.get(f"{_PREFIX}REASONING_EFFORT") or None),
