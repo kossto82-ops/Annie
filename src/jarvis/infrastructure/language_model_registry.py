@@ -8,8 +8,8 @@ factory. Nothing here calls a network; building a model only constructs it.
 
 Known out of the box (all via the generic OpenAI-compatible adapter):
 OpenAI, Groq, xAI/Grok, DeepSeek, Moonshot/Kimi, OpenRouter, Together, Mistral,
-Perplexity, a local Ollama, a local LM Studio -- plus "openai-compatible" for any
-other endpoint by `base_url`, and "scripted" (the offline stub, the default).
+Perplexity, NVIDIA (NIM), a local Ollama, a local LM Studio -- plus "openai-compatible"
+for any other endpoint by `base_url`, and "scripted" (the offline stub, the default).
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ _ENDPOINTS: dict[str, str] = {
     "together": "https://api.together.xyz/v1",
     "mistral": "https://api.mistral.ai/v1",
     "perplexity": "https://api.perplexity.ai",
+    "nvidia": "https://integrate.api.nvidia.com/v1",  # NVIDIA NIM hosted inference
     "ollama": "http://localhost:11434/v1",  # local SLM server
     "lmstudio": "http://localhost:1234/v1",  # local SLM server
 }

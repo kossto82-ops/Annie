@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-27 (Increment 99)
+Last updated: 2026-08-27 (Increment 100)
 
 ---
 
@@ -1378,6 +1378,11 @@ with belief + episode events dispatched through the NervousSystem at each step.
   tokens; a clear rate-limit (429) message. Ollama is supported/swappable but `qwen3:4b` is ~3 min/call on
   this CPU box — not viable interactively yet; `JARVIS_LLM_TIMEOUT` is configurable for slower local models.
 - Gates: ruff clean · pytest 497 passed, 3 skipped.
+
+### Increment 100 — NVIDIA NIM as a registered provider ✅ (2026-08-27)
+- Added `nvidia` → `https://integrate.api.nvidia.com/v1` to the open registry, so NVIDIA NIM models (e.g.
+  `nvidia/nemotron-3.5-lightning-30b-a3b`) are selectable like any other provider — key entered in the
+  panel, never in code. One-line registry entry; the generic OpenAI-compatible adapter handles the rest.
 
 ---
 
