@@ -24,6 +24,7 @@ from jarvis.infrastructure.llm_config_store import load_env_file
 from jarvis.infrastructure.perceiver_factory import (
     companion_perceiver_from_settings,
     perceiver_from_settings,
+    reasoner_from_settings,
     renderer_from_settings,
 )
 from jarvis.interface.command_center import Response, parse_body, route, stream_say
@@ -42,11 +43,13 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     settings = settings_from_env()
     perception: PerceptionSource = perceiver_from_settings(settings)
     companion_perception = companion_perceiver_from_settings(settings)
+    reasoner = reasoner_from_settings(settings)
     if home is None:
         jarvis = Jarvis(
             perception=perception,
             companion_perception=companion_perception,
             enable_recall=True,
+            reasoner=reasoner,
         )
     else:
         base = Path(home)
@@ -63,6 +66,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             perception=perception,
             companion_perception=companion_perception,
             enable_recall=True,
+            reasoner=reasoner,
         )
     jarvis.set_voice(renderer_from_settings(settings))  # reply in the user's language
     return jarvis

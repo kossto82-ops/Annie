@@ -25,6 +25,7 @@ from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.events.domain_event import CognitiveEvent
+from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
@@ -54,6 +55,11 @@ LOW_STABILITY_THRESHOLD = 0.2
 # ("the", "que") does not read as a relevant memory. Tunable; superseded once a
 # semantic retriever can judge relevance by meaning rather than surface overlap.
 _MIN_RECALL_RELEVANCE = 0.2
+
+# At or above this recall relevance a memory answers the question well enough that
+# Jarvis need not reason from scratch. The single source of truth for "strong recall",
+# shared with the surface so the response stance and the reasoning gate agree.
+STRONG_RECALL_RELEVANCE = 0.6
 
 # When the companion asks about *themselves*, what Jarvis knows about them is fully
 # relevant regardless of shared words ("who am I?" shares nothing with "is named
@@ -134,6 +140,7 @@ class ExecutiveController:
         episodes: EpisodeRepository,
         companion: CompanionModel,
         memory_retriever: MemoryRetriever | None = None,
+        reasoner: Reasoner | None = None,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
@@ -143,6 +150,14 @@ class ExecutiveController:
         # evidence that grounds a belief (Vision §3, §22). Absent -> behaviour is
         # exactly as before recall existed.
         self._memory_retriever = memory_retriever
+        # Optional: proposes a provisional answer when neither belief nor memory can
+        # help (Vision §37). Absent -> an ungrounded, unremembered question stays an
+        # honest "I don't have enough", exactly as before.
+        self._reasoner = reasoner
+
+    def set_reasoner(self, reasoner: Reasoner | None) -> None:
+        """Swap the reasoner at runtime (matches the active provider, Vision §38)."""
+        self._reasoner = reasoner
 
     def run(
         self,
@@ -177,6 +192,7 @@ class ExecutiveController:
             for piece in pieces:
                 episode.observe(piece)
             self._recall_into(episode)
+            self._reason_into(episode, belief)
         self._beliefs.save(belief)
         self._flush(episode)  # dispatch evidence/belief events
 
@@ -349,6 +365,25 @@ class ExecutiveController:
                 key=lambda m: (-m.relevance, -(m.source_confidence or 0.0), m.content)
             )
             episode.recall(tuple(relevant))
+
+    def _reason_into(self, episode: CognitiveEpisode, belief: Belief) -> None:
+        """Reason a provisional answer when belief and memory can't give one (§37).
+
+        Only when the belief is ungrounded *and* no strong memory already answers the
+        trigger -- so reasoning is a genuine fallback, not a redundant LLM call over a
+        question Jarvis already remembers. The result is provisional response context
+        (an :class:`Inference`), never evidence or belief confidence (Vision §38, D6).
+        """
+        if self._reasoner is None:
+            return
+        if belief.confidence.value >= GROUNDED_CONFIDENCE_THRESHOLD:
+            return
+        recalled = episode.recalled_memories
+        if recalled and recalled[0].relevance >= STRONG_RECALL_RELEVANCE:
+            return
+        inference = self._reasoner.infer(episode.trigger, recalled)
+        if inference is not None:
+            episode.infer(inference)
 
     def _companion_traits(self) -> list[RecalledMemory]:
         """What Jarvis knows about the companion, as recalled memories (most confident

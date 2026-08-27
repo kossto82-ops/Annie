@@ -21,15 +21,18 @@ from collections.abc import Mapping
 
 from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
 from jarvis.domain.perception.perception_source import PerceptionSource
+from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.language_model_registry import available, build_language_model
 from jarvis.infrastructure.llm_companion_perception import LlmCompanionPerception
 from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_model
 from jarvis.infrastructure.llm_perception import LlmPerception
+from jarvis.infrastructure.llm_reasoner import LlmReasoner
 from jarvis.infrastructure.llm_response_renderer import LlmResponseRenderer
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
+from jarvis.infrastructure.silent_reasoner import SilentReasoner
 
 _PREFIX = "JARVIS_LLM_"
 
@@ -120,6 +123,18 @@ def renderer_from_settings(settings: ProviderSettings) -> ResponseRenderer:
     return LlmResponseRenderer(build_language_model(settings))
 
 
+def reasoner_from_settings(settings: ProviderSettings) -> Reasoner:
+    """The reasoner (Vision §37) for fully-formed settings.
+
+    Offline -> the silent reasoner (no inference; an unremembered question stays an
+    honest "I don't have enough"); a real provider -> an LLM reasoner over the same
+    model, so a provisional answer is reasoned when belief and memory have none.
+    """
+    if settings.provider in _OFFLINE or not settings.model:
+        return SilentReasoner()
+    return LlmReasoner(build_language_model(settings))
+
+
 def _settings_from_ui(
     provider: str, model: str, base_url: str | None, environ: Mapping[str, str] | None
 ) -> ProviderSettings:
@@ -189,3 +204,21 @@ def build_renderer(
     if name in _OFFLINE:
         return IdentityRenderer()
     return renderer_from_settings(_settings_from_ui(provider, model, base_url, environ))
+
+
+def build_reasoner(
+    provider: str,
+    model: str = "",
+    base_url: str | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> Reasoner:
+    """Build the reasoner from the UI's non-secret choice (Vision §37).
+
+    Offline -> silent (no inference); a real provider -> an LLM reasoner over the same
+    model, keyed from the environment only, so a provisional answer comes from the same
+    model that perceives and voices.
+    """
+    name = provider.strip().lower()
+    if name in _OFFLINE:
+        return SilentReasoner()
+    return reasoner_from_settings(_settings_from_ui(provider, model, base_url, environ))

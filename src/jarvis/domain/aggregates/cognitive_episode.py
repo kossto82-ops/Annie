@@ -25,6 +25,7 @@ from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.domain.value_objects.goal import Goal
+from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 
 
@@ -66,6 +67,7 @@ class CognitiveEpisode:
     _working_belief: Belief | None = field(default=None, repr=False)
     _evidence_request: EvidenceRequest | None = field(default=None, repr=False)
     _recalled: tuple[RecalledMemory, ...] = field(default=(), repr=False)
+    _inference: Inference | None = field(default=None, repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
     )
@@ -145,6 +147,24 @@ class CognitiveEpisode:
     def recalled_memories(self) -> tuple[RecalledMemory, ...]:
         """The memories judged relevant to this episode's trigger (Vision §3)."""
         return self._recalled
+
+    def infer(self, inference: Inference) -> None:
+        """Attach a provisional answer reasoned for this trigger (Vision §37).
+
+        Like recalled memory, this is *response context*, not truth: it is offered
+        when no grounded belief and no memory could answer, and it never becomes
+        evidence or changes the working belief's derived confidence (Vision §38, D6).
+        """
+        if self.state.is_terminal:
+            raise InvalidStateTransition(
+                f"Episode {self.id} is {self.state.value}; cannot reason into it"
+            )
+        self._inference = inference
+
+    @property
+    def inference(self) -> Inference | None:
+        """The provisional answer reasoned for this trigger, if any (Vision §37)."""
+        return self._inference
 
     def attach_evidence_request(self, request: EvidenceRequest) -> None:
         """Record what evidence this episode is missing (Vision §16, §37)."""

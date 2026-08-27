@@ -21,6 +21,7 @@ from jarvis.domain.events.belief_events import ContradictionDetected
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
 from jarvis.domain.perception.perception_source import PerceptionSource
+from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
@@ -100,6 +101,7 @@ class Jarvis:
         energy_costs: EnergyCosts | None = None,
         energy_budget: int | None = None,
         enable_recall: bool = False,
+        reasoner: Reasoner | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -158,7 +160,17 @@ class Jarvis:
             self.episodes,
             self.companion,
             memory_retriever,
+            reasoner,
         )
+
+    def set_reasoner(self, reasoner: Reasoner | None) -> None:
+        """Swap the reasoner at runtime (Vision §37, §38; Track B).
+
+        Like the perceiver and voice, the reasoning capability is config: switching
+        provider from the command center updates it too, so a provisional answer comes
+        from the same model that perceives and voices. ``None`` disables reasoning.
+        """
+        self._executive.set_reasoner(reasoner)
 
     @property
     def perception(self) -> PerceptionSource:

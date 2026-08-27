@@ -32,8 +32,13 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
-from jarvis.executive.executive_controller import subject_of, working_statement
+from jarvis.executive.executive_controller import (
+    STRONG_RECALL_RELEVANCE,
+    subject_of,
+    working_statement,
+)
 from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.language_model_registry import build_language_model
@@ -41,6 +46,7 @@ from jarvis.infrastructure.perceiver_factory import (
     available_providers,
     build_companion_perceiver,
     build_perceiver,
+    build_reasoner,
     build_renderer,
     describe,
     saved_models,
@@ -48,11 +54,6 @@ from jarvis.infrastructure.perceiver_factory import (
 from jarvis.jarvis import Jarvis
 
 _OFFLINE_PERCEIVERS = frozenset({"", "keyword", "scripted", "stub"})
-
-# At or above this recall relevance (share of the query's words a memory matched),
-# Jarvis answers from memory confidently; below it, it offers the related memory but
-# is honest that it may not bear directly on the question (Vision §3, §37).
-_STRONG_RECALL = 0.6
 
 _CONSOLE_HTML = Path(__file__).with_name("console.html")
 
@@ -147,7 +148,7 @@ def _memory_reply(
     it may not settle the question (§37).
     """
     contents = "; ".join(memory.content for memory in recalled[:3])
-    if recalled[0].relevance >= _STRONG_RECALL:
+    if recalled[0].relevance >= STRONG_RECALL_RELEVANCE:
         reply = f"This connects to what I remember — {contents}."
         stance = "memory"
     else:
@@ -164,6 +165,36 @@ def _memory_reply(
         "provenance": provenance,
         "trace": trace,
     }
+
+
+def _inference_reply(
+    inference: Inference,
+    recalled: tuple[RecalledMemory, ...],
+    provenance: Reply | None,
+    trace: list[Reply],
+) -> Reply:
+    """Answer by reasoning when belief and memory have nothing (Vision §37).
+
+    A distinct stance, and honestly framed as provisional: Jarvis says it does not
+    recall settling this and is reasoning from understanding, so the reader never
+    mistakes an inference for a remembered fact or a grounded conclusion (Vision §38).
+    Any loosely-related memory is mentioned, not presented as the answer.
+    """
+    reply = (
+        "I don't recall us settling this, but reasoning from what I understand: "
+        f"{inference.answer}"
+    )
+    result: Reply = {
+        "reply": reply,
+        "speak": True,
+        "stance": "inference",
+        "inference": {"answer": inference.answer},
+        "provenance": provenance,
+        "trace": trace,
+    }
+    if recalled:
+        result["recalled"] = [_recalled_json(memory) for memory in recalled]
+    return result
 
 
 def _trace_steps(events: tuple[CognitiveEvent, ...]) -> list[Reply]:
@@ -262,11 +293,18 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
             "trace": trace,
         }
     recalled = episode.recalled_memories
-    if recalled:
-        # No grounded belief, but memory bears on this: answer from what Jarvis
-        # remembers rather than falling back to "insufficient evidence" (Vision §3).
+    strong_memory = bool(recalled) and recalled[0].relevance >= STRONG_RECALL_RELEVANCE
+    if strong_memory:
+        # A confident memory bears on this: answer from what Jarvis remembers.
         return _memory_reply(recalled, provenance, trace)
-    # Nothing to weigh and nothing recalled — warm and honest, and it invites you to
+    if episode.inference is not None:
+        # No grounded belief and no strong memory, but Jarvis can reason: give a
+        # provisional answer instead of a blank refusal (Vision §37).
+        return _inference_reply(episode.inference, recalled, provenance, trace)
+    if recalled:
+        # Only a loose memory and nothing to reason with: offer it, honestly partial.
+        return _memory_reply(recalled, provenance, trace)
+    # Nothing to weigh, recall, or reason — warm and honest, and it invites you to
     # teach it (§37), rather than scolding. Carries the (empty) provenance + trace.
     return {
         "reply": (
@@ -442,6 +480,9 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     jarvis.set_companion_perception(build_companion_perceiver(provider, model, base_url))
     # And voice replies in the companion's language through the same model (Vision §40).
     jarvis.set_voice(build_renderer(provider, model, base_url))
+    # And reason provisional answers through the same model, so a novel question gets
+    # a hedged answer instead of a refusal when a provider is active (Vision §37).
+    jarvis.set_reasoner(build_reasoner(provider, model, base_url))
     # Persist on every switch so the choice (and model fixes) survive a restart; the key
     # line is only written when a key was provided, and is never read back into a reply.
     llm_config_store.persist(staged)
