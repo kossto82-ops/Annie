@@ -53,3 +53,14 @@ Avoid generic `Manager`, `Engine`, `AIService`, `Orchestrator`, or wrapper abstr
 ## D13 — Configuration over hard-coded providers/tunables
 
 When adding provider selection or runtime tuning, prefer injected/configured values over module-level constants.
+
+## D14 — Graphify is a dev-time tool, not Jarvis memory
+
+Graphify indexes source code into a local code graph for Claude Code navigation
+(`.mcp.json`, `docs/graphify.md`). It is not imported by Jarvis, not in
+`pyproject.toml`, and not a substitute for episodic/semantic/belief memory. Only
+the deterministic `graphify update` (AST, no LLM) path is used — consistent with
+D8. If Jarvis ever needs graph *retrieval* inside cognition, it goes behind a
+domain-owned `GraphRetriever` Protocol with Graphify as one swappable adapter
+(cf. D7/D10/D12) — never a direct dependency. Do not wire that interface into
+`src/` until a real consumer exists.

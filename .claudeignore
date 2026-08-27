@@ -1,0 +1,16 @@
+# Graphify code-graph artifacts — MUST stay out of Claude Code's context.
+# graph.json alone is ~2.6 MB (~660k tokens). Claude reaches this data
+# ONLY through the graphify MCP server (small, targeted query results),
+# never by reading these files directly.
+graphify-out/
+**/graphify-out/
+graph.json
+*.graphify_labels.json
+*.graphify_labels.json.sig
+.graphify_root
+
+# Python bytecode / caches (noise, never worth reading)
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/

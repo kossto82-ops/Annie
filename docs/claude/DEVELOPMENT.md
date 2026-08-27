@@ -7,8 +7,13 @@ Make changes with the smallest possible context and smallest coherent diff.
 ## Before changing code
 
 1. Read `docs/claude/AI_CONTEXT.md` only if project orientation is needed.
-2. Identify the target module.
-3. Search for its direct callers/tests with `rg`.
+2. Identify the target module. To *locate* it cheaply — "what depends on X?",
+   "where is Y used?", "what connects A to B?" — query the **graphify** MCP tools
+   (`get_node`, `shortest_path`, `god_nodes`, `query_graph`) first; they return
+   `file:line` pointers, not file dumps. See `docs/graphify.md`. If the graph is
+   stale, `graphify update .` (deterministic, ~8 s). Skip Graphify for a symbol
+   whose location you already know.
+3. Search for its direct callers/tests with `rg` (or `get_neighbors`).
 4. Read the target file and closest tests.
 5. Only expand into adjacent modules when the dependency requires it.
 

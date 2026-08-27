@@ -23,6 +23,9 @@ env/
 # Command-center persistent memory (JARVIS_HOME default) — local runtime state
 .jarvis/
 
+# Graphify code-graph artifacts (regenerated locally via `graphify update .`)
+graphify-out/
+
 # OS / editor
 .DS_Store
 Thumbs.db
