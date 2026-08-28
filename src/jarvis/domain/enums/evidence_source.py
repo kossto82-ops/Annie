@@ -20,3 +20,7 @@ class EvidenceSource(Enum):
     EXTERNAL_SOURCE = "external_source"
     ACTION_OUTCOME = "action_outcome"
     SYSTEM_OBSERVATION = "system_observation"
+    # A provisional answer reasoned by a language model (Vision §37, §38). The weakest
+    # source: it is a candidate, not an observation, so a real statement always outweighs
+    # it -- until the companion confirms it, which is ordinary (strong) evidence.
+    INFERENCE = "inference"

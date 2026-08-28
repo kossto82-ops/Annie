@@ -100,11 +100,15 @@ class TestReasoningWiring:
         assert episode.inference is not None
         assert episode.inference.answer == "Use an input and filter the list."
 
-    def test_reasoning_does_not_touch_belief_confidence(self) -> None:
+    def test_a_reasoned_answer_is_remembered_as_weak_evidence(self) -> None:
+        # Inc G: the inference is remembered as the weakest evidence, so confidence is
+        # low but positive -- held faintly ("the model says X, unconfirmed"), well below
+        # the grounded threshold until the companion confirms it.
         jarvis = _reasoning_jarvis()
         episode = jarvis.perceive("how do I build an HTML filter?", trigger="q")
         assert episode.working_belief is not None
-        assert episode.working_belief.confidence.value == 0.0
+        confidence = episode.working_belief.confidence.value
+        assert 0.0 < confidence < 0.5
 
     def test_a_strong_memory_suppresses_reasoning(self) -> None:
         jarvis = _reasoning_jarvis("SHOULD NOT APPEAR")

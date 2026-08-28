@@ -29,6 +29,9 @@ _DEFAULT_FACTORS: Mapping[EvidenceSource, float] = {
     EvidenceSource.SYSTEM_OBSERVATION: 0.6,
     EvidenceSource.EXTERNAL_SOURCE: 0.5,
     EvidenceSource.DIRECT_OBSERVATION: 0.5,
+    # A reasoned guess is the weakest evidence: it holds a belief only faintly until
+    # something real (a companion confirmation) is added (Vision §37, §38).
+    EvidenceSource.INFERENCE: 0.2,
 }
 _UNKNOWN_FACTOR = 0.5
 

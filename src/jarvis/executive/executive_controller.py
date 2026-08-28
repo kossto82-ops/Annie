@@ -87,6 +87,19 @@ def _looks_like_self_question(text: str) -> bool:
     is_question = text.strip().endswith("?") or bool(tokens & _QUESTION_CUES)
     return is_question and bool(tokens & _SELF_REFERENCE)
 
+
+def remembered_inference(belief: Belief) -> Evidence | None:
+    """The provisional answer Jarvis already reasoned for this belief, if any.
+
+    The most recent supporting inference evidence -- what to surface (still framed as
+    provisional) instead of re-asking the model, until the companion confirms it and it
+    becomes an ordinary, grounded belief.
+    """
+    for piece in reversed(belief.evidence):
+        if piece.source is EvidenceSource.INFERENCE and piece.supports:
+            return piece
+    return None
+
 # When Jarvis holds a self-belief this confident that it concludes without enough
 # evidence, it changes how it handles an ungrounded question (Vision §20 learning).
 # This is not a fixed mode: it appears only while the self-belief is confident and
@@ -373,21 +386,41 @@ class ExecutiveController:
     def _reason_into(self, episode: CognitiveEpisode, belief: Belief) -> None:
         """Reason a provisional answer when belief and memory can't give one (§37).
 
-        Only when the belief is ungrounded *and* no strong memory already answers the
-        trigger -- so reasoning is a genuine fallback, not a redundant LLM call over a
-        question Jarvis already remembers. The result is provisional response context
-        (an :class:`Inference`), never evidence or belief confidence (Vision §38, D6).
+        Only when the belief has no *real* support (an inference doesn't count) and no
+        strong memory already answers the trigger, and Jarvis has not already reasoned
+        this before -- so a remembered answer is recalled, never re-asked of the model
+        (Vision §37). The reasoned answer is then remembered as the weakest, clearly
+        sourced evidence, so it persists and can mature when the companion confirms it
+        -- confidence stays derived and low (Vision §38, D3, D6).
         """
         if self._reasoner is None:
             return
-        if belief.confidence.value >= GROUNDED_CONFIDENCE_THRESHOLD:
+        if self._has_real_support(belief):
             return
         recalled = episode.recalled_memories
         if recalled and recalled[0].relevance >= STRONG_RECALL_RELEVANCE:
             return
+        if remembered_inference(belief) is not None:
+            return  # already reasoned this — the answer is remembered, don't re-ask
         inference = self._reasoner.infer(episode.trigger, recalled)
-        if inference is not None:
-            episode.infer(inference)
+        if inference is None:
+            return
+        episode.infer(inference)
+        episode.observe(
+            Evidence(
+                content=inference.answer,
+                source=EvidenceSource.INFERENCE,
+                weight=Confidence(0.6),
+                context="reasoned via the language model",
+            )
+        )
+
+    @staticmethod
+    def _has_real_support(belief: Belief) -> bool:
+        """True when the belief rests on any non-inference evidence (Vision §37)."""
+        return any(
+            piece.source is not EvidenceSource.INFERENCE for piece in belief.evidence
+        )
 
     def _companion_traits(self) -> list[RecalledMemory]:
         """What Jarvis knows about the companion, as recalled memories (most confident
@@ -411,9 +444,14 @@ class ExecutiveController:
 
     @staticmethod
     def _is_about_current(memory: RecalledMemory, trigger: str) -> bool:
-        """True when a recalled item just restates the episode's own trigger."""
+        """True when a recalled item just restates the episode's own trigger.
+
+        Covers the just-formed belief AND a prior identical-question episode -- echoing
+        either back as "memory" would be circular (e.g. re-asking the same question would
+        recall itself instead of the answer Jarvis reasoned for it).
+        """
         return (
-            memory.kind in (MemoryKind.WORLD_BELIEF, MemoryKind.GOAL)
+            memory.kind in (MemoryKind.WORLD_BELIEF, MemoryKind.GOAL, MemoryKind.EPISODE)
             and memory.content.strip().lower() == trigger.strip().lower()
         )
 

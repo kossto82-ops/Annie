@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.events.belief_events import (
     BeliefStrengthened,
     BeliefWeakened,
@@ -32,10 +34,10 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.evidence import Evidence
-from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.executive.executive_controller import (
     STRONG_RECALL_RELEVANCE,
+    remembered_inference,
     subject_of,
     working_statement,
 )
@@ -54,6 +56,18 @@ from jarvis.infrastructure.perceiver_factory import (
 from jarvis.jarvis import Jarvis
 
 _OFFLINE_PERCEIVERS = frozenset({"", "keyword", "scripted", "stub"})
+
+# A short reply that just affirms or denies is read as confirming (or correcting) the
+# last thing Jarvis said, so a provisional reasoned answer can mature (Vision §18, §20).
+_AFFIRM = frozenset(
+    {"sí", "si", "exacto", "correcto", "cierto", "eso", "vale", "claro", "perfecto",
+     "yes", "right", "correct", "exactly", "true", "ok", "okay", "yep", "yeah"}
+)
+_DENY = frozenset(
+    {"no", "incorrecto", "falso", "nope", "wrong", "incorrect", "false", "nah"}
+)
+_MAX_CONFIRMATION_WORDS = 5
+_WORD = re.compile(r"\w+")
 
 _CONSOLE_HTML = Path(__file__).with_name("console.html")
 
@@ -168,33 +182,67 @@ def _memory_reply(
 
 
 def _inference_reply(
-    inference: Inference,
+    answer: str,
     recalled: tuple[RecalledMemory, ...],
     provenance: Reply | None,
     trace: list[Reply],
 ) -> Reply:
     """Answer by reasoning when belief and memory have nothing (Vision §37).
 
-    A distinct stance, and honestly framed as provisional: Jarvis says it does not
-    recall settling this and is reasoning from understanding, so the reader never
-    mistakes an inference for a remembered fact or a grounded conclusion (Vision §38).
-    Any loosely-related memory is mentioned, not presented as the answer.
+    A distinct stance, honestly framed as provisional: Jarvis says it does not recall
+    settling this and is reasoning from understanding, so the reader never mistakes an
+    inference for a remembered fact or a grounded conclusion (Vision §38). It invites a
+    yes/no so the answer can be confirmed and remembered (the learning loop, Vision §20).
     """
     reply = (
         "I don't recall us settling this, but reasoning from what I understand: "
-        f"{inference.answer}"
+        f"{answer} — is that right? Tell me and I'll remember it."
     )
     result: Reply = {
         "reply": reply,
         "speak": True,
         "stance": "inference",
-        "inference": {"answer": inference.answer},
+        "inference": {"answer": answer},
         "provenance": provenance,
         "trace": trace,
     }
     if recalled:
         result["recalled"] = [_recalled_json(memory) for memory in recalled]
     return result
+
+
+def _confirmation(text: str) -> bool | None:
+    """Read a short reply as confirming (True), correcting (False), or neither (None).
+
+    Only a brief affirmation/denial counts, so an ordinary sentence that merely contains
+    "no" is not mistaken for a correction.
+    """
+    tokens = _WORD.findall(text.lower())
+    if not tokens or len(tokens) > _MAX_CONFIRMATION_WORDS:
+        return None
+    if any(token in _DENY for token in tokens):
+        return False
+    if any(token in _AFFIRM for token in tokens):
+        return True
+    return None
+
+
+def _confirmation_reply(affirm: bool, belief: Belief) -> Reply:
+    """Acknowledge that the companion confirmed or corrected the last reasoned answer."""
+    confidence = belief.confidence.value
+    reply = (
+        "Thanks — I'll take that as confirmed and remember it. I hold it more firmly now."
+        if affirm
+        else "Understood — I'll correct that. I hold it less firmly now."
+    )
+    return {
+        "reply": reply,
+        "speak": True,
+        "stance": "confirmation",
+        "confidence": confidence,
+        "provenance": _provenance(belief),
+        "trace": [],
+    }
 
 
 def _trace_steps(events: tuple[CognitiveEvent, ...]) -> list[Reply]:
@@ -281,14 +329,35 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
     final voicing (Vision §5, §8). Shared by the plain and streaming paths; may raise on
     a provider failure (the caller decides how to surface it).
     """
+    # A short "yes"/"no" confirms or corrects the last thing Jarvis reasoned, maturing a
+    # provisional answer into a grounded belief (the learning loop, Vision §20) — handled
+    # before a fresh episode, so the confirmation lands on the previous answer.
+    verdict = _confirmation(text)
+    history = jarvis.episodes.history()
+    if verdict is not None and history:
+        belief = jarvis.confirm(history[-1].trigger, affirm=verdict)
+        if belief is not None:
+            return _confirmation_reply(verdict, belief)
+
     # Both channels touch the language model when an LLM perceiver is active.
     episode = jarvis.perceive(text, trigger=text)
     learned = jarvis.note_companion(text)  # the relational channel (Vision §5)
     trace = _trace_steps(jarvis.trace_of(episode))
     belief = episode.working_belief
     explanation = belief.explain() if belief is not None else None
-    grounded = explanation is not None and bool(
-        explanation.supporting or explanation.contradicting
+    # "Grounded" means real evidence, not a reasoned guess: an inference-only belief is
+    # still answered as a provisional inference until the companion confirms it.
+    grounded = explanation is not None and any(
+        piece.source is not EvidenceSource.INFERENCE
+        for piece in (*explanation.supporting, *explanation.contradicting)
+    )
+    # The provisional answer to surface: freshly reasoned this turn, or the one Jarvis
+    # already reasoned before and remembered (so a repeat isn't re-asked of the model).
+    remembered = remembered_inference(belief) if belief is not None else None
+    inferred = (
+        episode.inference.answer
+        if episode.inference is not None
+        else (remembered.content if remembered is not None else None)
     )
     provenance = _provenance(belief) if belief is not None else None
 
@@ -307,6 +376,7 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
         return {
             "reply": explanation.narrate(subject_of(explanation.statement)),
             "speak": True,
+            "stance": "belief",
             "confidence": belief.confidence.value if belief is not None else 0.0,
             "provenance": provenance,
             "trace": trace,
@@ -316,10 +386,10 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
     if strong_memory:
         # A confident memory bears on this: answer from what Jarvis remembers.
         return _memory_reply(recalled, provenance, trace)
-    if episode.inference is not None:
-        # No grounded belief and no strong memory, but Jarvis can reason: give a
-        # provisional answer instead of a blank refusal (Vision §37).
-        return _inference_reply(episode.inference, recalled, provenance, trace)
+    if inferred is not None:
+        # No grounded belief and no strong memory, but Jarvis has a reasoned answer
+        # (fresh or remembered): give it provisionally instead of a blank refusal (§37).
+        return _inference_reply(inferred, recalled, provenance, trace)
     if recalled:
         # Only a loose memory and nothing to reason with: offer it, honestly partial.
         return _memory_reply(recalled, provenance, trace)

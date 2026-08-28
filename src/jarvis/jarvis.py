@@ -743,6 +743,33 @@ class Jarvis:
         )
         return episode.working_belief
 
+    def confirm(self, trigger: str, affirm: bool = True) -> Belief | None:
+        """Take the companion's confirmation (or correction) of a reasoned answer as
+        evidence (Vision §18, §20) -- the learning loop's second half.
+
+        A provisional answer Jarvis reasoned (weak `INFERENCE` evidence) matures when the
+        companion weighs in: affirming adds strong `USER_STATEMENT` support so it becomes
+        a grounded belief; correcting adds contradiction so it weakens. Confidence stays
+        derived, never set. Returns the updated belief, or None if Jarvis holds no view on
+        ``trigger`` to confirm.
+        """
+        if self.beliefs.get_by_statement(working_statement(trigger)) is None:
+            return None
+        verb = "confirmed" if affirm else "corrected"
+        episode = self.think(
+            trigger,
+            evidence=[
+                Evidence(
+                    content=f"the companion {verb} this",
+                    source=EvidenceSource.USER_STATEMENT,
+                    weight=Confidence(1.0),
+                    supports=affirm,
+                    context="companion confirmation of a reasoned answer",
+                )
+            ],
+        )
+        return episode.working_belief
+
     def connections(self) -> tuple[Connection, ...]:
         """Beliefs that rest on the same evidence, linked (Vision §4, §31) — the
         first step beyond isolated memory, strongest connection first.
