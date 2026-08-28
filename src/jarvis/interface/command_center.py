@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import cast
 
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.events.belief_events import (
     BeliefStrengthened,
@@ -466,6 +467,15 @@ def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
     }
 
 
+# How each action stance reads in the spoken reply (the raw enum value still goes
+# to the cycle panel; prose gets a natural phrasing).
+_ACTION_PHRASE: dict[ActionStance, str] = {
+    ActionStance.SUGGEST: "And I'd suggest an action",
+    ActionStance.ASK_FIRST: "And I'd ask before taking an action",
+    ActionStance.WITHHOLD: "And I'd hold off on an action",
+}
+
+
 def _reflect(jarvis: Jarvis, _payload: Reply) -> Reply:
     """Run the whole reflective cycle and report what it produced (Vision §31)."""
     cycle = jarvis.reflect_cycle()
@@ -483,14 +493,19 @@ def _reflect(jarvis: Jarvis, _payload: Reply) -> Reply:
         parts.append(f"I wonder if {cycle.hypothesis}.")
     if cycle.learned is not None:
         parts.append(f"So I've come to believe: {cycle.learned}.")
+    if cycle.action is not None:
+        parts.append(f"{_ACTION_PHRASE[cycle.action.stance]} to check it still holds.")
     return {
         "reply": " ".join(parts),
         "speak": True,
         "cycle": {
+            "connections": len(cycle.connections),
             "observation": cycle.reflection.observation,
             "hypothesis": cycle.hypothesis,
             "learned": cycle.learned,
             "produced_insight": cycle.produced_insight,
+            "action": cycle.action.stance.value if cycle.action is not None else None,
+            "reached_action": cycle.reached_action,
         },
     }
 

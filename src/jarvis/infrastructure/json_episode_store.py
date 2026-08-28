@@ -18,6 +18,7 @@ from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
+from jarvis.infrastructure.atomic_write import atomic_write_text
 
 
 def _serialise_record(record: EpisodeRecord) -> dict[str, Any]:
@@ -76,6 +77,5 @@ class JsonEpisodeStore:
         self._records = [_deserialise_record(entry) for entry in raw]
 
     def _flush(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = [_serialise_record(r) for r in self._records]
-        self._path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        atomic_write_text(self._path, json.dumps(payload, indent=2))

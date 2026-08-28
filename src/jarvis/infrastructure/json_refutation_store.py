@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from jarvis.infrastructure.atomic_write import atomic_write_text
+
 
 class JsonRefutationStore:
     """Refuted (observation, belief) pairs persisted to a JSON file."""
@@ -34,6 +36,5 @@ class JsonRefutationStore:
         self._pairs = {(entry[0], entry[1]) for entry in raw}
 
     def _flush(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = [[observation, belief] for observation, belief in sorted(self._pairs)]
-        self._path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        atomic_write_text(self._path, json.dumps(payload, indent=2))

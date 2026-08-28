@@ -905,25 +905,31 @@ class Jarvis:
 
     def reflect_cycle(self) -> ReflectiveCycle:
         """Run the whole reflective cycle once and report what it produced (Vision
-        §31): Connect → Reflect → Hypothesise → Challenge → Learn, end to end.
+        §31): Connect → Reflect → Hypothesise → Challenge → Learn → Act, end to end.
 
         One honest action for "think about what I know" — it *calls* the existing
         stage methods in order (it does not re-implement them), and returns a
         summary of each stage's result, empty where nothing was load-bearing. Note
         it is not purely a read-model: the Learn stage adopts a surviving insight as
-        a belief. This is the seam a future autonomous trigger will call.
+        a belief. Act runs *after* Learn so the just-learned insight is the one it
+        acts on, and it only *recommends* (autonomy is earned, §28). This is the seam
+        a future autonomous trigger will call.
         """
+        connections = self.connections()
         reflections = self.reflect()
         reflection = reflections[0] if reflections else None
         hypotheses = self.hypothesise()
         leading = hypotheses.leading() if hypotheses is not None else None
         challenge = self.challenge()
         learned = self.learn_from_reflection()
+        action = self.act_on_insight()
         return ReflectiveCycle(
+            connections=connections,
             reflection=reflection,
             hypothesis=leading.statement if leading is not None else None,
             challenge=challenge,
             learned=learned.statement if learned is not None else None,
+            action=action,
         )
 
     def _unmined_load_bearing(self) -> Reflection | None:

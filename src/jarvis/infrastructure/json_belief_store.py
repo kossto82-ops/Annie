@@ -21,6 +21,7 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.infrastructure.atomic_write import atomic_write_text
 
 
 def _serialise_evidence(evidence: Evidence) -> dict[str, Any]:
@@ -92,6 +93,5 @@ class JsonBeliefStore:
             self._by_statement[belief.statement] = belief
 
     def _flush(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = [_serialise_belief(b) for b in self._by_statement.values()]
-        self._path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        atomic_write_text(self._path, json.dumps(payload, indent=2))

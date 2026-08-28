@@ -212,13 +212,28 @@ class TestReflectCycle:
     def test_one_call_runs_every_stage(self) -> None:
         jarvis = self._with_hypothesis()
         result = jarvis.reflect_cycle()
+        # Connect: beliefs sharing the same evidence are linked.
+        assert len(result.connections) > 0
         assert result.reflection is not None
         assert result.hypothesis is not None and "common cause" in result.hypothesis
         assert result.challenge is not None
         assert result.learned is not None and "common cause" in result.learned
         assert result.produced_insight is True
+        # Act: the just-learned insight carries all the way to a recommended stance.
+        assert result.action is not None
+        assert result.reached_action is True
         # The learned belief is now part of the web.
         assert any("common cause" in b.statement for b in jarvis.beliefs.all_beliefs())
+
+    def test_an_empty_cycle_reaches_no_action(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("a", evidence=[_ev("observation A")])
+        jarvis.think("b", evidence=[_ev("observation B")])
+        result = jarvis.reflect_cycle()
+        # No shared evidence, nothing load-bearing: Connect and Act both stay empty.
+        assert result.connections == ()
+        assert result.action is None
+        assert result.reached_action is False
 
     def test_an_isolated_web_yields_an_empty_cycle(self) -> None:
         jarvis = Jarvis()
