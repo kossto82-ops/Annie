@@ -9,7 +9,11 @@ from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
-from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
+from jarvis.domain.events.episode_events import (
+    EpisodeCompleted,
+    EpisodeReflected,
+    EpisodeStarted,
+)
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
@@ -35,6 +39,12 @@ def _ev(
     if at is not None:
         kwargs["observed_at"] = at
     return Evidence(**kwargs)  # type: ignore[arg-type]
+
+
+def _only_reflection(trace: tuple[CognitiveEvent, ...]) -> EpisodeReflected:
+    reflections = [e for e in trace if isinstance(e, EpisodeReflected)]
+    assert len(reflections) == 1
+    return reflections[0]
 
 
 class TestThink:
@@ -162,12 +172,16 @@ class TestEvidenceRequest:
 
 
 class TestEventFlow:
-    def test_emits_started_then_completed_when_ungrounded(self) -> None:
+    def test_emits_started_reflected_then_completed_when_ungrounded(self) -> None:
         jarvis = Jarvis()
         events: list[CognitiveEvent] = []
         jarvis.nervous_system.subscribe(CognitiveEvent, events.append)  # type: ignore[arg-type]
         episode = jarvis.think("hello")
-        assert [type(e) for e in events] == [EpisodeStarted, EpisodeCompleted]
+        assert [type(e) for e in events] == [
+            EpisodeStarted,
+            EpisodeReflected,
+            EpisodeCompleted,
+        ]
         assert all(e.episode_id == episode.id for e in events)
 
     def test_belief_events_flow_when_evidence_is_provided(self) -> None:
@@ -179,6 +193,26 @@ class TestEventFlow:
         assert kinds[0] is EpisodeStarted
         assert EvidenceAdded in kinds
         assert kinds[-1] is EpisodeCompleted
+
+    def test_reflection_notes_a_grounded_conclusion_as_uncontested(self) -> None:
+        jarvis = Jarvis()
+        # Three supporting pieces clear the grounded-confidence threshold (0.5).
+        episode = jarvis.think(
+            "is the plan solid?", evidence=[_ev(0.9), _ev(0.9), _ev(0.9)]
+        )
+        reflected = _only_reflection(jarvis.trace_of(episode))
+        assert reflected.contested is False
+        assert "well grounded" in reflected.note
+
+    def test_reflection_notes_a_contradicted_conclusion_as_contested(self) -> None:
+        jarvis = Jarvis()
+        episode = jarvis.think(
+            "is the plan solid?",
+            evidence=[_ev(0.9), _ev(0.9, supports=False, content="but it slipped")],
+        )
+        reflected = _only_reflection(jarvis.trace_of(episode))
+        assert reflected.contested is True
+        assert "contradicted" in reflected.note
 
     def test_grounded_episode_can_explain_its_conclusion(self) -> None:
         episode = Jarvis().think(

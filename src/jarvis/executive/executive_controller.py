@@ -215,7 +215,7 @@ class ExecutiveController:
 
         episode.begin_reflecting()
         if episode.attention is Attention.FULL:
-            self._reflect(belief)
+            self._reflect(episode, belief)
         self._flush(episode)
 
         episode.begin_deciding()
@@ -455,10 +455,24 @@ class ExecutiveController:
             and memory.content.strip().lower() == trigger.strip().lower()
         )
 
-    def _reflect(self, belief: Belief) -> None:
-        # Reflection has no observable output yet; a later increment turns this
-        # into a genuine review of the reasoning behind ``belief``.
-        _ = belief
+    def _reflect(self, episode: CognitiveEpisode, belief: Belief) -> None:
+        """Review the reasoning behind ``belief`` and record what the review noticed.
+
+        A genuine, honest Reflect stage (Vision §19): it looks at the belief the
+        episode just reasoned and notes whether it is contested (rests on
+        partly-contradicted evidence), well grounded, or thinly grounded. It only
+        *notices* -- it changes neither the belief nor the decision -- but the note
+        now appears in the episode's provenance trace instead of nothing.
+        """
+        explanation = belief.explain()
+        contested = bool(explanation.contradicting)
+        if contested:
+            note = "the conclusion rests on evidence that is partly contradicted"
+        elif belief.confidence.value >= GROUNDED_CONFIDENCE_THRESHOLD:
+            note = "the conclusion is well grounded in its evidence"
+        else:
+            note = "the conclusion is thinly grounded and may need more evidence"
+        episode.record_reflection(note, contested=contested)
 
     def _decide(self, trigger: str, belief: Belief, attention: Attention) -> str:
         confidence = belief.confidence.value

@@ -11,7 +11,12 @@ from jarvis.domain.aggregates.cognitive_episode import (
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.events.belief_events import BeliefStrengthened
-from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
+from jarvis.domain.events.episode_events import (
+    EpisodeCompleted,
+    EpisodeFailed,
+    EpisodeReflected,
+    EpisodeStarted,
+)
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -104,6 +109,42 @@ class TestFailure:
         episode.complete("done")
         with pytest.raises(InvalidStateTransition):
             episode.fail("too late")
+
+    def test_records_episode_failed_with_reason(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.pull_events()  # discard EpisodeStarted
+        episode.fail("boom")
+        events = episode.pull_events()
+        assert len(events) == 1
+        failed = events[0]
+        assert isinstance(failed, EpisodeFailed)
+        assert failed.reason == "boom"
+        assert failed.correlation_id == episode.id
+
+
+class TestReflection:
+    def test_record_reflection_emits_an_episode_reflected_event(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.begin_reflecting()
+        episode.pull_events()  # discard EpisodeStarted
+        episode.record_reflection("well grounded", contested=False)
+        events = episode.pull_events()
+        assert len(events) == 1
+        reflected = events[0]
+        assert isinstance(reflected, EpisodeReflected)
+        assert reflected.note == "well grounded"
+        assert reflected.contested is False
+        assert reflected.correlation_id == episode.id
+
+    def test_reflection_changes_neither_state_nor_result(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.begin_reflecting()
+        episode.record_reflection("noticed something", contested=True)
+        assert episode.state == EpisodeState.REFLECTING
+        assert episode.result is None
 
 
 class TestWorkingBelief:

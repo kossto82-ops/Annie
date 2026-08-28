@@ -21,7 +21,12 @@ from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
-from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
+from jarvis.domain.events.episode_events import (
+    EpisodeCompleted,
+    EpisodeFailed,
+    EpisodeReflected,
+    EpisodeStarted,
+)
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.domain.value_objects.goal import Goal
@@ -196,7 +201,26 @@ class CognitiveEpisode:
             )
         self.state = EpisodeState.FAILED
         self.result = None
-        _ = reason  # reason is retained by the caller/log; no failure event yet
+        self._record(
+            EpisodeFailed(episode_id=self.id, correlation_id=self.id, reason=reason)
+        )
+
+    def record_reflection(self, note: str, *, contested: bool) -> None:
+        """Record the episode's review of its own reasoning (Vision §19).
+
+        Reflection *notices*, it does not conclude: this appends an
+        :class:`EpisodeReflected` event to the episode's trace and changes neither
+        the working belief nor the decision. ``note`` is what the review observed;
+        ``contested`` marks that the conclusion rests on partly-contradicted evidence.
+        """
+        self._record(
+            EpisodeReflected(
+                episode_id=self.id,
+                correlation_id=self.id,
+                note=note,
+                contested=contested,
+            )
+        )
 
     # -- events --------------------------------------------------------------
 
