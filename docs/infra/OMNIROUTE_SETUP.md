@@ -179,8 +179,10 @@ HTTP 404 unless done through the authenticated dashboard session). So provider c
 - **Phase 6 (done):** Claude Code routes through OmniRoute via a **reversible launcher**
   (`docs/infra/claude-omniroute.ps1`) — env-only, global config/OAuth untouched. Verified with a
   non-interactive one-shot returning content through OmniRoute → Grok. See §10.
-- **Phase 4c:** add more providers (NVIDIA NIM, etc.) — each needs a user-created key.
-- **Phase 5:** configure a conservative routing strategy (cost/priority + fallback).
+- **Phase 4c (done):** NVIDIA added; connected lineup (all free): cerebras, deepseek, grok,
+  gemini, github-models, openai, nvidia — with 3-layer fallback across them.
+- **Phase 5 (done):** routing uses OmniRoute's built-in `auto/*` combos (no custom config needed;
+  custom combos require dashboard auth). See §11.
 - **Phase 7:** point Jarvis at OmniRoute — **config only**, no refactor:
   ```
   JARVIS_LLM_PROVIDER = openai-compatible
@@ -229,6 +231,37 @@ session and use Claude Code normally.
   launcher discovers the newest version automatically).
 - A leftover `[claude-code:unrecognized_model] {"model":"auto"}` stderr line is harmless; to remove
   it fully, map `auto` in Claude Code's `modelOverrides` setting.
+
+---
+
+---
+
+## 11. Routing strategy (Phase 5)
+
+OmniRoute routing is expressed as **combos** (a strategy + a provider set). It always runs a
+3-layer fallback (circuit breaker → cooldown → model lockout) across connected providers.
+
+**What we use — built-in `auto/*` combos** (no configuration needed, verified routing at $0):
+
+| Request model id | Meaning | Observed route |
+|---|---|---|
+| `auto` | balanced 15-factor scorer (default) | picks a healthy provider |
+| `auto/best-coding` | coding-optimized | e.g. openai/gpt-4o |
+| `auto/best-reasoning` | reasoning-optimized | reasoning-tier model |
+| `auto/best-fast` | cheap/fast | e.g. openai/gpt-4o-mini |
+
+These already optimize cost + quality + latency + availability with fallback, which is exactly the
+conservative goal. Consumers select by model id:
+- **Claude Code launcher** (`claude-omniroute.ps1`): main = `auto/best-coding`, small/fast = `auto/best-fast`.
+- **Jarvis**: `JARVIS_LLM_MODEL=auto` (balanced) — or `auto/best-reasoning` for heavier cognition.
+
+**Custom combos (optional, dashboard-only).** Creating an explicit combo — e.g. `cost-optimized`
+(cheapest-first) or `priority` with a fixed free-first order — is a **dashboard** action; the CLI
+`combo create` returns HTTP 401 (management writes need the authenticated dashboard session). Do it
+in the dashboard's Routing/Combos section only if you need ordering beyond what `auto/*` gives.
+
+**Preview without spending tokens:** `omniroute simulate "<prompt>" --combo <name> --explain`
+(dry-run; shows the selected provider + fallback tree). Requires a configured combo.
 
 ---
 

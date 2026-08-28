@@ -39,10 +39,11 @@ $env:ANTHROPIC_BASE_URL = $OmniBase
 # needs a token set so it does not fall back to the Anthropic OAuth flow.
 $env:ANTHROPIC_AUTH_TOKEN = "sk-omniroute-local"
 # Claude Code sends bare claude-* model ids, which OmniRoute reports as "ambiguous".
-# Force the auto router instead (OmniRoute picks a connected provider + does fallback).
-# Alternative combos: auto/best-coding (main), auto/best-fast (small).
-$env:ANTHROPIC_MODEL = "auto"
-$env:ANTHROPIC_SMALL_FAST_MODEL = "auto"
+# Use OmniRoute's built-in task combos instead: best-coding for the main model, best-fast
+# for the background/small model. Both score cost+quality+latency+availability and fall
+# back across connected providers. Plain "auto" also works as a balanced default.
+$env:ANTHROPIC_MODEL = "auto/best-coding"
+$env:ANTHROPIC_SMALL_FAST_MODEL = "auto/best-fast"
 # "auto" is not a model id Claude Code knows, so it warns about the assumed context
 # window. This silences that cosmetic warning (the router still works either way).
 $env:CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "1"
