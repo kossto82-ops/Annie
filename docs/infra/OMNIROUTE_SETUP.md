@@ -176,10 +176,11 @@ HTTP 404 unless done through the authenticated dashboard session). So provider c
   verified with a fresh non-cached round-trip. Runtime config used:
   `JARVIS_LLM_PROVIDER=openai-compatible`, `JARVIS_LLM_BASE_URL=http://127.0.0.1:20128/v1`,
   `JARVIS_LLM_MODEL=auto` (embeddings still direct to Ollama).
+- **Phase 6 (done):** Claude Code routes through OmniRoute via a **reversible launcher**
+  (`docs/infra/claude-omniroute.ps1`) — env-only, global config/OAuth untouched. Verified with a
+  non-interactive one-shot returning content through OmniRoute → Grok. See §10.
 - **Phase 4c:** add more providers (NVIDIA NIM, etc.) — each needs a user-created key.
 - **Phase 5:** configure a conservative routing strategy (cost/priority + fallback).
-- **Phase 6:** point Claude Code at OmniRoute (`ANTHROPIC_BASE_URL=http://127.0.0.1:20128/v1`) —
-  **back up the current Claude Code config first**.
 - **Phase 7:** point Jarvis at OmniRoute — **config only**, no refactor:
   ```
   JARVIS_LLM_PROVIDER = openai-compatible
@@ -192,6 +193,42 @@ HTTP 404 unless done through the authenticated dashboard session). So provider c
 - **Phase 9:** real end-to-end test `Jarvis → LanguageModel → OmniRoute → provider → response`.
 - **DeerFlow:** out of scope for now. Would fit later as a multi-step agent/research layer *above*
   Jarvis, not inside the model infrastructure.
+
+---
+
+---
+
+## 10. Claude Code through OmniRoute (Phase 6)
+
+Claude Code (the CLI engine, not the desktop UI) reads `ANTHROPIC_BASE_URL` + an auth token from
+the environment, and OmniRoute exposes an **Anthropic-compatible** surface at `/v1/messages` (it
+translates to whatever provider is connected). So Claude Code can be pointed at OmniRoute **without
+touching global config or the OAuth login**.
+
+**Reversible launcher:** `docs/infra/claude-omniroute.ps1` (also kept at
+`~/.claude/omniroute/claude-omniroute.ps1`). It sets env vars **only for the process it starts**:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File docs/infra/claude-omniroute.ps1
+```
+
+What it sets (per-process, not persisted):
+- `ANTHROPIC_BASE_URL = http://127.0.0.1:20128`
+- `ANTHROPIC_AUTH_TOKEN = sk-omniroute-local` (dummy; OmniRoute accepts localhost without a real key)
+- `ANTHROPIC_MODEL = auto`, `ANTHROPIC_SMALL_FAST_MODEL = auto` (bare `claude-*` ids are "ambiguous"
+  to OmniRoute; `auto` lets it route + fall back across connected providers)
+- `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = 1` (silences the cosmetic "auto not
+  recognized" context-window warning)
+
+**Safety:** the current `settings.json` was backed up to `~/.claude/settings.json.bak-phase6`
+before any Phase-6 work. The launcher modifies **no** existing file. To stop routing, close that
+session and use Claude Code normally.
+
+**Findings:**
+- Claude Code binary lives at `~/AppData/Roaming/Claude/claude-code/<version>/claude.exe` (the
+  launcher discovers the newest version automatically).
+- A leftover `[claude-code:unrecognized_model] {"model":"auto"}` stderr line is harmless; to remove
+  it fully, map `auto` in Claude Code's `modelOverrides` setting.
 
 ---
 
