@@ -13,7 +13,24 @@ for how a decision was reached -- not an exposure of hidden chain-of-thought.
 
 from __future__ import annotations
 
+from typing import Protocol, runtime_checkable
+
 from jarvis.domain.events.domain_event import CognitiveEvent, DomainEvent
+
+
+@runtime_checkable
+class EpisodeTraceSink(Protocol):
+    """What Jarvis needs of a trace: record events, read them back by correlation.
+
+    The in-memory :class:`EpisodeTrace` and a durable JSON-backed trace both satisfy
+    this, so persistence is swapped in the same way as the repositories (Vision §21).
+    """
+
+    def handle(self, event: DomainEvent) -> None: ...
+
+    def for_correlation(self, correlation_id: str) -> tuple[CognitiveEvent, ...]: ...
+
+    def all_events(self) -> tuple[CognitiveEvent, ...]: ...
 
 
 class EpisodeTrace:

@@ -61,6 +61,7 @@ from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.in_memory_refutation_store import InMemoryRefutationStore
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
+from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
@@ -68,7 +69,7 @@ from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRe
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.text_embedder import TextEmbedder
 from jarvis.nervous_system.nervous_system import NervousSystem
-from jarvis.observability.episode_trace import EpisodeTrace
+from jarvis.observability.episode_trace import EpisodeTrace, EpisodeTraceSink
 
 # Once Jarvis has turned an unreached goal over this many times without its
 # reachability improving, it stops wondering about it *for now* (Vision §16, §28):
@@ -104,6 +105,7 @@ class Jarvis:
         energy_budget: int | None = None,
         enable_recall: bool = False,
         reasoner: Reasoner | None = None,
+        trace: EpisodeTraceSink | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -142,7 +144,9 @@ class Jarvis:
         # behaviour is identical to before. Distinct from the cumulative tally above.
         self._energy_budget = energy_budget
         self._energy_available = energy_budget if energy_budget is not None else 0
-        self._trace = EpisodeTrace()
+        # Decision provenance (Vision §26). In-memory by default; a durable JSON-backed
+        # sink is injected by `persistent()` so the trace survives a restart.
+        self._trace: EpisodeTraceSink = trace or EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
         # Optional long-term-memory recall (Vision §3): when enabled, a deterministic
         # lexical retriever over Jarvis's own stores lets an episode answer from what
@@ -262,9 +266,9 @@ class Jarvis:
 
         Wires every store -- beliefs, episodes, companion model, action learning,
         reversibility, goal reachability, sub-goal links and reflective-cycle
-        refutations -- to files under ``directory``, so a single call gives full
-        continuity across restarts (Vision §3, §21). Nothing new is persisted; this
-        composes the JSON stores.
+        refutations -- plus the decision-provenance trace to files under
+        ``directory``, so a single call gives full continuity across restarts
+        (Vision §3, §21, §26). It composes the JSON stores and the JSONL trace log.
         """
         base = Path(directory)
         return cls(
@@ -276,6 +280,7 @@ class Jarvis:
             goals_store=JsonBeliefStore(base / "goals.json"),
             subgoals_store=JsonBeliefStore(base / "subgoals.json"),
             refutations_store=JsonRefutationStore(base / "refutations.json"),
+            trace=JsonEpisodeTrace(base / "trace.jsonl"),
         )
 
     def think(
