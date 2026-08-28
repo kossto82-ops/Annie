@@ -12,7 +12,8 @@ so the voice can never swallow or distort what Jarvis actually concluded.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import cast
 
 from jarvis.infrastructure.language_model import LanguageModel
 
@@ -55,9 +56,10 @@ class LlmResponseRenderer:
         if not callable(streamer):
             yield self.phrase(reply, like)
             return
+        stream_fn = cast("Callable[[str], Iterator[str]]", streamer)
         produced = False
         try:
-            for piece in streamer(self._prompt(text, like)):
+            for piece in stream_fn(self._prompt(text, like)):
                 if piece:
                     produced = True
                     yield piece

@@ -9,11 +9,15 @@ isn't a JSON array yields ``None`` — honest silence, never a fabricated readin
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 
-def extract_json_array(raw: str) -> list[Any] | None:
-    """Return the JSON array embedded in ``raw`` (fenced or bare), or None."""
+def extract_json_array(raw: object) -> list[Any] | None:
+    """Return the JSON array embedded in ``raw`` (fenced or bare), or None.
+
+    ``raw`` is typed ``object`` because it is untrusted model output: a
+    non-string reply is tolerated as unreadable (``None``) rather than trusted.
+    """
     if not isinstance(raw, str):
         return None
     start = raw.find("[")
@@ -24,4 +28,6 @@ def extract_json_array(raw: str) -> list[Any] | None:
         parsed: Any = json.loads(raw[start : end + 1])
     except (json.JSONDecodeError, TypeError):
         return None
-    return parsed if isinstance(parsed, list) else None
+    if isinstance(parsed, list):
+        return cast("list[Any]", parsed)
+    return None

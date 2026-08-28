@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from typing import cast
 
 from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
 from jarvis.domain.perception.perception_source import PerceptionSource
@@ -78,7 +79,7 @@ def describe(source: PerceptionSource) -> dict[str, str | None]:
     if callable(reporter):
         described = reporter()
         if isinstance(described, dict):
-            return described
+            return cast("dict[str, str | None]", described)
     return {"kind": "custom", "provider": type(source).__name__, "model": None}
 
 

@@ -70,7 +70,7 @@ class LlmPerception:
         if parsed is None:
             return ()  # unreadable output -> stay silent (Vision §37)
         evidence: list[Evidence] = []
-        for claim in cast("list[Any]", parsed):
+        for claim in parsed:
             piece = _claim_to_evidence(claim)
             if piece is not None:
                 evidence.append(piece)

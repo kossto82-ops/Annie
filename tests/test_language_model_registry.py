@@ -114,7 +114,9 @@ class TestStream:
         settings = ProviderSettings(
             provider="groq", model="m", base_url="https://api.groq.com/openai/v1"
         )
-        model = OpenAiCompatibleModel(settings, stream_transport=lambda url, h, b: iter(sse))
+        model = OpenAiCompatibleModel(
+            settings, stream_transport=lambda url, headers, body: iter(sse)
+        )
         assert list(model.stream("hi")) == ["Hola", " Roberto"]
 
     def test_the_stream_request_sets_stream_true(self) -> None:

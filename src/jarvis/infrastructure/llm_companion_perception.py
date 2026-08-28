@@ -56,7 +56,7 @@ class LlmCompanionPerception:
         if parsed is None:
             return ()  # unreadable output -> stay silent (Vision §37)
         observations: list[CompanionObservation] = []
-        for item in cast("list[Any]", parsed):
+        for item in parsed:
             observation = _item_to_observation(item, utterance)
             if observation is not None:
                 observations.append(observation)
