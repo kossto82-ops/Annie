@@ -101,8 +101,10 @@ class OpenAiCompatibleModel:
         }
         if settings.reasoning_effort:  # only for reasoning models, when configured
             request_body["reasoning_effort"] = settings.reasoning_effort
-        if stream:
-            request_body["stream"] = True
+        # Always send `stream` explicitly. Omitting it is not safe: some gateways (e.g. an
+        # OmniRoute route fronting a streaming provider) default to an SSE body when the flag
+        # is absent, which the non-streaming `complete` path cannot json.loads -> empty reply.
+        request_body["stream"] = stream
         return json.dumps(request_body).encode("utf-8")
 
     def complete(self, prompt: str) -> str:

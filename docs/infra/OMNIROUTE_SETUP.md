@@ -51,8 +51,8 @@ own registry does not do.
 | Native deps | `better-sqlite3` repaired via `omniroute repair`; keytar/onnxruntime prebuilt |
 | Server | Runs on **port 20128**, OpenAI-compatible `GET /v1/models` → HTTP 200 (115 routing models) |
 | Data dir | `~/.omniroute/` (storage.sqlite + its own `.env` with an auto-generated encryption key) |
-| Providers connected | **None yet** — this is the current blocker (Phase 4b) |
-| Jarvis integration | **Not started** (Phase 7). No Jarvis files changed yet. |
+| Providers connected | Gemini (`gemini-web`) + Grok (`grok-cli`), both active — connected via dashboard |
+| Jarvis integration | **Verified end-to-end** (Phase 7): `Jarvis → LanguageModel → OmniRoute → Grok → reply`, real non-cached round-trip returns content. Config-only; one 1-line adapter hardening (see §8). |
 
 ---
 
@@ -161,12 +161,21 @@ HTTP 404 unless done through the authenticated dashboard session). So provider c
   not present in this build's api-key catalog.
 - **Run `serve` from your home dir**, otherwise OmniRoute also loads the Jarvis repo `.env` (it
   ignores unknown vars, but keep the secret files separate).
+- **Adapter must send `stream: false` explicitly.** OmniRoute's Grok route returns an **SSE body**
+  when the `stream` field is absent, which the non-streaming `complete()` path cannot parse
+  (`json.loads` fails → empty reply). Fixed in `src/jarvis/infrastructure/openai_compatible_model.py`
+  by always sending `stream` (true/false) instead of only when true. Universally correct; harmless
+  for providers that already default to non-stream (Groq direct, OpenAI).
 
 ---
 
 ## 9. Remaining plan
 
-- **Phase 4b (current):** connect the first provider in the dashboard ($0: Groq or Gemini free tier).
+- **Phase 4b (done):** Gemini + Grok connected via dashboard; real chat at $0 cost verified.
+- **Phase 7 (done):** Jarvis routes through OmniRoute (config-only + the §8 `stream:false` fix),
+  verified with a fresh non-cached round-trip. Runtime config used:
+  `JARVIS_LLM_PROVIDER=openai-compatible`, `JARVIS_LLM_BASE_URL=http://127.0.0.1:20128/v1`,
+  `JARVIS_LLM_MODEL=auto` (embeddings still direct to Ollama).
 - **Phase 4c:** add more providers (NVIDIA NIM, etc.) — each needs a user-created key.
 - **Phase 5:** configure a conservative routing strategy (cost/priority + fallback).
 - **Phase 6:** point Claude Code at OmniRoute (`ANTHROPIC_BASE_URL=http://127.0.0.1:20128/v1`) —
