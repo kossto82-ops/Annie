@@ -27,6 +27,7 @@ from jarvis.domain.events.episode_events import (
     EpisodeReflected,
     EpisodeStarted,
 )
+from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.domain.value_objects.goal import Goal
@@ -105,13 +106,24 @@ class CognitiveEpisode:
 
     # -- working belief (the conclusion the episode is reasoning toward) ------
 
-    def form_working_belief(self, statement: str) -> Belief:
-        """Create the belief this episode is reasoning toward (Vision §12)."""
+    def form_working_belief(
+        self, statement: str, policy: EvidenceWeightingPolicy | None = None
+    ) -> Belief:
+        """Create the belief this episode is reasoning toward (Vision §12).
+
+        ``policy`` sets how the belief weighs its evidence; when omitted the belief
+        uses the default (no decay). A decaying policy makes stale evidence count for
+        less over time (Vision §10, §22).
+        """
         if self.state.is_terminal:
             raise InvalidStateTransition(
                 f"Episode {self.id} is {self.state.value}; cannot form a belief"
             )
-        belief = Belief(statement=statement)
+        belief = (
+            Belief(statement=statement, weighting_policy=policy)
+            if policy is not None
+            else Belief(statement=statement)
+        )
         self._working_belief = belief
         return belief
 

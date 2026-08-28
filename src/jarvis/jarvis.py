@@ -29,6 +29,7 @@ from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.curiosity import wonder
+from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
 from jarvis.domain.services.hypothesis_generation import generate_hypotheses
 from jarvis.domain.services.reflection import find_reflections
@@ -106,6 +107,7 @@ class Jarvis:
         enable_recall: bool = False,
         reasoner: Reasoner | None = None,
         trace: EpisodeTraceSink | None = None,
+        weighting_policy: EvidenceWeightingPolicy | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -160,6 +162,9 @@ class Jarvis:
             if enable_recall
             else None
         )
+        # How working beliefs weigh evidence (Vision §10, §22). None -> the default
+        # (no decay); a DecayingWeightingPolicy makes stale evidence fade over time.
+        self._weighting_policy = weighting_policy
         self._executive = ExecutiveController(
             self.nervous_system,
             self.beliefs,
@@ -167,6 +172,7 @@ class Jarvis:
             self.companion,
             memory_retriever,
             reasoner,
+            weighting_policy,
         )
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
@@ -261,7 +267,11 @@ class Jarvis:
         return tuple(learned)
 
     @classmethod
-    def persistent(cls, directory: str | Path) -> Jarvis:
+    def persistent(
+        cls,
+        directory: str | Path,
+        weighting_policy: EvidenceWeightingPolicy | None = None,
+    ) -> Jarvis:
         """A Jarvis whose whole memory lives on disk under one directory.
 
         Wires every store -- beliefs, episodes, companion model, action learning,
@@ -272,7 +282,7 @@ class Jarvis:
         """
         base = Path(directory)
         return cls(
-            beliefs=JsonBeliefStore(base / "beliefs.json"),
+            beliefs=JsonBeliefStore(base / "beliefs.json", weighting_policy),
             episodes=JsonEpisodeStore(base / "episodes.json"),
             companion_store=JsonBeliefStore(base / "companion.json"),
             actions_store=JsonBeliefStore(base / "actions.json"),
@@ -281,6 +291,7 @@ class Jarvis:
             subgoals_store=JsonBeliefStore(base / "subgoals.json"),
             refutations_store=JsonRefutationStore(base / "refutations.json"),
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
+            weighting_policy=weighting_policy,
         )
 
     def think(

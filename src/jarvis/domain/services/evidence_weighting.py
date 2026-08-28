@@ -13,8 +13,9 @@ stance can be supplied (e.g. a more sceptical Jarvis) without touching beliefs.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -60,3 +61,39 @@ class SourceWeightingPolicy:
 
 
 DEFAULT_WEIGHTING = SourceWeightingPolicy()
+
+
+@dataclass(frozen=True, slots=True)
+class DecayingWeightingPolicy:
+    """Fades an evidence's contribution as it ages -- forgetting (Vision §10, §22).
+
+    Confidence counts evidence, but evidence should not count *forever*: a belief
+    sustained only by stale observations ought to weaken until something recent
+    renews it. This policy composes over a ``base`` (source) policy and multiplies its
+    contribution by a recency factor that halves every ``half_life``. So a piece of
+    evidence one half-life old counts half as much, two half-lives old a quarter, and
+    so on -- asymptotically to zero but never negative.
+
+    The evidence itself is never mutated (provenance stays intact, Vision §8); only its
+    *contribution* fades, exactly as source weighting only scales the contribution. The
+    clock is injected, so the domain stays deterministic and offline-testable, and this
+    policy is opt-in -- :data:`DEFAULT_WEIGHTING` does not decay, so nothing forgets
+    unless a decaying policy is explicitly wired in.
+    """
+
+    now: Callable[[], datetime]
+    half_life: timedelta = timedelta(days=30)
+    base: EvidenceWeightingPolicy = DEFAULT_WEIGHTING
+
+    def __post_init__(self) -> None:
+        if self.half_life.total_seconds() <= 0.0:
+            raise ValueError("half_life must be a positive duration")
+
+    def effective_weight(self, evidence: Evidence) -> float:
+        base_weight = self.base.effective_weight(evidence)
+        age_seconds = (self.now() - evidence.observed_at).total_seconds()
+        if age_seconds <= 0.0:
+            # Just-observed (or future-dated, e.g. clock skew) evidence does not decay.
+            return base_weight
+        recency = 0.5 ** (age_seconds / self.half_life.total_seconds())
+        return base_weight * recency

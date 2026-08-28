@@ -29,6 +29,7 @@ from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
+from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
@@ -154,11 +155,15 @@ class ExecutiveController:
         companion: CompanionModel,
         memory_retriever: MemoryRetriever | None = None,
         reasoner: Reasoner | None = None,
+        weighting_policy: EvidenceWeightingPolicy | None = None,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
         self._episodes = episodes
         self._companion = companion
+        # Optional: how working beliefs weigh their evidence. Absent -> the default
+        # (no decay). A decaying policy makes stale evidence fade (Vision §10, §22).
+        self._weighting_policy = weighting_policy
         # Optional: surfaces relevant memories to *answer from*, distinct from the
         # evidence that grounds a belief (Vision §3, §22). Absent -> behaviour is
         # exactly as before recall existed.
@@ -318,7 +323,7 @@ class ExecutiveController:
         if remembered is not None:
             episode.adopt_working_belief(remembered)
             return remembered
-        return episode.form_working_belief(statement)
+        return episode.form_working_belief(statement, self._weighting_policy)
 
     def _seed_from_companion(self, episode: CognitiveEpisode) -> None:
         """If Jarvis already believes something relevant about the companion, feed

@@ -19,6 +19,10 @@ from typing import Any
 
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.services.evidence_weighting import (
+    DEFAULT_WEIGHTING,
+    EvidenceWeightingPolicy,
+)
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.atomic_write import atomic_write_text
@@ -57,11 +61,14 @@ def _serialise_belief(belief: Belief) -> dict[str, Any]:
     }
 
 
-def _deserialise_belief(data: dict[str, Any]) -> Belief:
+def _deserialise_belief(
+    data: dict[str, Any], policy: EvidenceWeightingPolicy
+) -> Belief:
     return Belief(
         statement=data["statement"],
         id=data["id"],
         formed_at=datetime.fromisoformat(data["formed_at"]),
+        weighting_policy=policy,
         _evidence=[_deserialise_evidence(e) for e in data["evidence"]],
     )
 
@@ -69,8 +76,13 @@ def _deserialise_belief(data: dict[str, Any]) -> Belief:
 class JsonBeliefStore:
     """A belief store persisted to a JSON file, keyed by statement."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(
+        self, path: str | Path, weighting_policy: EvidenceWeightingPolicy | None = None
+    ) -> None:
         self._path = Path(path)
+        # Rehydrated beliefs derive confidence with this policy. Default = no decay;
+        # a decaying policy makes stale evidence fade after a restart (Vision §10, §22).
+        self._weighting_policy = weighting_policy or DEFAULT_WEIGHTING
         self._by_statement: dict[str, Belief] = {}
         self._load()
 
@@ -89,7 +101,7 @@ class JsonBeliefStore:
             return
         raw: Any = json.loads(self._path.read_text(encoding="utf-8"))
         for entry in raw:
-            belief = _deserialise_belief(entry)
+            belief = _deserialise_belief(entry, self._weighting_policy)
             self._by_statement[belief.statement] = belief
 
     def _flush(self) -> None:
