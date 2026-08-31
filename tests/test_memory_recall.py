@@ -149,8 +149,9 @@ class TestSayAnswersFromMemory:
         assert isinstance(recalled, list) and recalled
 
     def test_without_recall_the_same_question_stays_at_the_honest_no_view(self) -> None:
-        jarvis = Jarvis()  # recall off — behaviour unchanged
+        jarvis = Jarvis()  # recall off — it must NOT answer from memory
         handle(jarvis, "say", {"text": _PRIOR})
         result = handle(jarvis, "say", {"text": _QUESTION})
-        assert "stance" not in result
-        assert "enough to form a view" in str(result["reply"])
+        assert result.get("stance") != "memory"
+        assert "recalled" not in result
+        assert _PRIOR not in str(result["reply"])  # did not parrot the earlier turn

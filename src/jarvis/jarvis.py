@@ -13,6 +13,7 @@ from pathlib import Path
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
+from jarvis.domain.conversation.conversation_context import ConversationContext
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
@@ -165,6 +166,10 @@ class Jarvis:
         # How working beliefs weigh evidence (Vision §10, §22). None -> the default
         # (no decay); a DecayingWeightingPolicy makes stale evidence fade over time.
         self._weighting_policy = weighting_policy
+        # Short-term conversational context (Vision §3): the last few turns of THIS
+        # conversation, kept separate from long-term memory so follow-ups and pronouns
+        # resolve against what was just said, not against the belief store.
+        self.conversation = ConversationContext()
         self._executive = ExecutiveController(
             self.nervous_system,
             self.beliefs,

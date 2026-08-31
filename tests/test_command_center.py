@@ -63,7 +63,11 @@ class TestSay:
         assert isinstance(result["reply"], str)
         assert result["reply"].strip() != ""
         assert result["speak"] is True
-        assert isinstance(result["confidence"], float)
+        # The reply is conversational — internal state (confidence) is never exposed.
+        assert "confidence" not in result
+        # But grounding still happened internally (inspectable via `explain`/`why`).
+        beliefs = jarvis.beliefs.all_beliefs()
+        assert beliefs and beliefs[0].confidence.value > 0.0
         state = result["state"]
         assert isinstance(state, dict)
         assert state["episodes"] == 1
@@ -77,10 +81,12 @@ class TestSay:
         assert state["episodes"] == 0
 
     def test_ungrounded_text_is_answered_honestly_not_invented(self) -> None:
-        # The default keyword perceiver makes nothing of this, so Jarvis must say so.
+        # Nothing to reason or recall: Jarvis stays in the conversation and invites more,
+        # never fabricating an answer or exposing internal state.
         result = handle(Jarvis(), "say", {"text": "zxqw"})
         reply = str(result["reply"]).lower()
-        assert "enough" in reply or "evidence" in reply
+        assert "tell me more" in reply
+        assert "confidence" not in result
 
 
 class _CompanionReader:
@@ -200,8 +206,8 @@ class TestVoice:
 
     def test_the_default_voice_leaves_the_reply_untouched(self) -> None:
         result = handle(Jarvis(), "say", {"text": "the deploy definitely succeeded"})
-        # IdentityRenderer default: canonical English reply, unchanged.
-        assert "I hold" in str(result["reply"])
+        # IdentityRenderer default: the canonical English reply passes through unchanged.
+        assert "tell me more and we'll reason it through together" in str(result["reply"])
 
 
 class TestStreamSay:
