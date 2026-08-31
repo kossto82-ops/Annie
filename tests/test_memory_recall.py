@@ -126,8 +126,9 @@ class TestSelfQuestionsConsultTheCompanion:
         jarvis = Jarvis(enable_recall=True)
         _knows_name(jarvis)
         result = handle(jarvis, "say", {"text": "sabes mi nombre?"})
-        assert result.get("stance") in {"memory", "partial_memory"}
+        assert result["stance"] == "memory"
         assert "Raúl" in str(result["reply"])
+        assert "relevance" not in result
 
     def test_a_world_question_does_not_dump_companion_traits(self) -> None:
         jarvis = Jarvis(enable_recall=True)
@@ -139,19 +140,28 @@ class TestSelfQuestionsConsultTheCompanion:
 
 
 class TestSayAnswersFromMemory:
-    def test_it_answers_from_memory_instead_of_a_blank_no_view(self) -> None:
+    def test_it_uses_only_explicit_memory_in_conversation(self) -> None:
         jarvis = Jarvis(enable_recall=True)
-        handle(jarvis, "say", {"text": _PRIOR})
+        handle(jarvis, "say", {"text": f"Remember that {_PRIOR}"})
         result = handle(jarvis, "say", {"text": _QUESTION})
         assert result["stance"] == "memory"
         assert _PRIOR in str(result["reply"])
-        recalled = result["recalled"]
-        assert isinstance(recalled, list) and recalled
+        assert "recalled" not in result
 
-    def test_without_recall_the_same_question_stays_at_the_honest_no_view(self) -> None:
-        jarvis = Jarvis()  # recall off — it must NOT answer from memory
+    def test_ordinary_conversation_does_not_create_recallable_memory(self) -> None:
+        jarvis = Jarvis(enable_recall=True)
         handle(jarvis, "say", {"text": _PRIOR})
         result = handle(jarvis, "say", {"text": _QUESTION})
         assert result.get("stance") != "memory"
         assert "recalled" not in result
-        assert _PRIOR not in str(result["reply"])  # did not parrot the earlier turn
+        assert jarvis.episodes.history() == ()
+        assert jarvis.beliefs.all_beliefs() == ()
+        assert jarvis.companion.beliefs() == ()
+
+    def test_without_recall_the_same_question_stays_at_the_honest_no_view(self) -> None:
+        jarvis = Jarvis()
+        handle(jarvis, "say", {"text": _PRIOR})
+        result = handle(jarvis, "say", {"text": _QUESTION})
+        assert result.get("stance") != "memory"
+        assert "recalled" not in result
+        assert _PRIOR not in str(result["reply"])

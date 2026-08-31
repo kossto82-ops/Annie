@@ -53,6 +53,29 @@ class TestLlmResponseRenderer:
     def test_an_empty_reply_is_returned_as_is(self) -> None:
         assert LlmResponseRenderer(_FakeModel("x")).phrase("", like="ok") == ""
 
+    def test_prompt_leak_falls_back_to_the_decided_reply(self) -> None:
+        source = "Hi — good to see you. What's on your mind?"
+        leaked = (
+            'The user message is "Hola Jarvis" which is Spanish for "Hello Jarvis". '
+            f'The assistant reply is "{source}". Hola — ¿qué tal?'
+        )
+        assert LlmResponseRenderer(_FakeModel(leaked)).phrase(source, like="Hola Jarvis") == source
+
+    def test_duplicated_rendering_falls_back_to_the_decided_reply(self) -> None:
+        source = "Tell me what is happening and I will help."
+        duplicated = "Cuéntame qué ocurre y te ayudaré. Cuéntame qué ocurre y te ayudaré."
+        assert LlmResponseRenderer(_FakeModel(duplicated)).phrase(source, like="Hola") == source
+
+    def test_the_exact_reported_renderer_leak_falls_back(self) -> None:
+        source = "Hi — good to see you. What's on your mind?"
+        leaked = (
+            'The user message is "Hola Jarvis!" which is Spanish for "Hello Jarvis!"\n'
+            'The user message is "Hola Jarvis!" which is Spanish for "Hello Jarvis!"\n'
+            "Hola — me alegra verte. ¿Qué tienes en mente?"
+            "Hola — me alegra verte. ¿Qué tienes en mente?"
+        )
+        assert LlmResponseRenderer(_FakeModel(leaked)).phrase(source, like="Hola Jarvis!") == source
+
 
 class _StreamingModel:
     """A model that streams fixed deltas (and can complete for the fallback)."""
@@ -80,3 +103,18 @@ class TestPhraseStream:
         # _FakeModel has no .stream -> a single phrased chunk.
         pieces = list(LlmResponseRenderer(_FakeModel("Hola")).phrase_stream("Hi", like="es"))
         assert pieces == ["Hola"]
+
+    def test_streamed_prompt_leak_is_never_yielded(self) -> None:
+        source = "Hi — good to see you."
+        leaked = [
+            "The user's message is in Spanish. ",
+            "The assistant's reply is in English. Hola — qué bueno verte.",
+        ]
+        pieces = list(LlmResponseRenderer(_StreamingModel(leaked)).phrase_stream(source, "Hola"))
+        assert pieces == [source]
+
+    def test_streamed_duplicate_is_never_yielded(self) -> None:
+        source = "Tell me more."
+        repeated = ["Cuéntame más. ", "Cuéntame más."]
+        pieces = list(LlmResponseRenderer(_StreamingModel(repeated)).phrase_stream(source, "Hola"))
+        assert pieces == [source]

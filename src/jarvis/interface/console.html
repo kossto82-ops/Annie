@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Jarvis — Command Center</title>
+<link rel="icon" href="data:," />
 <style>
   :root {
     --bg: #05070d; --panel: #0c111c; --panel2: #10182a; --edge: #1d2942;
@@ -11,7 +12,7 @@
     --warn: #ff8f6b; --good: #57e39a; --violet: #9a7bff;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
+  html, body { height: 100%; margin: 0; overflow-x: hidden; }
   body {
     background: radial-gradient(1200px 800px at 30% -10%, #0b1426 0%, var(--bg) 60%);
     background-color: var(--bg);
@@ -44,7 +45,8 @@
   main { display: grid; grid-template-columns: 1.24fr 0.76fr; min-height: 0; }
   .stage { position: relative; border-right: 1px solid var(--edge);
     display: grid; grid-template-rows: 1fr auto; min-height: 0; }
-  #face { width: 100%; height: 100%; display: block; }
+  #face { width: 100%; height: 100%; display: block;
+    background: radial-gradient(circle at 50% 48%, rgba(26,169,201,.08), transparent 58%); }
   .stage .status { position: absolute; top: 16px; left: 20px; font-size: 12px;
     letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
   .stage .status b { color: var(--teal); }
@@ -144,7 +146,35 @@
   .stagechip { font-size: 11px; border: 1px solid var(--edge); border-radius: 8px; padding: 4px 10px; color: var(--dim); }
   .stagechip.on { color: var(--ink); border-color: var(--teal2); }
   .stagechip.on b { color: var(--teal); font-weight: 600; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } .stage { display: none; } }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: minmax(210px, 34vh) minmax(0, 1fr); min-width: 0; }
+    .stage { display: block; min-width: 0; min-height: 210px; border-right: 0; border-bottom: 1px solid var(--edge); }
+    .stage .status { top: 12px; left: 16px; }
+    .stage .reasoning, .stage .metrics { display: none; }
+    .right { min-height: 0; }
+  }
+  @media (max-width: 560px) {
+    header { gap: 8px; padding: 10px 14px; display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto; }
+    header .sub, header .spacer, header .pill { display: none; }
+    header h1 { font-size: 14px; }
+    header .toolbtn { width: 36px; height: 30px; padding: 0; justify-content: center;
+      overflow: hidden; color: transparent; gap: 0; font-size: 0; }
+    header .toolbtn::before { content: "⚙"; color: var(--ink); font-size: 15px; }
+    main { grid-template-rows: minmax(190px, 30vh) minmax(0, 1fr); }
+    .stage { min-height: 190px; }
+    .right, .chat, form.composer { min-width: 0; }
+    .chat { padding: 14px; }
+    .msg { max-width: 100%; overflow-wrap: anywhere; }
+    .actions { overflow-x: auto; flex-wrap: nowrap; }
+    .actions button { min-height: 44px; }
+    form.composer { padding: 10px; }
+    form.composer input { min-width: 0; }
+    .send { min-height: 44px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar > i, .scrim, .drawer { transition: none; }
+  }
 </style>
 </head>
 <body class="">
@@ -664,42 +694,190 @@ if (SR) {
 
 /* ---- the point-cloud face ---------------------------------------------- */
 const canvas = $("face"), ctx = canvas.getContext("2d");
-let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+let W = 0, H = 0, DPR = 1;
 function resize() {
   const r = canvas.getBoundingClientRect();
   W = r.width; H = r.height;
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 }
 window.addEventListener("resize", resize);
 
-// Build points on a sphere (Fibonacci), classified into face regions.
-function buildPoints(n) {
-  const pts = [], gold = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < n; i++) {
-    const y = 1 - (i / (n - 1)) * 2;          // 1 .. -1
-    const r = Math.sqrt(Math.max(0, 1 - y * y));
-    const th = gold * i;
-    const x = Math.cos(th) * r, z = Math.sin(th) * r;
-    let kind = "face";
-    const front = z > 0.35;
-    if (front && y > 0.12 && y < 0.42) {
-      if (x > 0.12 && x < 0.42) kind = "eyeR";
-      else if (x < -0.12 && x > -0.42) kind = "eyeL";
-    }
-    if (front && y > -0.5 && y < -0.16 && Math.abs(x) < 0.4) kind = "mouth";
-    pts.push({ x, y, z, kind, seed: Math.random() * 6.28 });
-  }
-  return pts;
-}
-const POINTS = buildPoints(1100);
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const EYE_Y = 0.24;
 
-let angle = 0, mouthEnv = 0, blink = 0, lastBlink = 0;
-// Speech articulation: `articulation` is bumped by each spoken-word boundary and
-// decays between words, so the mouth opens on real words. `pulsed` tells whether
-// this browser actually delivered boundary events; if not, we fall back to a gentle
-// continuous motion so the face still looks like it's talking.
-let articulation = 0, pulsed = false;
+function frontZ(x, y, lift) {
+  const nx = x / 0.8, ny = y / 1.06;
+  return 0.72 * Math.sqrt(Math.max(0.03, 1 - nx * nx - ny * ny)) + (lift || 0);
+}
+
+function addPoint(points, x, y, kind, detail) {
+  points.push({
+    x, y, z: frontZ(x, y, detail && detail.lift), kind,
+    seed: Math.random() * 6.28,
+    ...(detail || {}),
+  });
+}
+
+function addOrganicPoint(points, centerX, centerY, spreadX, spreadY, kind, detail) {
+  const jitterX = (Math.random() - 0.5) * spreadX;
+  const jitterY = (Math.random() - 0.5) * spreadY;
+  const lift = (detail && detail.lift) || 0;
+  addPoint(points, centerX + jitterX, centerY + jitterY, kind,
+    { ...(detail || {}), lift: lift + (Math.random() - 0.5) * 0.012 });
+}
+
+/** Adds a volumetric facial region whose density carries anatomy without hard outlines. */
+function addRegion(points, centerX, centerY, radiusX, radiusY, count, kind, lift, detail) {
+  for (let i = 0; i < count; i++) {
+    const radius = Math.sqrt((i + 0.45) / count);
+    const theta = i * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.16;
+    const taper = 0.86 + Math.random() * 0.18;
+    addPoint(points,
+      centerX + Math.cos(theta) * radiusX * radius * taper,
+      centerY + Math.sin(theta) * radiusY * radius * taper,
+      kind,
+      { ...(detail || {}), lift: lift + (1 - radius) * 0.016 });
+  }
+}
+
+/** Builds a layered eye socket, lids, sclera, iris, and pupil from separate particle depths. */
+function addEye(points, centerX, kind, asymmetry) {
+  addRegion(points, centerX, EYE_Y, 0.165, 0.098, 46, "socket", 0.008,
+    { eyeY: EYE_Y });
+
+  const contourCount = 40;
+  for (let i = 0; i < contourCount; i++) {
+    const u = -1 + (2 * i) / (contourCount - 1);
+    const almond = Math.sqrt(Math.max(0, 1 - u * u));
+    const eyeX = centerX + u * 0.132;
+    const skew = asymmetry * u * 0.008;
+    if (Math.random() > 0.08) {
+      addOrganicPoint(points, eyeX, EYE_Y + almond * 0.047 + skew,
+        0.009, 0.009, kind, { eyeY: EYE_Y, lift: 0.03 });
+    }
+    if (Math.random() > 0.1) {
+      addOrganicPoint(points, eyeX, EYE_Y - almond * 0.035 + skew,
+        0.009, 0.008, kind, { eyeY: EYE_Y, lift: 0.028 });
+    }
+  }
+
+  addRegion(points, centerX, EYE_Y + asymmetry * 0.004, 0.113, 0.036, 34,
+    "sclera", 0.032, { eyeY: EYE_Y });
+  for (let i = 0; i < 30; i++) {
+    const radius = 0.038 * Math.sqrt((i + 0.4) / 30);
+    const theta = i * GOLDEN_ANGLE;
+    addPoint(points, centerX + Math.cos(theta) * radius,
+      EYE_Y + Math.sin(theta) * radius * 0.9, "iris",
+      { eyeY: EYE_Y, lift: 0.046 });
+  }
+  for (let i = 0; i < 10; i++) {
+    const radius = 0.014 * Math.sqrt((i + 0.4) / 10);
+    const theta = i * GOLDEN_ANGLE;
+    addPoint(points, centerX + Math.cos(theta) * radius,
+      EYE_Y + Math.sin(theta) * radius, "pupil",
+      { eyeY: EYE_Y, lift: 0.058 });
+  }
+
+  for (let i = 0; i < 30; i++) {
+    const u = -1 + (2 * i) / 29;
+    const arch = 0.385 + (1 - u * u) * 0.03 + asymmetry * u * 0.009;
+    addOrganicPoint(points, centerX + u * 0.145, arch,
+      0.014, 0.014, "brow", { lift: 0.02 });
+  }
+}
+
+/** Defines bridge planes, tip, wings, and nostril shadows without tracing a nose contour. */
+function addNose(points) {
+  for (let i = 0; i < 58; i++) {
+    const progress = i / 57;
+    const side = i % 2 === 0 ? -1 : 1;
+    const halfWidth = 0.022 + progress * 0.035;
+    addOrganicPoint(points, side * halfWidth, 0.17 - progress * 0.31,
+      0.025, 0.03, "nosePlane", { lift: 0.018 + progress * 0.02 });
+  }
+  addRegion(points, 0, -0.148, 0.09, 0.058, 44, "noseTip", 0.048);
+  addRegion(points, -0.082, -0.168, 0.052, 0.034, 16, "noseWing", 0.027);
+  addRegion(points, 0.082, -0.168, 0.052, 0.034, 16, "noseWing", 0.027);
+  addRegion(points, -0.052, -0.184, 0.025, 0.014, 9, "nostril", 0.035);
+  addRegion(points, 0.052, -0.184, 0.025, 0.014, 9, "nostril", 0.035);
+}
+
+/** Adds cheekbones, temples, muzzle, jaw and chin as overlapping planes of light. */
+function addFacialPlanes(points) {
+  addRegion(points, 0, 0.61, 0.48, 0.25, 92, "forehead", 0.006);
+  addRegion(points, -0.37, 0.06, 0.24, 0.23, 72, "cheek", 0.026);
+  addRegion(points, 0.37, 0.06, 0.24, 0.23, 72, "cheek", 0.026);
+  addRegion(points, -0.51, 0.27, 0.13, 0.21, 30, "temple", -0.002);
+  addRegion(points, 0.51, 0.27, 0.13, 0.21, 30, "temple", -0.002);
+  addRegion(points, 0, -0.315, 0.3, 0.14, 58, "muzzle", 0.018);
+  addRegion(points, -0.37, -0.47, 0.19, 0.24, 46, "jaw", 0.008);
+  addRegion(points, 0.37, -0.47, 0.19, 0.24, 46, "jaw", 0.008);
+  addRegion(points, 0, -0.69, 0.23, 0.14, 54, "chin", 0.035);
+}
+
+/** Builds a subtle human mouth with a cupid's bow, corners, lower lip and oral shadow. */
+function addMouth(points) {
+  const lipCount = 72;
+  for (let i = 0; i < lipCount; i++) {
+    const u = -1 + (2 * i) / (lipCount - 1);
+    const influence = 1 - u * u;
+    const bow = Math.exp(-Math.pow(u / 0.24, 2));
+    const upperY = -0.35 + influence * 0.016 - bow * 0.018;
+    const lowerY = -0.356 - influence * 0.039;
+    if (Math.random() > 0.09) {
+      addOrganicPoint(points, u * 0.275, upperY, 0.012, 0.011, "mouth",
+        { lift: 0.038, mouthDirection: 0.23, mouthInfluence: influence });
+    }
+    if (Math.random() > 0.08) {
+      addOrganicPoint(points, u * 0.275, lowerY, 0.012, 0.011, "mouth",
+        { lift: 0.04, mouthDirection: -1, mouthInfluence: influence });
+    }
+  }
+  addRegion(points, 0, -0.36, 0.245, 0.022, 38, "oralShadow", 0.032);
+  addRegion(points, -0.286, -0.356, 0.04, 0.035, 10, "mouthCorner", 0.027);
+  addRegion(points, 0.286, -0.356, 0.04, 0.035, 10, "mouthCorner", 0.027);
+  addRegion(points, 0, -0.49, 0.22, 0.075, 34, "lowerLipPlane", 0.018);
+}
+
+/** Builds a non-uniform human facial surface whose perimeter dissolves into darkness. */
+function buildPoints() {
+  const points = [];
+  const surfaceCount = 420;
+  for (let i = 0; i < surfaceCount; i++) {
+    const radius = Math.sqrt((i + 0.35) / surfaceCount);
+    const theta = i * GOLDEN_ANGLE;
+    const vertical = Math.sin(theta) * radius;
+    const jawTaper = vertical < -0.12 ? 1 - Math.min(0.28, (-vertical - 0.12) * 0.32) : 1;
+    const foreheadTaper = vertical > 0.55 ? 1 - (vertical - 0.55) * 0.12 : 1;
+    const x = Math.cos(theta) * radius * 0.72 * jawTaper * foreheadTaper;
+    const y = vertical * 1.03 + 0.04;
+    const edge = Math.min(1, radius);
+    const z = frontZ(x, y, 0) - edge * edge * 0.05;
+    points.push({
+      x, y, z, kind: "skin", seed: Math.random() * 6.28,
+      edge, drift: 0.003 + edge * 0.006,
+    });
+  }
+
+  addFacialPlanes(points);
+  addEye(points, -0.235, "eyeL", -0.35);
+  addEye(points, 0.235, "eyeR", 0.35);
+  addNose(points);
+  addMouth(points);
+  return points;
+}
+const POINTS = buildPoints();
+const FEATURES = POINTS.filter((point) => !["skin", "forehead", "cheek", "muzzle", "jaw", "chin", "temple", "lowerLipPlane"].includes(point.kind));
+
+/**
+ * Speech articulation is bumped by spoken-word boundaries and decays between words.
+ * A timer fallback keeps the visible response honest when a browser emits no boundaries.
+ */
+let mouthEnv = 0, articulation = 0, pulsed = false;
+let blink = 0, blinkStarted = -10, nextBlink = 2.8 + Math.random() * 1.8;
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 function setSpeaking(on) {
   speaking = !!on;
   if (speaking) { pulsed = false; articulation = 0; }
@@ -708,67 +886,140 @@ function pulseWord(strength) {
   articulation = Math.min(1, typeof strength === "number" ? strength : 0.7 + Math.random() * 0.3);
   pulsed = true;
 }
+
 // A small hook so the mouth-sync mechanism can be exercised and observed directly.
 window.__face = {
   pulseWord: (s) => pulseWord(s),
   setSpeaking: (b) => setSpeaking(b),
+  setThinking: (b) => { thinking = !!b; setMood(thinking ? "thinking" : "idle"); },
   get mouthEnv() { return mouthEnv; },
   get speaking() { return speaking; },
   get pulsed() { return pulsed; },
+  get blink() { return blink; },
+  get thinking() { return thinking; },
+  snapshotFeatures: () => FEATURES.map((point) => ({
+    kind: point.kind,
+    x: point.x,
+    y: point.y + (point.kind === "mouth"
+      ? mouthEnv * 0.14 * point.mouthDirection * point.mouthInfluence
+      : 0),
+    z: point.z,
+  })),
 };
+
 function frame(now) {
   const t = now * 0.001;
-  angle += 0.0035;
-  const breathe = 1 + 0.02 * Math.sin(t * 1.4);
-  // Mouth: driven by real word boundaries when the browser provides them (open at
-  // each word, close between), otherwise a gentle continuous "talking" motion.
+  const isReduced = reduceMotion.matches;
+  const breathe = isReduced ? 1 : 1 + 0.012 * Math.sin(t * 1.35);
+  const headTurn = isReduced ? 0 : 0.045 * Math.sin(t * 0.36) +
+    (thinking ? 0.018 * Math.sin(t * 1.1) : 0);
+
   let mouthTarget = 0;
   if (speaking) {
     if (pulsed) {
-      const flutter = 0.5 + 0.5 * Math.abs(Math.sin(t * 32));  // articulate within a word
+      const flutter = 0.5 + 0.5 * Math.abs(Math.sin(t * 32));
       mouthTarget = Math.min(1, articulation * flutter);
     } else {
-      mouthTarget = 0.28 + 0.32 * Math.abs(Math.sin(t * 13));  // fallback: no boundaries
+      mouthTarget = 0.28 + 0.32 * Math.abs(Math.sin(t * 13));
     }
   }
-  mouthEnv += (mouthTarget - mouthEnv) * 0.4;
-  articulation *= 0.9;  // each word's opening decays until the next boundary
-  // blink roughly every ~4s
-  if (t - lastBlink > 3.5 + Math.random()) { lastBlink = t; blink = 1; }
-  blink = Math.max(0, blink - 0.08);
+  mouthEnv += (mouthTarget - mouthEnv) * (isReduced ? 0.6 : 0.34);
+  articulation *= 0.9;
 
-  const hue = thinking ? 265 : 174;               // violet while thinking, teal at rest
-  const shimmer = thinking ? 0.5 : 0.0;
-  const scale = Math.min(W, H) * 0.34;
-  const cx = W / 2, cy = H / 2, FOV = 2.6;
-  const cosA = Math.cos(angle), sinA = Math.sin(angle);
+  if (!isReduced && t >= nextBlink) {
+    blinkStarted = t;
+    nextBlink = t + 3.4 + Math.random() * 2.4;
+  }
+  const blinkAge = t - blinkStarted;
+  blink = !isReduced && blinkAge < 0.22 ? Math.sin(Math.PI * blinkAge / 0.22) : 0;
+
+  const hue = thinking ? 265 : 174;
+  const shimmer = thinking ? 0.5 : 0;
+  const scale = Math.min(W * 0.41 / 0.8, H * 0.43 / 1.06);
+  const cx = W / 2, cy = H / 2, FOV = 2.8;
+  const cosA = Math.cos(headTurn), sinA = Math.sin(headTurn);
+  const gazeX = isReduced ? 0 : 0.01 * Math.sin(t * 0.62) +
+    (thinking ? 0.008 * Math.sin(t * 1.7) : 0);
+  const gazeY = isReduced ? 0 : 0.006 * Math.sin(t * 0.47 + 1.1);
 
   ctx.clearRect(0, 0, W, H);
   ctx.globalCompositeOperation = "lighter";
   for (let i = 0; i < POINTS.length; i++) {
     const p = POINTS[i];
     let px = p.x, py = p.y, pz = p.z;
-    if (p.kind === "mouth") py -= mouthEnv * 0.16 * (py + 0.16) * -6; // open downward
+    if (p.kind === "mouth") {
+      py += mouthEnv * 0.14 * p.mouthDirection * p.mouthInfluence;
+    } else if (p.kind === "oralShadow") {
+      py -= mouthEnv * 0.045;
+      pz += mouthEnv * 0.02;
+    } else if (p.kind === "mouthCorner") {
+      py -= mouthEnv * 0.016;
+    }
+    if (p.eyeY !== undefined) {
+      py = p.eyeY + (py - p.eyeY) * (1 - blink * 0.94);
+    }
+    if (p.kind === "iris" || p.kind === "pupil") {
+      px += gazeX;
+      py += gazeY;
+    }
+    if (p.drift && !isReduced) {
+      px += Math.sin(t * 0.42 + p.seed) * p.drift;
+      py += Math.cos(t * 0.37 + p.seed) * p.drift * 0.7;
+    }
     px *= breathe; py *= breathe; pz *= breathe;
     const rx = px * cosA + pz * sinA;
     const rz = -px * sinA + pz * cosA;
-    const ry = py;
     const persp = FOV / (FOV - rz);
     const sx = cx + rx * scale * persp;
-    const sy = cy - ry * scale * persp;
-    let a = 0.15 + 0.85 * ((rz + 1) / 2);          // depth fade
-    let light = 60;
-    if (p.kind === "eyeL" || p.kind === "eyeR") { light = 88; a *= (1 - 0.85 * blink); }
-    if (p.kind === "mouth") light = 70 + mouthEnv * 20;
-    a *= 0.5 + 0.5 * Math.abs(Math.sin(t * 2 + p.seed)) * (0.4 + shimmer);
-    const size = 1.3 * persp;
+    const sy = cy - py * scale * persp;
+    let alpha = 0.1 + 0.7 * ((rz + 1) / 2);
+    let light = 58, size = 1.2;
+    const flicker = 0.55 + 0.45 * Math.abs(Math.sin(t * 2 + p.seed));
+
+    if (p.kind === "skin") {
+      const edgeFade = Math.pow(1 - p.edge, 0.55);
+      light = 54 + edgeFade * 7;
+      alpha *= edgeFade * flicker * (0.7 + shimmer * 0.3);
+      size = 0.78 + edgeFade * 0.34;
+    } else if (["forehead", "cheek", "muzzle", "jaw", "chin", "temple", "lowerLipPlane"].includes(p.kind)) {
+      const planeLight = p.kind === "cheek" || p.kind === "chin" ? 68 : 63;
+      light = planeLight;
+      alpha = 0.1 + flicker * (p.kind === "cheek" ? 0.28 : 0.2);
+      size = p.kind === "cheek" ? 1.02 : 0.92;
+    } else if (p.kind === "socket") {
+      light = 59; alpha = 0.08 + flicker * 0.15; size = 0.88;
+    } else if (p.kind === "nosePlane") {
+      light = 68; alpha = 0.12 + flicker * 0.24; size = 0.9;
+    } else if (p.kind === "noseTip" || p.kind === "noseWing") {
+      light = p.kind === "noseTip" ? 72 : 64;
+      alpha = 0.16 + flicker * 0.25; size = 0.94;
+    } else if (p.kind === "nostril" || p.kind === "oralShadow") {
+      light = 43; alpha = 0.2 + mouthEnv * 0.35 + flicker * 0.08;
+      size = 0.88 + mouthEnv * 0.2;
+    } else if (p.kind === "brow") {
+      light = 70; alpha = 0.2 + flicker * 0.29; size = 0.94;
+    } else if (p.kind === "mouth") {
+      light = 66 + mouthEnv * 15;
+      alpha = 0.2 + mouthEnv * 0.43 + flicker * (0.19 + mouthEnv * 0.08);
+      size = 0.92 + mouthEnv * 0.25;
+    } else if (p.kind === "mouthCorner") {
+      light = 58; alpha = 0.14 + mouthEnv * 0.36 + flicker * 0.12; size = 0.9;
+    } else if (p.kind === "pupil") {
+      light = 88; alpha = 0.5 + flicker * 0.28; size = 1.08;
+    } else if (p.kind === "sclera") {
+      light = 77; alpha = 0.22 + flicker * 0.25; size = 0.92;
+    } else {
+      light = p.kind === "iris" ? 82 : 73;
+      alpha = p.kind === "iris" ? 0.35 + flicker * 0.31 : 0.25 + flicker * 0.28;
+      size = p.kind === "iris" ? 1.03 : 0.92;
+    }
+
     ctx.beginPath();
-    ctx.fillStyle = "hsla(" + hue + ",90%," + light + "%," + a.toFixed(3) + ")";
-    ctx.arc(sx, sy, size, 0, 6.283);
+    ctx.fillStyle = "hsla(" + hue + ",90%," + light + "%," + Math.min(1, alpha).toFixed(3) + ")";
+    ctx.arc(sx, sy, size * persp, 0, 6.283);
     ctx.fill();
   }
   ctx.globalCompositeOperation = "source-over";
-  // header pulse mirrors the mood
   $("pulse").style.boxShadow = "0 0 " + (8 + mouthEnv * 18) + "px " +
     (thinking ? "var(--violet)" : "var(--teal)");
   requestAnimationFrame(frame);

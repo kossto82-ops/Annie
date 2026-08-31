@@ -15,6 +15,7 @@ from jarvis.domain.aggregates.cognitive_episode import (
     CognitiveEpisode,
     InvalidStateTransition,
 )
+from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.value_objects.confidence import Confidence
@@ -30,6 +31,16 @@ from jarvis.interface.command_center import handle
 class _FailingModel:
     def complete(self, prompt: str) -> str:
         raise RuntimeError("provider down")
+
+
+class _RecordingModel:
+    def __init__(self, answer: str) -> None:
+        self.answer = answer
+        self.prompt: str | None = None
+
+    def complete(self, prompt: str) -> str:
+        self.prompt = prompt
+        return self.answer
 
 
 def _reasoning_jarvis(answer: str = "Provisional answer.") -> Jarvis:
@@ -63,6 +74,23 @@ class TestReasoners:
         inference = reasoner.infer("what is recursion?")
         assert inference is not None
         assert inference.answer == "Recursion calls itself."
+
+    def test_the_llm_reasoner_receives_recent_dialogue_separately(self) -> None:
+        model = _RecordingModel("Por el contexto anterior.")
+        reasoner = LlmReasoner(model)
+        inference = reasoner.infer(
+            "¿Por qué?",
+            conversation=(
+                Turn("companion", "Estoy pensando en cambiar la arquitectura."),
+                Turn("jarvis", "Puede tener sentido si resuelve un límite real."),
+            ),
+        )
+        assert inference is not None
+        assert model.prompt is not None
+        assert "<recent_dialogue>" in model.prompt
+        assert "User: Estoy pensando" in model.prompt
+        assert "Jarvis: Puede tener sentido" in model.prompt
+        assert "<current_message>\n¿Por qué?" in model.prompt
 
     def test_an_empty_completion_yields_no_inference(self) -> None:
         assert LlmReasoner(ScriptedLanguageModel(default="   ")).infer("x?") is None
@@ -131,17 +159,18 @@ class TestReasoningWiring:
 
 
 class TestSayReasons:
-    def test_say_reasons_a_provisional_answer_for_a_novel_question(self) -> None:
+    def test_say_reasons_without_persisting_a_novel_question(self) -> None:
         jarvis = _reasoning_jarvis("Use an input and filter the list.")
         result = handle(jarvis, "say", {"text": "how do I build an HTML filter?"})
-        assert result["stance"] == "inference"
-        assert "reasoning from what I understand" in str(result["reply"])
-        assert "Use an input and filter the list." in str(result["reply"])
+        assert result["stance"] == "conversation"
+        assert str(result["reply"]) == "Use an input and filter the list."
+        assert jarvis.episodes.history() == ()
+        assert jarvis.beliefs.all_beliefs() == ()
 
-    def test_a_remembered_question_prefers_memory_over_reasoning(self) -> None:
-        jarvis = _reasoning_jarvis("SHOULD NOT APPEAR")
+    def test_a_self_question_uses_memory_as_reasoning_context(self) -> None:
+        jarvis = _reasoning_jarvis("Te llamas Raúl.")
         _knows_name(jarvis)
         result = handle(jarvis, "say", {"text": "sabes mi nombre?"})
-        assert result["stance"] == "memory"
+        assert result["stance"] == "conversation"
         assert "Raúl" in str(result["reply"])
-        assert "SHOULD NOT APPEAR" not in str(result["reply"])
+        assert jarvis.episodes.history() == ()

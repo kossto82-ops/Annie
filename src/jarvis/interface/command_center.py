@@ -31,23 +31,10 @@ from jarvis.domain.conversation.intent import (
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.events.belief_events import (
-    BeliefStrengthened,
-    BeliefWeakened,
-    ContradictionDetected,
-)
-from jarvis.domain.events.domain_event import CognitiveEvent
-from jarvis.domain.events.episode_events import EpisodeCompleted, EpisodeStarted
-from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
-from jarvis.executive.executive_controller import (
-    STRONG_RECALL_RELEVANCE,
-    remembered_inference,
-    subject_of,
-    working_statement,
-)
+from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.language_model_registry import build_language_model
@@ -60,6 +47,7 @@ from jarvis.infrastructure.perceiver_factory import (
     describe,
     saved_models,
 )
+from jarvis.infrastructure.response_renderer import uses_spanish
 from jarvis.jarvis import Jarvis
 
 _OFFLINE_PERCEIVERS = frozenset({"", "keyword", "scripted", "stub"})
@@ -154,76 +142,6 @@ def _provenance(belief: Belief) -> Reply:
     }
 
 
-def _recalled_json(memory: RecalledMemory) -> Reply:
-    """One recalled memory as the panel renders it — content, kind, source, match."""
-    return {
-        "content": memory.content,
-        "kind": memory.kind.name,
-        "provenance": memory.provenance,
-        "relevance": memory.relevance,
-    }
-
-
-def _memory_reply(
-    recalled: tuple[RecalledMemory, ...], provenance: Reply | None, trace: list[Reply]
-) -> Reply:
-    """Answer from what Jarvis remembers when it holds no grounded view (Vision §3).
-
-    A distinct cognitive stance from belief and from ignorance: it reports remembered
-    context, clearly as memory (never asserted as a fresh conclusion, §22). A strong
-    match answers directly; a weak one offers the related memory but stays honest that
-    it may not settle the question (§37).
-    """
-    contents = "; ".join(memory.content for memory in recalled[:3])
-    if recalled[0].relevance >= STRONG_RECALL_RELEVANCE:
-        reply = f"Yes — I remember {contents}."
-        stance = "memory"
-    else:
-        reply = (
-            "I don't hold a firm view on that, but I remember something related — "
-            f"{contents}. I don't find that we settled it, though."
-        )
-        stance = "partial_memory"
-    return {
-        "reply": reply,
-        "speak": True,
-        "stance": stance,
-        "recalled": [_recalled_json(memory) for memory in recalled],
-        "provenance": provenance,
-        "trace": trace,
-    }
-
-
-def _inference_reply(
-    answer: str,
-    recalled: tuple[RecalledMemory, ...],
-    provenance: Reply | None,
-    trace: list[Reply],
-) -> Reply:
-    """Answer by reasoning when belief and memory have nothing (Vision §37).
-
-    A distinct stance, honestly framed as provisional: Jarvis says it does not recall
-    settling this and is reasoning from understanding, so the reader never mistakes an
-    inference for a remembered fact or a grounded conclusion (Vision §38). It invites a
-    yes/no so the answer can be confirmed and remembered (the learning loop, Vision §20).
-    """
-    reply = (
-        "I don't recall us settling this, but reasoning from what I understand: "
-        f"{answer} — is that right? Tell me and I'll remember it."
-    )
-    result: Reply = {
-        "reply": reply,
-        "speak": True,
-        "stance": "inference",
-        "inference": {"answer": answer},
-        "provenance": provenance,
-        "trace": trace,
-    }
-    if recalled:
-        result["recalled"] = [_recalled_json(memory) for memory in recalled]
-    return result
-
-
 def _confirmation(text: str) -> bool | None:
     """Read a short reply as confirming (True), correcting (False), or neither (None).
 
@@ -262,31 +180,6 @@ def _confirmation_reply(affirm: bool, belief: Belief) -> Reply:
         "provenance": _provenance(belief),
         "trace": [],
     }
-
-
-def _trace_steps(events: tuple[CognitiveEvent, ...]) -> list[Reply]:
-    """An episode's cognitive events as ordered, human-readable steps (Vision §26) —
-    the chain the panel draws so you can watch the reasoning, not just read the reply.
-    """
-    steps: list[Reply] = []
-    for event in events:
-        if isinstance(event, EpisodeStarted):
-            steps.append({"step": "started", "detail": event.trigger})
-        elif isinstance(event, EvidenceAdded):
-            steps.append(
-                {"step": "weighed evidence", "detail": "for" if event.supports else "against"}
-            )
-        elif isinstance(event, BeliefStrengthened):
-            steps.append({"step": "belief strengthened", "detail": f"{event.confidence.value:.2f}"})
-        elif isinstance(event, BeliefWeakened):
-            steps.append({"step": "belief weakened", "detail": f"{event.confidence.value:.2f}"})
-        elif isinstance(event, ContradictionDetected):
-            steps.append({"step": "contradiction noted", "detail": "a held belief was opposed"})
-        elif isinstance(event, EpisodeCompleted):
-            steps.append({"step": "concluded", "detail": event.result})
-        else:
-            steps.append({"step": type(event).__name__, "detail": ""})
-    return steps
 
 
 def _provider_error(error: Exception) -> str:
@@ -367,13 +260,13 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
 
     intent = classify(text)
     if intent is ConversationIntent.GREETING:
-        return _turn(jarvis, _greeting_reply(jarvis))
+        return _turn(jarvis, _greeting_reply(jarvis, text))
     if intent is ConversationIntent.SMALLTALK:
-        return _turn(jarvis, _smalltalk_reply())
+        return _turn(jarvis, _smalltalk_reply(text))
     if intent is ConversationIntent.FEEDBACK:
-        return _turn(jarvis, _feedback_reply())
+        return _turn(jarvis, _feedback_reply(text))
     if intent is ConversationIntent.INSTRUCTION:
-        return _turn(jarvis, _instruction_reply())
+        return _turn(jarvis, _instruction_reply(jarvis, text))
     if intent is ConversationIntent.REMEMBER:
         return _turn(jarvis, _remember_reply(jarvis, text))
     return _turn(jarvis, _knowledge_reply(jarvis, text))
@@ -390,33 +283,50 @@ def _plain(reply: str, stance: str) -> Reply:
     return {"reply": reply, "speak": True, "stance": stance, "provenance": None, "trace": []}
 
 
-def _greeting_reply(jarvis: Jarvis) -> Reply:
+def _greeting_reply(jarvis: Jarvis, text: str) -> Reply:
     name = _companion_name(jarvis)
+    if uses_spanish(text):
+        opener = f"Hola, {name}" if name else "Hola"
+        return _plain(f"{opener}. Me alegra verte. ¿Qué tienes en mente?", "greeting")
     opener = f"Hi {name}" if name else "Hi"
     return _plain(f"{opener} — good to see you. What's on your mind?", "greeting")
 
 
-def _smalltalk_reply() -> Reply:
+def _smalltalk_reply(text: str) -> Reply:
+    if uses_spanish(text):
+        return _plain("Bien, aquí estoy. ¿Qué tal tú?", "smalltalk")
     return _plain("I'm here and doing fine — how about you?", "smalltalk")
 
 
-def _feedback_reply() -> Reply:
-    # Feedback about Jarvis is heard as conversation, never stored as a belief.
+def _feedback_reply(text: str) -> Reply:
+    if uses_spanish(text):
+        return _plain(
+            "Sí, parece que algo estoy haciendo mal. ¿Qué es lo que más te está fallando?",
+            "feedback",
+        )
     return _plain(
         "Sounds like I'm getting something wrong. What's failing most for you?", "feedback"
     )
 
 
-def _instruction_reply() -> Reply:
-    # An instruction is interpreted, not remembered — and Jarvis is honest about what it
-    # can actually do (no fabricated "I checked with the AI"). Real tool execution is
-    # earned agency (Vision §28), not yet wired.
-    return _plain(
-        "Got it — I'll treat that as an instruction, not something to remember. I can't "
-        "consult another AI on my own yet, so tell me exactly what to do with what I know "
-        "and I'll take it from there.",
-        "instruction",
-    )
+def _instruction_reply(jarvis: Jarvis, text: str) -> Reply:
+    """Execute an instruction through an existing capability, or decline honestly.
+
+    A request to check with the configured language model is contextual action, not
+    knowledge. The reasoner receives the preceding dialogue so references such as
+    "lo" resolve against what the companion and Jarvis were just discussing.
+    """
+    inference = jarvis.reason(text, conversation=jarvis.conversation.before_current())
+    if inference is None:
+        unavailable = (
+            "Entiendo la instrucción, pero con las capacidades actuales no puedo consultar "
+            "otra IA."
+            if uses_spanish(text)
+            else "I understand the instruction, but I can't consult another AI with the "
+            "capabilities currently available."
+        )
+        return _plain(unavailable, "instruction")
+    return _plain(inference.answer, "instruction")
 
 
 def _remember_reply(jarvis: Jarvis, text: str) -> Reply:
@@ -431,50 +341,38 @@ def _remember_reply(jarvis: Jarvis, text: str) -> Reply:
             context="the companion explicitly asked to remember this",
         ),
     )
-    reply = _plain(f"Got it — I'll remember that: {fact}.", "memory")
+    wording = f"Entendido. Recordaré que {fact}." if uses_spanish(text) else (
+        f"Got it — I'll remember that: {fact}."
+    )
+    reply = _plain(wording, "memory")
     reply["learned"] = [fact]
     return reply
 
 
 def _knowledge_reply(jarvis: Jarvis, text: str) -> Reply:
-    """A real statement/question: perceive, recall and reason — but reply like a person.
+    """Answer ordinary conversation without silently converting it into memory.
 
-    This is the only conversational path that touches perception and memory. The
-    relational channel still learns stable facts about the person here (a genuine
-    self-disclosure, not a greeting or a complaint — those never reach this path). The
-    reply never exposes internal state (confidence, evidence, sources); a grounded belief
-    still forms and can be inspected with `explain`/`why`, it just isn't narrated back.
+    Recent dialogue is the primary context. Existing long-term memory may still help,
+    but this path writes neither companion traits nor world beliefs; persistence is
+    reserved for explicit remember/learn/confirmation actions.
     """
-    episode = jarvis.perceive(text, trigger=text)
-    learned = jarvis.note_companion(text)  # the relational channel (Vision §5)
-    trace = _trace_steps(jarvis.trace_of(episode))
-    belief = episode.working_belief
-    remembered = remembered_inference(belief) if belief is not None else None
-    inferred = (
-        episode.inference.answer
-        if episode.inference is not None
-        else (remembered.content if remembered is not None else None)
+    recalled = jarvis.recall(text)
+    inference = jarvis.reason(
+        text,
+        memory=recalled,
+        conversation=jarvis.conversation.before_current(),
     )
-    provenance = _provenance(belief) if belief is not None else None
-    recalled = episode.recalled_memories
-    strong_memory = bool(recalled) and recalled[0].relevance >= STRONG_RECALL_RELEVANCE
-    if learned:
-        # A genuine self-disclosure taught Jarvis something about you — acknowledge it
-        # naturally (this is how you "teach" it, §5), without exposing internal state.
-        traits = [b.explain().statement for b in learned]
-        summary = "Got it — I'll remember that about you: " + "; ".join(traits) + "."
-        reply = _plain(summary, "memory")
-        reply["learned"] = traits
-        reply["provenance"] = provenance
-        reply["trace"] = trace
-        return reply
-    if inferred is not None:
-        # A reasoned answer (fresh or remembered): give it, honestly provisional (§37).
-        return _inference_reply(inferred, recalled, provenance, trace)
-    if strong_memory or recalled:
-        # A memory bears on this: use it naturally, as memory (§22) — never a verdict.
-        return _memory_reply(recalled, provenance, trace)
-    return _engage_reply(text, provenance, trace)
+    if inference is not None:
+        return _plain(inference.answer, "conversation")
+    if recalled:
+        return _natural_memory_reply(recalled)
+    return _engage_reply(text, None, [])
+
+
+def _natural_memory_reply(recalled: tuple[RecalledMemory, ...]) -> Reply:
+    """Use relevant long-term memory without exposing retrieval mechanics or scores."""
+    content = recalled[0].content
+    return _plain(f"I remember that {content}. How does that bear on what you mean now?", "memory")
 
 
 def _engage_reply(text: str, provenance: Reply | None, trace: list[Reply]) -> Reply:

@@ -12,6 +12,7 @@ gets here. The default renderer changes nothing at all.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from typing import Protocol, runtime_checkable
 
@@ -27,6 +28,22 @@ class ResponseRenderer(Protocol):
     def phrase_stream(self, reply: str, like: str) -> Iterator[str]:
         """Yield the reworded reply in pieces as they are produced (for streaming)."""
         ...
+
+
+_SPANISH_MARKERS = frozenset(
+    {
+        "hola", "buenas", "que", "qué", "como", "cómo", "tal", "deberia", "debería",
+        "funcionas", "habla", "recuerda", "prefiero", "pues", "por", "porque", "crees",
+        "estoy", "con", "para", "seguro", "mente", "cambiar",
+    }
+)
+_WORD = re.compile(r"\w+", re.UNICODE)
+
+
+def uses_spanish(text: str) -> bool:
+    """Conservative Spanish detection for deterministic conversational fallbacks."""
+    tokens = set(_WORD.findall(text.lower()))
+    return bool(tokens & _SPANISH_MARKERS) or any(char in text for char in "¿¡ñáéíóú")
 
 
 class IdentityRenderer:

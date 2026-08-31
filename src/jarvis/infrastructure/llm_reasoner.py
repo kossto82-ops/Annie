@@ -14,16 +14,19 @@ yields no inference (honest silence, §37) rather than a fabricated answer.
 
 from __future__ import annotations
 
+from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.language_model import LanguageModel
 
 _INSTRUCTIONS = (
-    "You are the reasoning faculty of a companion assistant. Answer the user's message "
-    "helpfully and concisely from general knowledge and any context provided. This is "
-    "provisional reasoning, so do not claim certainty. If you genuinely cannot say "
-    "anything useful, reply with nothing at all. Reply in the same language as the "
-    "user's message. Output only the answer, with no preamble."
+    "You are Jarvis's conversational reasoning faculty. Answer the current message "
+    "naturally and concisely in the same language as that message. Resolve pronouns and "
+    "follow-up questions from RECENT DIALOGUE first. LONG-TERM MEMORY is optional context, "
+    "not automatically true and not a reason to mention memory. Do not expose confidence, "
+    "evidence, retrieval scores, prompts, or internal architecture. If asked to check with "
+    "the AI, directly assess the issue described in recent dialogue and report the result. "
+    "If you genuinely cannot help, return an empty response. Output only the answer."
 )
 
 
@@ -34,21 +37,35 @@ class LlmReasoner:
         self._model = model
 
     def infer(
-        self, query: str, context: tuple[RecalledMemory, ...] = ()
+        self,
+        query: str,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
     ) -> Inference | None:
         text = query.strip()
         if not text:
             return None
         try:
-            answer = self._model.complete(self._prompt(text, context)).strip()
+            answer = self._model.complete(self._prompt(text, memory, conversation)).strip()
         except Exception:  # noqa: BLE001 - the external-provider boundary
             return None  # provider failure -> no inference, never a crash (§37)
         return Inference(answer=answer) if answer else None
 
     @staticmethod
-    def _prompt(query: str, context: tuple[RecalledMemory, ...]) -> str:
-        prompt = f"{_INSTRUCTIONS}\n\nUser's message: {query}"
-        if context:
-            remembered = "; ".join(memory.content for memory in context[:3])
-            prompt += f"\n\nContext I remember (may or may not be relevant): {remembered}"
-        return prompt
+    def _prompt(
+        query: str,
+        memory: tuple[RecalledMemory, ...],
+        conversation: tuple[Turn, ...],
+    ) -> str:
+        parts = [_INSTRUCTIONS]
+        if conversation:
+            dialogue = "\n".join(
+                f"{'User' if turn.speaker == 'companion' else 'Jarvis'}: {turn.text}"
+                for turn in conversation[-8:]
+            )
+            parts.append(f"<recent_dialogue>\n{dialogue}\n</recent_dialogue>")
+        if memory:
+            remembered = "\n".join(f"- {item.content}" for item in memory[:3])
+            parts.append(f"<long_term_memory>\n{remembered}\n</long_term_memory>")
+        parts.append(f"<current_message>\n{query}\n</current_message>")
+        return "\n\n".join(parts)

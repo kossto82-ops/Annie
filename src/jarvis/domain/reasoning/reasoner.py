@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 
@@ -30,7 +31,10 @@ class Reasoner(Protocol):
     """Proposes a provisional answer to a query, optionally using recalled context."""
 
     def infer(
-        self, query: str, context: tuple[RecalledMemory, ...] = ()
+        self,
+        query: str,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
     ) -> Inference | None:
-        """Return a provisional answer to ``query``, or None when it cannot help."""
+        """Answer ``query`` from optional memory and recent dialogue, or return None."""
         ...

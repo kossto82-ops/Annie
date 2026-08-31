@@ -19,6 +19,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
+from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.episode_kind import EpisodeKind
@@ -39,6 +40,7 @@ from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
+from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.nervous_system.nervous_system import NervousSystem
@@ -180,6 +182,49 @@ class ExecutiveController:
     def set_memory_retriever(self, retriever: MemoryRetriever | None) -> None:
         """Swap the memory retriever at runtime -- e.g. lexical -> embedding (D11)."""
         self._memory_retriever = retriever
+
+    def reason(
+        self,
+        query: str,
+        *,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
+    ) -> Inference | None:
+        """Propose a conversational answer without creating or persisting cognition."""
+        if self._reasoner is None:
+            return None
+        return self._reasoner.infer(query, memory, conversation)
+
+    def recall(self, query: str) -> tuple[RecalledMemory, ...]:
+        """Return relevant long-term context without opening a cognitive episode."""
+        if self._memory_retriever is None:
+            return ()
+        relevant: list[RecalledMemory] = []
+        seen: set[str] = set()
+        for memory in self._memory_retriever.recall(query):
+            if memory.relevance < _MIN_RECALL_RELEVANCE:
+                continue
+            if self._is_about_current(memory, query):
+                continue
+            key = memory.content.strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            relevant.append(memory)
+        if _looks_like_self_question(query):
+            for memory in self._companion_traits():
+                key = memory.content.strip().lower()
+                if key not in seen:
+                    seen.add(key)
+                    relevant.append(memory)
+        relevant.sort(
+            key=lambda item: (
+                -item.relevance,
+                -(item.source_confidence or 0.0),
+                item.content,
+            )
+        )
+        return tuple(relevant)
 
     def run(
         self,
@@ -407,7 +452,7 @@ class ExecutiveController:
             return
         if remembered_inference(belief) is not None:
             return  # already reasoned this — the answer is remembered, don't re-ask
-        inference = self._reasoner.infer(episode.trigger, recalled)
+        inference = self._reasoner.infer(episode.trigger, recalled, ())
         if inference is None:
             return
         episode.infer(inference)

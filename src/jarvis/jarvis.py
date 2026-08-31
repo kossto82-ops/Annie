@@ -13,7 +13,7 @@ from pathlib import Path
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
-from jarvis.domain.conversation.conversation_context import ConversationContext
+from jarvis.domain.conversation.conversation_context import ConversationContext, Turn
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
@@ -49,6 +49,8 @@ from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.energy_costs import EnergyCosts
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
+from jarvis.domain.value_objects.inference import Inference
+from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
@@ -188,6 +190,24 @@ class Jarvis:
         from the same model that perceives and voices. ``None`` disables reasoning.
         """
         self._executive.set_reasoner(reasoner)
+
+    def reason(
+        self,
+        query: str,
+        *,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
+    ) -> Inference | None:
+        """Ask the configured reasoner without creating an episode or belief.
+
+        This is the conversation-first read path: recent dialogue and recalled memory
+        may inform a response, but reasoning alone writes nothing to long-term memory.
+        """
+        return self._executive.reason(query, memory=memory, conversation=conversation)
+
+    def recall(self, query: str) -> tuple[RecalledMemory, ...]:
+        """Retrieve relevant long-term context without creating an episode or belief."""
+        return self._executive.recall(query)
 
     def enable_embedding_recall(self, embedder: TextEmbedder) -> None:
         """Upgrade recall from surface tokens to *meaning* (Vision §3, D11).

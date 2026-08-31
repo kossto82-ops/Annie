@@ -22,6 +22,48 @@ def test_the_console_asset_is_shipped() -> None:
     assert "command center" in html
 
 
+def test_the_face_keeps_its_recognisable_features_and_responsive_stage() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        '"eyeL"',
+        '"eyeR"',
+        '"iris"',
+        '"pupil"',
+        '"nosePlane"',
+        '"noseTip"',
+        '"mouth"',
+        '"cheek"',
+        '"chin"',
+    ):
+        assert marker in html, f"point-cloud face lost its {marker!r} feature"
+    for marker in (
+        "addFacialPlanes(points)",
+        "addEye(points",
+        "addNose(points)",
+        "addMouth(points)",
+        "addOrganicPoint",
+    ):
+        assert marker in html, f"integrated particle geometry lost its {marker!r} builder"
+    assert "prefers-reduced-motion: reduce" in html
+    assert ".stage { display: none; }" not in html
+
+
+def test_the_face_keeps_its_dynamic_eye_and_state_behaviour() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "nextBlink",
+        "blinkStarted",
+        "gazeX",
+        "gazeY",
+        "thinking ? 265 : 174",
+        "setThinking:",
+        "get blink()",
+        "get thinking()",
+        "snapshotFeatures:",
+    ):
+        assert marker in html, f"dynamic face wiring lost its {marker!r} behavior"
+
+
 def test_the_mouth_is_driven_by_real_speech_boundaries() -> None:
     html = _CONSOLE.read_text(encoding="utf-8")
     # The utterance's word boundaries drive the mouth, gated by start/end of speech.

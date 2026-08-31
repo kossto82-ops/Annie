@@ -8,6 +8,7 @@ confidence — the LLM proposes, Jarvis (and the companion) decide (Vision §20,
 from __future__ import annotations
 
 from jarvis import Jarvis
+from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
@@ -25,8 +26,12 @@ class CountingReasoner:
         self.calls = 0
 
     def infer(
-        self, query: str, context: tuple[RecalledMemory, ...] = ()
+        self,
+        query: str,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
     ) -> Inference | None:
+        _ = (memory, conversation)
         self.calls += 1
         return Inference(answer=self.answer)
 
@@ -78,32 +83,24 @@ class TestConfirming:
 
 
 class TestSayLearningLoop:
-    def test_reason_then_yes_confirms_and_grounds(self) -> None:
-        jarvis, _ = _learner("Use an input and filter the list.")
-        first = handle(jarvis, "say", {"text": _Q})
-        assert first["stance"] == "inference"
-        second = handle(jarvis, "say", {"text": "sí, exacto"})
-        assert second["stance"] == "confirmation"
-        belief = jarvis.beliefs.get_by_statement(working_statement(_Q))
-        assert belief is not None and belief.confidence.value >= 0.5
-
-    def test_repeat_surfaces_the_remembered_answer_without_re_reasoning(self) -> None:
+    def test_ordinary_reasoning_is_conversational_and_not_persisted(self) -> None:
         jarvis, reasoner = _learner("Use an input and filter the list.")
-        handle(jarvis, "say", {"text": _Q})
-        again = handle(jarvis, "say", {"text": _Q})
-        assert again["stance"] == "inference"
-        assert "Use an input and filter the list." in str(again["reply"])
-        assert reasoner.calls == 1
+        first = handle(jarvis, "say", {"text": _Q})
+        second = handle(jarvis, "say", {"text": _Q})
+        assert first["stance"] == "conversation"
+        assert second["stance"] == "conversation"
+        assert reasoner.calls == 2
+        assert jarvis.beliefs.get_by_statement(working_statement(_Q)) is None
+        assert jarvis.episodes.history() == ()
 
-    def test_a_short_no_is_read_as_a_correction(self) -> None:
+    def test_a_short_no_without_a_persisted_reasoning_episode_is_conversation(self) -> None:
         jarvis, _ = _learner()
         handle(jarvis, "say", {"text": _Q})
         correction = handle(jarvis, "say", {"text": "no"})
-        assert correction["stance"] == "confirmation"
+        assert correction["stance"] == "conversation"
 
     def test_a_long_sentence_with_no_is_not_a_correction(self) -> None:
         jarvis, _ = _learner()
         handle(jarvis, "say", {"text": _Q})
-        # A real sentence that merely contains "no" must not be mistaken for a correction.
         reply = handle(jarvis, "say", {"text": "no estoy seguro de cómo empezar con esto"})
         assert reply.get("stance") != "confirmation"

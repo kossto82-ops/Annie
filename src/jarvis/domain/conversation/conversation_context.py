@@ -39,5 +39,17 @@ class ConversationContext:
         turns = tuple(self._turns)
         return turns if limit is None else turns[-limit:]
 
+    def before_current(self, limit: int = 8) -> tuple[Turn, ...]:
+        """Recent dialogue before the user turn currently being handled.
+
+        The command center records incoming text before classification. Keeping this read
+        explicit prevents the current message being duplicated in a reasoner's query and
+        preserves speaker attribution for follow-ups.
+        """
+        turns = tuple(self._turns)
+        if turns and turns[-1].speaker == "companion":
+            turns = turns[:-1]
+        return turns[-limit:]
+
     def is_empty(self) -> bool:
         return not self._turns

@@ -8,6 +8,9 @@ turns are kept as short-term context, separate from long-term memory.
 
 from __future__ import annotations
 
+from jarvis.domain.conversation.conversation_context import Turn
+from jarvis.domain.value_objects.inference import Inference
+from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.interface.command_center import handle
 from jarvis.jarvis import Jarvis
 
@@ -23,6 +26,23 @@ def _reply_text(result: dict[str, object]) -> str:
     return str(result["reply"]).lower()
 
 
+class ContextReasoner:
+    """Returns scripted answers and records the context supplied by conversation."""
+
+    def __init__(self, answers: list[str]) -> None:
+        self._answers = iter(answers)
+        self.calls: list[tuple[str, tuple[RecalledMemory, ...], tuple[Turn, ...]]] = []
+
+    def infer(
+        self,
+        query: str,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
+    ) -> Inference | None:
+        self.calls.append((query, memory, conversation))
+        return Inference(answer=next(self._answers))
+
+
 class TestConversationFirst:
     def test_a_greeting_is_answered_as_conversation(self) -> None:  # Test A
         jarvis = Jarvis()
@@ -33,6 +53,8 @@ class TestConversationFirst:
         assert "learned" not in result
         assert "recalled" not in result
         assert jarvis.episodes.history() == ()
+        assert jarvis.beliefs.all_beliefs() == ()
+        assert jarvis.companion.beliefs() == ()
         assert not any(leak in _reply_text(result) for leak in _LEAKS)
 
     def test_greeting_then_smalltalk_keeps_continuity(self) -> None:  # Test B
@@ -50,6 +72,8 @@ class TestConversationFirst:
         assert result["stance"] == "feedback"
         assert "confidence" not in result
         assert jarvis.companion.beliefs() == ()  # not learned as a trait
+        assert jarvis.beliefs.all_beliefs() == ()
+        assert jarvis.episodes.history() == ()
         assert not any(leak in _reply_text(result) for leak in _LEAKS)
 
     def test_feedback_is_not_mistaken_for_a_bare_no(self) -> None:  # Test C (regression)
@@ -61,13 +85,32 @@ class TestConversationFirst:
         assert "confidence" not in result
 
     def test_an_instruction_after_feedback_is_not_memory(self) -> None:  # Test D
+        reasoner = ContextReasoner(
+            ["Sí: estabas convirtiendo conversación en memoria en vez de responder."]
+        )
+        jarvis = Jarvis(reasoner=reasoner)
+        _reply(jarvis, "No funcionas muy bien.")
+        result = _reply(jarvis, "pues habla con la IA para estar seguro")
+        assert result["stance"] == "instruction"
+        assert "conversación en memoria" in _reply_text(result)
+        assert "learned" not in result
+        assert "remember this about you" not in _reply_text(result)
+        assert jarvis.companion.beliefs() == ()  # nothing was stored
+        assert jarvis.beliefs.all_beliefs() == ()
+        assert reasoner.calls[0][0] == "pues habla con la IA para estar seguro"
+        prior = reasoner.calls[0][2]
+        assert [turn.text for turn in prior] == [
+            "No funcionas muy bien.",
+            "Sí, parece que algo estoy haciendo mal. ¿Qué es lo que más te está fallando?",
+        ]
+
+    def test_an_instruction_is_honest_when_no_ai_capability_exists(self) -> None:
         jarvis = Jarvis()
         _reply(jarvis, "No funcionas muy bien.")
         result = _reply(jarvis, "pues habla con la IA para estar seguro")
         assert result["stance"] == "instruction"
-        assert "learned" not in result
-        assert "remember this about you" not in _reply_text(result)
-        assert jarvis.companion.beliefs() == ()  # nothing was stored
+        assert "no puedo consultar otra ia" in _reply_text(result)
+        assert jarvis.episodes.history() == ()
 
     def test_an_explicit_remember_becomes_memory(self) -> None:  # Test E
         jarvis = Jarvis()
@@ -77,7 +120,14 @@ class TestConversationFirst:
         assert traits == ["prefiero trabajar por la noche"]
 
     def test_a_statement_and_follow_ups_stay_conversational(self) -> None:  # Test F
-        jarvis = Jarvis()
+        reasoner = ContextReasoner(
+            [
+                "Depende del problema que quieras resolver.",
+                "Sí, si la estructura actual ya limita el cambio.",
+                "Porque el coste actual supera el riesgo de una modificación acotada.",
+            ]
+        )
+        jarvis = Jarvis(reasoner=reasoner)
         turns = [
             "Estoy pensando en cambiar la arquitectura.",
             "¿Crees que debería?",
@@ -85,8 +135,22 @@ class TestConversationFirst:
         ]
         for text in turns:
             result = _reply(jarvis, text)
+            assert result["stance"] == "conversation"
             assert not any(leak in _reply_text(result) for leak in _LEAKS)
             assert "confidence" not in result
         # The whole exchange is retained as short-term context for follow-ups.
         said = [turn.text for turn in jarvis.conversation.recent() if turn.speaker == "companion"]
         assert said == turns
+        assert [turn.text for turn in reasoner.calls[1][2]] == [
+            turns[0],
+            "Depende del problema que quieras resolver.",
+        ]
+        assert [turn.text for turn in reasoner.calls[2][2]] == [
+            turns[0],
+            "Depende del problema que quieras resolver.",
+            turns[1],
+            "Sí, si la estructura actual ya limita el cambio.",
+        ]
+        assert jarvis.episodes.history() == ()
+        assert jarvis.beliefs.all_beliefs() == ()
+        assert jarvis.companion.beliefs() == ()

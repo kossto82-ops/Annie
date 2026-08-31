@@ -57,20 +57,17 @@ class TestSnapshot:
 
 
 class TestSay:
-    def test_it_grounds_a_belief_and_replies(self) -> None:
+    def test_it_replies_without_grounding_ordinary_conversation(self) -> None:
         jarvis = Jarvis(perception=_YesPerception())
         result = handle(jarvis, "say", {"text": "the sky is clear today"})
         assert isinstance(result["reply"], str)
         assert result["reply"].strip() != ""
         assert result["speak"] is True
-        # The reply is conversational — internal state (confidence) is never exposed.
         assert "confidence" not in result
-        # But grounding still happened internally (inspectable via `explain`/`why`).
-        beliefs = jarvis.beliefs.all_beliefs()
-        assert beliefs and beliefs[0].confidence.value > 0.0
+        assert jarvis.beliefs.all_beliefs() == ()
         state = result["state"]
         assert isinstance(state, dict)
-        assert state["episodes"] == 1
+        assert state["episodes"] == 0
 
     def test_empty_text_is_handled_without_thinking(self) -> None:
         jarvis = Jarvis(perception=_YesPerception())
@@ -107,16 +104,13 @@ class _CompanionReader:
 
 
 class TestCompanionChannel:
-    def test_talking_teaches_jarvis_about_the_companion(self) -> None:
+    def test_talking_does_not_teach_without_an_explicit_memory_request(self) -> None:
         jarvis = Jarvis()
         jarvis.set_companion_perception(_CompanionReader())
         result = handle(jarvis, "say", {"text": "I went hiking this weekend"})
-        # The reply acknowledges what it learned, and the snapshot shows the trait.
-        assert "likes hiking" in str(result["reply"])
-        assert result["learned"] == ["likes hiking"]
+        assert "learned" not in result
         state = cast("dict[str, object]", result["state"])
-        companion = cast("list[dict[str, object]]", state["companion"])
-        assert any(row["statement"] == "likes hiking" for row in companion)
+        assert cast("list[dict[str, object]]", state["companion"]) == []
 
     def test_default_jarvis_learns_nothing_and_reply_is_unchanged(self) -> None:
         result = handle(Jarvis(), "say", {"text": "hola jarvis"})
@@ -181,9 +175,8 @@ class TestGreeting:
     def test_greeting_shifts_once_it_knows_you(self) -> None:
         jarvis = Jarvis()
         jarvis.set_companion_perception(_CompanionReader())
-        handle(jarvis, "say", {"text": "I went hiking"})  # teach it something
+        handle(jarvis, "learn", {"text": "I went hiking"})
         result = handle(jarvis, "greeting", {})
-        # With something remembered, the default greeting acknowledges the return.
         assert "again" in str(result["reply"]).lower()
 
 
@@ -238,45 +231,22 @@ class TestStreamSay:
 
 
 class TestReasoning:
-    def test_say_carries_provenance_and_a_step_trace(self) -> None:
+    def test_say_keeps_internal_provenance_out_of_ordinary_conversation(self) -> None:
         jarvis = Jarvis(perception=_YesPerception())
         result = handle(jarvis, "say", {"text": "the deploy succeeded"})
-        prov = cast("dict[str, object]", result["provenance"])
-        assert isinstance(prov["confidence"], float)
-        supporting = cast("list[object]", prov["supporting"])
-        assert len(supporting) >= 1
-        first = cast("dict[str, object]", supporting[0])
-        assert set(first) == {"content", "source", "weight"}
-        trace = cast("list[object]", result["trace"])
-        # The episode must at least start and conclude, in order.
-        steps = [cast("dict[str, object]", s)["step"] for s in trace]
-        assert steps[0] == "started"
-        assert steps[-1] == "concluded"
+        assert result["provenance"] is None
+        assert result["trace"] == []
+        assert jarvis.beliefs.all_beliefs() == ()
+        assert jarvis.episodes.history() == ()
 
     def test_the_internal_working_label_never_leaks_to_the_user(self) -> None:
-        # Grounded and ungrounded replies must both name the subject in plain words,
-        # never the internal "Working conclusion about:" identity label.
-        grounded = handle(
-            Jarvis(perception=_YesPerception()), "say", {"text": "the build passed"}
-        )
-        assert "Working conclusion about" not in json.dumps(grounded)
-        prov = cast("dict[str, object]", grounded["provenance"])
-        assert prov["statement"] == "the build passed"
-        ungrounded = handle(Jarvis(), "say", {"text": "hola jarvis"})
-        assert "Working conclusion about" not in json.dumps(ungrounded)
-        assert str(ungrounded["reply"]).strip() != ""  # a warm reply, and no leak
+        reply = handle(Jarvis(), "say", {"text": "hola jarvis"})
+        assert "Working conclusion about" not in json.dumps(reply)
+        assert str(reply["reply"]).strip() != ""
 
-    def test_ungrounded_say_still_returns_a_trace_and_empty_grounds(self) -> None:
-        # With no evidence Jarvis still forms an (empty) working belief and concludes
-        # honestly — the panel shows a real trace with no grounds, not a fabrication.
-        result = handle(Jarvis(), "say", {"text": "zxqw"})
-        prov = cast("dict[str, object]", result["provenance"])
-        assert prov["supporting"] == []
-        assert isinstance(result["trace"], list)
-
-    def test_explain_returns_the_grounds_for_a_held_belief(self) -> None:
+    def test_explain_returns_the_grounds_for_explicit_cognition(self) -> None:
         jarvis = Jarvis(perception=_YesPerception())
-        handle(jarvis, "say", {"text": "coffee helps me focus"})
+        jarvis.perceive("coffee helps me focus")
         result = handle(jarvis, "explain", {"topic": "coffee helps me focus"})
         prov = result["provenance"]
         assert isinstance(prov, dict)
