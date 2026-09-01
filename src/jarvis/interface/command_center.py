@@ -30,6 +30,7 @@ from jarvis.domain.conversation.intent import (
 )
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.action_stance import ActionStance
+from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -115,6 +116,12 @@ def snapshot(jarvis: Jarvis) -> Reply:
         "actions": [
             {"description": a.description, "confidence": a.confidence, "stance": a.stance.name}
             for a in summary.learned_actions
+        ],
+        "capabilities": [
+            {"name": name, "status": status} for name, status in summary.capabilities
+        ],
+        "needs": [
+            {"statement": s, "confidence": c} for s, c in summary.capability_needs
         ],
     }
 
@@ -780,6 +787,133 @@ def _external_search_reply(docs: tuple[RetrievedDocument, ...]) -> str:
     return "Search results:\n" + "\n".join(parts)
 
 
+def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Give Jarvis tools to grow — scout, propose, and acquire capabilities
+    (Odysseus, Vision §34, §28).
+
+    Actions: ``scout`` (recognise a need and propose candidates for it),
+    ``acquire`` (mark a proposed capability as now-available), ``reject``
+    (decline a proposal so it is not re-proposed), ``list`` (what Jarvis
+    proposes/has), and ``recommend``/``stance`` (the evidence-derived stance on
+    acquiring a named capability). Acquisition is deliberate and earned; the
+    surface only ever *suggests* via the derived stance.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    name = str(payload.get("name", "")).strip()
+    statement = str(payload.get("statement", "")).strip()
+    rationale = str(payload.get("rationale", "")).strip()
+
+    if not action:
+        capabilities = jarvis.capabilities()
+        if not capabilities:
+            return {
+                "reply": "I have no proposed or acquired capabilities yet — tell me "
+                "a capability you think I'd grow from and I'll scout for it.",
+                "speak": False,
+            }
+        lines = [
+            f"- {c.name} ({c.status.value})" for c in capabilities
+        ]
+        reply = "Capabilities I know of:\n" + "\n".join(lines)
+        recommendations = {c.name: jarvis.capability_stance(c.name).value for c in capabilities}
+        return {"reply": reply, "speak": False, "recommendations": recommendations}
+
+    if action == "list":
+        capabilities = jarvis.capabilities()
+        if not capabilities:
+            return {"reply": "No capabilities proposed or acquired yet.", "speak": False}
+        lines = [f"- {c.name} ({c.status.value})" for c in capabilities]
+        return {
+            "reply": "Capabilities I know of:\n" + "\n".join(lines),
+            "speak": False,
+            "recommendations": {
+                c.name: jarvis.capability_stance(c.name).value for c in capabilities
+            },
+        }
+
+    if action == "scout":
+        if not statement:
+            return {
+                "reply": "Tell me the capability you'd like (e.g. 'search the web').",
+                "speak": False,
+            }
+        candidates = jarvis.need_capability(statement, rationale or statement)
+        if not candidates:
+            return {
+                "reply": f"I don't yet see a candidate in my toolkit for '{statement}'.",
+                "speak": False,
+            }
+        # Persist the proposals so the companion can later acquire or reject them
+        # without re-scouting (repeated needs are recognised, not re-proposed).
+        for candidate in candidates:
+            jarvis.remember_capability(candidate)
+        proposals = [c for c in candidates if c.status is CapabilityStatus.PROPOSED]
+        lines = [f"- {c.name}" for c in candidates]
+        reply = (
+            f"I could grow the ability to '{statement}' by:\n" + "\n".join(lines)
+        )
+        recommendation = (
+            jarvis.capability_stance(proposals[0].name)
+            if proposals
+            else None
+        )
+        return {
+            "reply": reply,
+            "speak": False,
+            "capabilities": [
+                {"name": c.name, "status": c.status.value} for c in candidates
+            ],
+            "recommendation": (
+                recommendation.value if recommendation is not None else None
+            ),
+        }
+
+    if action == "recommend":
+        if not name:
+            return {"reply": "Name a capability to recommend on.", "speak": False}
+        recommendation = jarvis.recommend_capability(name)
+        return {
+            "reply": recommendation.rationale,
+            "speak": False,
+            "stance": recommendation.stance.value,
+            "confidence": recommendation.confidence.value,
+        }
+
+    if action == "acquire":
+        if not name:
+            return {"reply": "Name a capability to acquire.", "speak": False}
+        acquired = jarvis.acquire_capability(name)
+        if acquired is None:
+            return {
+                "reply": f"I haven't proposed '{name}' — scout it first.",
+                "speak": False,
+            }
+        return {
+            "reply": (
+                f"Understood — I now consider '{name}' acquired as a capability."
+            ),
+            "speak": False,
+            "capability": {"name": acquired.name, "status": acquired.status.value},
+        }
+
+    if action == "reject":
+        if not name:
+            return {"reply": "Name a capability to reject.", "speak": False}
+        rejected = jarvis.reject_capability(name)
+        if rejected is None:
+            return {
+                "reply": f"I haven't proposed '{name}' — scout it first.",
+                "speak": False,
+            }
+        return {
+            "reply": f"Declined — I won't re-propose '{name}'.",
+            "speak": False,
+            "capability": {"name": rejected.name, "status": rejected.status.value},
+        }
+
+    return {"reply": "Unknown capability action.", "speak": False}
+
+
 _COMMANDS: dict[str, Command] = {
     "say": _say,
     "explain": _explain,
@@ -793,6 +927,7 @@ _COMMANDS: dict[str, Command] = {
     "greeting": _greeting,
     "state": _state,
     "external": _external,
+    "capability": _capability,
 }
 
 

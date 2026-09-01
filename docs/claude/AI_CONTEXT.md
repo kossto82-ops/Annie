@@ -96,12 +96,16 @@ Curiosity can trigger the cycle.
 
 ## Odysseus (capability acquisition)
 
-Odysseus lets Jarvis recognise and propose new capabilities (Vision §34). Phase 1 is the
-core model + scout: a `CapabilityNeed` (a recognised gap) is matched by `capability_scout`
-against a deterministic catalog to propose `Capability` candidates. It only *proposes*;
-acquiring/rejecting is a deliberate, separate step (autonomy is earned, Vision §28), and
-the capability itself stays an injectable provider at the edge (D7). A `CapabilityRepository`
-(domain Protocol; in-memory + JSON stores) persists proposals/acquisitions.
+Odysseus lets Jarvis recognise and grow new capabilities (Vision §34). A recognised gap
+becomes a *need belief* ("I need the ability to …") whose confidence is derived from evidence
+(never asserted, §8); `capability_scout` matches it against a deterministic catalog to
+propose `Capability` candidates. The evaluator then derives a stance -- suggest / ask first /
+withhold (Vision §28) -- and curiosity closes the loop: a confident, unmet need raises a
+`CuriosityImpulse` that `pursue` turns into an acquisition. It only *proposes*/suggests;
+acquiring/rejecting is a deliberate, separate step (autonomy is earned, Vision §28), and the
+capability itself stays an injectable provider at the edge (D7). `CapabilityRepository` +
+need `BeliefRepository` (domain Protocols; in-memory + JSON stores) persist proposals and
+needs; `state_summary` and the Command Center `capability` command surface both.
 
 ## Current state snapshot
 
@@ -115,7 +119,8 @@ the capability itself stays an injectable provider at the edge (D7). A `Capabili
 - Command Center: implemented.
 - Speech mouth synchronisation: implemented.
 - Reasoning/provenance visualisation: a strong next refinement, not a permanent requirement.
-- Odysseus (capability acquisition): core model + scout implemented; evaluation/integration remaining.
+- Odysseus (capability acquisition): core model + scout, evidence-grounded evaluation, and
+  curiosity/surface integration implemented.
 
 ## Known technical debt / future directions
 

@@ -15,6 +15,7 @@ from typing import cast
 import pytest
 
 from jarvis import Jarvis
+from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.perception.perception_source import PerceptionSource
@@ -473,6 +474,51 @@ class TestExternal:
         result = handle(Jarvis(), "external", {})
         assert isinstance(result["reply"], str)
         assert "read" in result["reply"]
+
+
+class TestCapabilityCommand:
+    def test_scout_proposes_and_remembers_candidates(self) -> None:
+        jarvis = Jarvis()
+        result = handle(
+            jarvis,
+            "capability",
+            {"action": "scout", "statement": "search the web for current news"},
+        )
+        assert isinstance(result["reply"], str)
+        assert "search the web" in result["reply"]
+        assert jarvis.capabilities()  # proposals persisted for later acquire
+
+    def test_scout_with_no_match_is_honest(self) -> None:
+        result = handle(
+            Jarvis(),
+            "capability",
+            {"action": "scout", "statement": "compose symphonies"},
+        )
+        assert isinstance(result["reply"], str)
+        assert "see a candidate" in result["reply"].lower()
+
+    def test_acquiring_after_scout_updates_the_store(self) -> None:
+        jarvis = Jarvis()
+        handle(jarvis, "capability", {"action": "scout", "statement": "search the web"})
+        result = handle(jarvis, "capability", {"action": "acquire", "name": "search the web"})
+        assert isinstance(result["reply"], str)
+        assert "acquired" in result["reply"]
+        assert any(
+            capability.status is CapabilityStatus.ACQUIRED
+            for capability in jarvis.capabilities()
+        )
+
+    def test_recommend_reports_a_derived_stance(self) -> None:
+        jarvis = Jarvis()
+        handle(jarvis, "capability", {"action": "scout", "statement": "search the web"})
+        result = handle(jarvis, "capability", {"action": "recommend", "name": "search the web"})
+        assert "stance" in result
+        assert isinstance(result["stance"], str)
+
+    def test_an_unknown_capability_action_is_answered_kindly(self) -> None:
+        result = handle(Jarvis(), "capability", {"action": "teleport"})
+        assert isinstance(result["reply"], str)
+        assert "unknown" in result["reply"].lower()
 
 
 class TestRoute:

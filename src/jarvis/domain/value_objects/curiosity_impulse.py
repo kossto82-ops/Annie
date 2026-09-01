@@ -29,3 +29,7 @@ class CuriosityImpulse:
     # when it was raised from an un-mined pattern in the belief web. When set,
     # pursuing the impulse runs the reflective cycle. None for other impulses.
     reflect_on: str | None = None
+    # The capability this impulse wants Jarvis to acquire (Odysseus, Vision §34),
+    # when it was raised from a confidently-needed, not-yet-acquired capability.
+    # When set, pursuing the impulse marks that capability acquired. None otherwise.
+    capability_to_acquire: str | None = None

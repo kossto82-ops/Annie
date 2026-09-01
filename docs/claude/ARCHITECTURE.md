@@ -121,20 +121,25 @@ Act / recommend verification
 
 ## Odysseus (capability acquisition)
 
-Odysseus is the mechanism by which Jarvis recognises and proposes new *capabilities* --
-extensions of its ability to act (Vision §34). It is Phase 1 as of this increment: core
-model + scout (discovery); evaluation against evidence and integration are later phases.
+Odysseus is the mechanism by which Jarvis recognises and grows new *capabilities* --
+extensions of its ability to act (Vision §34). Phase 1 delivered the core model + scout
+(discovery); Phase 2 grounds recognition in evidence and wires acquisition into curiosity
+and the surfaces.
 
 The flow:
 
 ```text
-CapabilityNeed (a recognised gap)
+recognise_need  (a need becomes a belief, confidence derived from evidence, §8)
         ↓
 capability_scout
         ↓
-Capability proposals (PROPOSED)
+Capability proposals (PROPOSED), persisted
         ↓
-remember / evaluate / acquire or reject
+capability_evaluator  (derived stance: suggest / ask first / withhold, §28)
+        ↓
+feel_curious → pursue  (a confident unmet need raises an acquisition impulse)
+        ↓
+acquire or reject (deliberate; autonomy is earned, Vision §28)
 ```
 
 Boundaries:
@@ -142,15 +147,24 @@ Boundaries:
 - The scout is an evidence *producer* only: it pairs a need with plausible candidates from
   a deterministic catalog (keyword-matched capability templates). It decides nothing
   (Vision §32).
-- A `Capability` is bookkeeping of what Jarvis *can* do; the capability itself is always an
+- A ``Capability`` is bookkeeping of what Jarvis *can* do; the capability itself is always an
   injectable, provider-agnostic capability at the edge (D7). No cognition lives inside a
   capability.
+- A recognised need is an ordinary *belief* (``"I need the ability to …"``) whose confidence
+  is derived from evidence (Vision §8) -- never asserted. ``capability_evaluator.recommend``
+  mirrors ``action_advisor`` (Vision §28): it *suggests* acquisition only when the need is
+  confident and the capability is not yet held; it withholds when contracted; otherwise it
+  asks first. It only recommends, it acquires nothing.
 - Acquiring (`CapabilityStatus.ACQUIRED`) and rejecting (`REJECTED`) are deliberate, separate
-  steps -- autonomy is earned (Vision §28). Phase 1 implements proposing, remembering, and the
-  status bookkeeping; evidence-grounded evaluation is a later phase.
+  steps -- autonomy is earned (Vision §28).
+- Curiosity closes the loop: a confidently-needed, unavailable capability raises a
+  ``CuriosityImpulse`` naming it, and ``pursue`` marks it acquired (so growth is both earned
+  and acted on). ``state_summary`` and the Command Center ``capability`` command expose
+  capabilities and needs.
 
-Storage: `CapabilityRepository` (domain Protocol) with in-memory and JSON stores, wired into
-`Jarvis.persistent()` as `capabilities.json` so acquisitions survive a restart.
+Storage: `CapabilityRepository` and the need beliefs (`BeliefRepository`) are domain Protocols
+with in-memory and JSON stores, wired into `Jarvis.persistent()` as `capabilities.json` and
+`needs.json` so acquisitions and recognised needs survive a restart.
 
 ## LLM boundary
 

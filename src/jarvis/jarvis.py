@@ -15,6 +15,7 @@ from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.conversation.conversation_context import ConversationContext, Turn
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
@@ -31,6 +32,7 @@ from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSourc
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
+from jarvis.domain.services.capability_evaluator import recommend as recommend_capability
 from jarvis.domain.services.capability_scout import scout
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
@@ -46,6 +48,7 @@ from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.capability_need import CapabilityNeed
+from jarvis.domain.value_objects.capability_recommendation import CapabilityRecommendation
 from jarvis.domain.value_objects.challenge import Challenge
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
@@ -97,6 +100,11 @@ HELPFUL_COMPANION_TRAIT = "is helpful when I am stuck"
 # (mirrors the grounded threshold, D14) and has survived challenge.
 _INSIGHT_CONFIDENCE = 0.5
 
+# The internal identity prefix for a capability need belief (Odysseus). It
+# distinguishes a need from other belief kinds and keeps retrieval deterministic
+# (D17) -- but it is machine bookkeeping, never shown to the companion.
+_NEED_PREFIX = "I need the ability to: "
+
 
 class Jarvis:
     """A long-term cognitive companion (first vertical slice)."""
@@ -112,6 +120,7 @@ class Jarvis:
         goals_store: BeliefRepository | None = None,
         subgoals_store: BeliefRepository | None = None,
         capabilities_store: CapabilityRepository | None = None,
+        needs_store: BeliefRepository | None = None,
         perception: PerceptionSource | None = None,
         companion_perception: CompanionPerceptionSource | None = None,
         refutations_store: RefutationRepository | None = None,
@@ -139,6 +148,10 @@ class Jarvis:
         self._capabilities: CapabilityRepository = (
             capabilities_store or InMemoryCapabilityStore()
         )
+        # The *needs* behind capability acquisition (Odysseus). A need is an ordinary
+        # belief ("I need the ability to …") whose confidence is derived from evidence
+        # (Vision §3, §8), so whether to acquire a capability is earned, not asserted.
+        self._needs: BeliefRepository = needs_store or InMemoryBeliefStore()
         self._perception: PerceptionSource = perception or KeywordPerception()
         # The relational channel (Vision §5): reads what the companion says into
         # observations about *them*. Silent by default (needs an LLM to read free
@@ -382,6 +395,98 @@ class Jarvis:
         need = CapabilityNeed(statement=statement, rationale=rationale)
         return scout(need)
 
+    def recognise_need(
+        self,
+        statement: str,
+        rationale: str,
+        evidence: Iterable[Evidence] | None = None,
+    ) -> tuple[Capability, ...]:
+        """Record, with evidence, that Jarvis needs a capability -- the first real
+        stage of acquisition (Odysseus, Vision §34, §3).
+
+        The need becomes an ordinary *belief* (``"I need the ability to …"``) whose
+        confidence is derived from the supplied evidence (Vision §8), so acquiring
+        a capability is earned rather than asserted. It then scouts candidates and
+        *persists* them, so a repeated need is recognised rather than re-proposed.
+        Returns the candidate capabilities (possibly empty when none match). The
+        need's own confidence is never set -- it is exactly as strong as its
+        evidence.
+        """
+        need_statement = self._need_statement(statement)
+        belief = self._needs.get_by_statement(need_statement) or Belief(
+            statement=need_statement
+        )
+        for piece in evidence or ():
+            belief.add_evidence(piece)
+        self._needs.save(belief)
+        for event in belief.pull_events():
+            self.nervous_system.publish(event)
+        self.nervous_system.dispatch()
+
+        need = CapabilityNeed(statement=statement, rationale=rationale)
+        candidates = scout(need)
+        for capability in candidates:
+            self._capabilities.save(capability)
+        return candidates
+
+    def capability_needs(self) -> tuple[tuple[str, Confidence], ...]:
+        """The capability needs Jarvis has recognised, with their *derived*
+        confidence, most-strongly-needed first (Odysseus, Vision §3, §8).
+
+        Each is a need belief ("I need the ability to …") whose confidence comes
+        from its evidence, not an assertion. Read-only.
+        """
+        needs = [
+            (belief.statement, belief.confidence)
+            for belief in self._needs.all_beliefs()
+        ]
+        needs.sort(key=lambda pair: pair[1].value, reverse=True)
+        return tuple(needs)
+
+    def recommend_capability(self, name: str) -> CapabilityRecommendation:
+        """Derive a stance toward acquiring the capability named ``name``
+        (Odysseus, Vision §28) -- the evaluation stage after the scout proposes.
+
+        The stance comes from the derived confidence of the need behind it and
+        whether Jarvis already has it (mirrors action learning): suggest only a
+        confidently-needed, unavailable capability; ask first when uncertain or
+        already available; withhold one whose need is contradicted. It only
+        recommends -- it acquires nothing.
+        """
+        need = self._need_for_capability(name)
+        capability = self._capabilities.get_by_name(name)
+        return recommend_capability(need, capability)
+
+    def _need_for_capability(self, capability_name: str) -> Belief | None:
+        """The need belief bearing on a named capability, if Jarvis recorded one.
+
+        Needs are keyed by their statement; this asks the one that most plausibly
+        names the capability's work. Best effort: it looks for any recorded need
+        whose plain-text subject mentions ``capability_name``, else None.
+        """
+        prefix = _NEED_PREFIX
+        candidates = self._needs.all_beliefs()
+        if not candidates:
+            return None
+        # The capability's own name usually appears in the need's plain subject.
+        for belief in candidates:
+            subject = belief.statement[len(prefix) :] if belief.statement.startswith(
+                prefix
+            ) else belief.statement
+            if capability_name.lower() in subject.lower():
+                return belief
+        # Fall back to the most confident need as the best available grounds.
+        return max(candidates, key=lambda b: b.confidence.value)
+
+    def capability_stance(self, name: str) -> CapabilityStance:
+        """The recommended stance toward acquiring ``name`` (Odysseus, Vision §28).
+
+        A lightweight shorthand over :meth:`recommend_capability` for the surface.
+        """
+        return recommend_capability(
+            self._need_for_capability(name), self._capabilities.get_by_name(name)
+        ).stance
+
     def acquire_capability(self, name: str) -> Capability | None:
         """Mark a previously-proposed capability as acquired (Odysseus, Vision §28).
 
@@ -427,6 +532,10 @@ class Jarvis:
         """
         return self._capabilities.all_capabilities()
 
+    @staticmethod
+    def _need_statement(statement: str) -> str:
+        return f"{_NEED_PREFIX}{statement}"
+
     @classmethod
     def persistent(
         cls,
@@ -436,7 +545,8 @@ class Jarvis:
         """A Jarvis whose whole memory lives on disk under one directory.
 
         Wires every store -- beliefs, episodes, companion model, action learning,
-        reversibility, goal reachability, sub-goal links and reflective-cycle
+        reversibility, goal reachability, sub-goal links, capability acquisitions
+        (Odysseus), recognised capability needs and reflective-cycle
         refutations -- plus the decision-provenance trace to files under
         ``directory``, so a single call gives full continuity across restarts
         (Vision §3, §21, §26). It composes the JSON stores and the JSONL trace log.
@@ -451,6 +561,7 @@ class Jarvis:
             goals_store=JsonBeliefStore(base / "goals.json"),
             subgoals_store=JsonBeliefStore(base / "subgoals.json"),
             capabilities_store=JsonCapabilityStore(base / "capabilities.json"),
+            needs_store=JsonBeliefStore(base / "needs.json"),
             refutations_store=JsonRefutationStore(base / "refutations.json"),
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
             weighting_policy=weighting_policy,
@@ -710,6 +821,16 @@ class Jarvis:
                     f"{self._reachability_note(goal)}{self._progress_note(goal)}"
                 )
 
+        acquired = [
+            capability
+            for capability in self._capabilities.all_capabilities()
+            if capability.status.value == "acquired"
+        ]
+        if acquired:
+            lines.append("What I can now do:")
+            for capability in acquired:
+                lines.append(f"  - {capability.description}")
+
         episodes = len(self.episodes.history())
         lines.append(
             f"This rests on {episodes} past episode(s); everything here is "
@@ -744,6 +865,14 @@ class Jarvis:
             ),
             recurring_goals=self.recurring_goals(),
             energy_spent=self._energy_spent,
+            capabilities=tuple(
+                (capability.name, capability.status.value)
+                for capability in self._capabilities.all_capabilities()
+            ),
+            capability_needs=tuple(
+                (statement.removeprefix(_NEED_PREFIX), confidence.value)
+                for statement, confidence in self.capability_needs()
+            ),
         )
 
     def _summarise_action(self, statement: str, confidence: float) -> LearnedAction:
@@ -856,6 +985,31 @@ class Jarvis:
                         trigger=f"Why do I keep returning to: {goal}?",
                         rationale=f'I have pursued the goal "{goal}" {count} times',
                         goal=goal,
+                    )
+
+        # A capability Jarvis confidently needs but does not yet have is a growth
+        # worth acting on (Odysseus, Vision §34, §28): the need is *earned* by
+        # evidence, not a random want, so pursuing it acquires a real tool. The
+        # evaluator's SUGGEST stance already encodes "confidently needed, not yet
+        # held", so this reuses the derived recommendation rather than re-deciding.
+        for need_statement, confidence in self.capability_needs():
+            if confidence.value < _INSIGHT_CONFIDENCE:
+                continue
+            need = self._needs.get_by_statement(need_statement)
+            for capability in self._capabilities.all_capabilities():
+                if (
+                    recommend_capability(need, capability).stance
+                    is CapabilityStance.SUGGEST
+                ):
+                    subject = need_statement.removeprefix(_NEED_PREFIX)
+                    return CuriosityImpulse(
+                        trigger=f"Acquire the capability to: {subject}",
+                        rationale=(
+                            f'I need "{subject}" (need confidence '
+                            f"{confidence.value:.2f}) and do not have "
+                            f"'{capability.name}' yet"
+                        ),
+                        capability_to_acquire=capability.name,
                     )
         return None
 
@@ -1145,6 +1299,8 @@ class Jarvis:
         """
         if impulse.reflect_on is not None:
             self.reflect_cycle()
+        if impulse.capability_to_acquire is not None:
+            self.acquire_capability(impulse.capability_to_acquire)
         goal = Goal(statement=impulse.goal) if impulse.goal is not None else None
         episode = CognitiveEpisode(
             trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY, goal=goal

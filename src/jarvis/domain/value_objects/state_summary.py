@@ -37,3 +37,5 @@ class StateSummary:
     learned_actions: tuple[LearnedAction, ...]  # action learning + its stance
     recurring_goals: tuple[tuple[str, int], ...]  # goals kept returning to, with counts
     energy_spent: int  # total cognitive energy spent so far (Vision §15)
+    capabilities: tuple[tuple[str, str], ...] = ()  # (name, status) -- what Jarvis has
+    capability_needs: tuple[Scored, ...] = ()  # recognised needs (Odysseus), with confidence
