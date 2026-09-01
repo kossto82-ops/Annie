@@ -94,6 +94,15 @@ The cycle is evidence-grounded, revisable, auditable, and implemented inside the
 
 Curiosity can trigger the cycle.
 
+## Odysseus (capability acquisition)
+
+Odysseus lets Jarvis recognise and propose new capabilities (Vision §34). Phase 1 is the
+core model + scout: a `CapabilityNeed` (a recognised gap) is matched by `capability_scout`
+against a deterministic catalog to propose `Capability` candidates. It only *proposes*;
+acquiring/rejecting is a deliberate, separate step (autonomy is earned, Vision §28), and
+the capability itself stays an injectable provider at the edge (D7). A `CapabilityRepository`
+(domain Protocol; in-memory + JSON stores) persists proposals/acquisitions.
+
 ## Current state snapshot
 
 - Reflective cycle: implemented.
@@ -106,6 +115,7 @@ Curiosity can trigger the cycle.
 - Command Center: implemented.
 - Speech mouth synchronisation: implemented.
 - Reasoning/provenance visualisation: a strong next refinement, not a permanent requirement.
+- Odysseus (capability acquisition): core model + scout implemented; evaluation/integration remaining.
 
 ## Known technical debt / future directions
 

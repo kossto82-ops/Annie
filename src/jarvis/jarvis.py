@@ -24,12 +24,14 @@ from jarvis.domain.perception.companion_perception import CompanionPerceptionSou
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.repositories.belief_repository import BeliefRepository
+from jarvis.domain.repositories.capability_repository import CapabilityRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
 from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
+from jarvis.domain.services.capability_scout import scout
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
@@ -42,6 +44,8 @@ from jarvis.domain.services.self_observation import (
 )
 from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
+from jarvis.domain.value_objects.capability import Capability
+from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.challenge import Challenge
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
@@ -64,9 +68,11 @@ from jarvis.executive.executive_controller import (
 from jarvis.infrastructure.agent_reach_source import build_agent_reach_source
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
+from jarvis.infrastructure.in_memory_capability_store import InMemoryCapabilityStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.in_memory_refutation_store import InMemoryRefutationStore
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
+from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
@@ -105,6 +111,7 @@ class Jarvis:
         reversibility_store: BeliefRepository | None = None,
         goals_store: BeliefRepository | None = None,
         subgoals_store: BeliefRepository | None = None,
+        capabilities_store: CapabilityRepository | None = None,
         perception: PerceptionSource | None = None,
         companion_perception: CompanionPerceptionSource | None = None,
         refutations_store: RefutationRepository | None = None,
@@ -126,6 +133,12 @@ class Jarvis:
         )
         self._goals: BeliefRepository = goals_store or InMemoryBeliefStore()
         self._subgoals: BeliefRepository = subgoals_store or InMemoryBeliefStore()
+        # Odysseus (capability acquisition): candidate and acquired capabilities.
+        # In-memory by default; a durable JSON store is wired by `persistent()` so
+        # proposed/acquired capabilities survive a restart.
+        self._capabilities: CapabilityRepository = (
+            capabilities_store or InMemoryCapabilityStore()
+        )
         self._perception: PerceptionSource = perception or KeywordPerception()
         # The relational channel (Vision §5): reads what the companion says into
         # observations about *them*. Silent by default (needs an LLM to read free
@@ -354,6 +367,66 @@ class Jarvis:
             return ()
         return self._external_source.available_channels()
 
+    # -- Odysseus: capability acquisition (Vision §34, §28) -------------------
+
+    def need_capability(self, statement: str, rationale: str) -> tuple[Capability, ...]:
+        """Recognise a capability gap and scout candidate ways to fill it
+        (Odysseus, Vision §34).
+
+        Given what Jarvis wants to do (``statement``) and why it matters
+        (``rationale``), this proposes candidate capabilities drawn from what
+        Jarvis could acquire. It only *proposes* -- none is pursued or adopted,
+        and autonomy stays earned (Vision §28). A need that matches no candidate
+        yields an empty tuple, an honest "no candidate yet".
+        """
+        need = CapabilityNeed(statement=statement, rationale=rationale)
+        return scout(need)
+
+    def acquire_capability(self, name: str) -> Capability | None:
+        """Mark a previously-proposed capability as acquired (Odysseus, Vision §28).
+
+        Advertises that Jarvis now has the capability named ``name`` in its
+        capability store. Returns the updated capability, or None when Jarvis has
+        not proposed anything by that name. This is bookkeeping of what Jarvis
+        *can* do -- it is not the capability itself, which must remain an
+        injectable capability provider at the edge (D7).
+        """
+        current = self._capabilities.get_by_name(name)
+        if current is None:
+            return None
+        acquired = current.mark_acquired()
+        self._capabilities.save(acquired)
+        return acquired
+
+    def reject_capability(self, name: str) -> Capability | None:
+        """Mark a proposed capability as rejected (Odysseus, Vision §28).
+
+        Record that Jarvis evaluated ``name`` and declined it, so the scout will
+        not keep re-proposing the same idea. Returns the updated capability, or
+        None when Jarvis has not proposed anything by that name.
+        """
+        current = self._capabilities.get_by_name(name)
+        if current is None:
+            return None
+        rejected = current.mark_rejected()
+        self._capabilities.save(rejected)
+        return rejected
+
+    def remember_capability(self, capability: Capability) -> None:
+        """Persist a proposed capability so it is not re-discovered from scratch.
+
+        Stores ``capability`` in the capability store (used by the surface / a
+        caller to record a scout result for continuity), so a repeated need is
+        recognised rather than re-proposed. No acquisition happens here.
+        """
+        self._capabilities.save(capability)
+
+    def capabilities(self) -> tuple[Capability, ...]:
+        """Every capability Jarvis has proposed or acquired, for the surface to
+        report what it can do (Vision §34). Read-only.
+        """
+        return self._capabilities.all_capabilities()
+
     @classmethod
     def persistent(
         cls,
@@ -377,6 +450,7 @@ class Jarvis:
             reversibility_store=JsonBeliefStore(base / "reversibility.json"),
             goals_store=JsonBeliefStore(base / "goals.json"),
             subgoals_store=JsonBeliefStore(base / "subgoals.json"),
+            capabilities_store=JsonCapabilityStore(base / "capabilities.json"),
             refutations_store=JsonRefutationStore(base / "refutations.json"),
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
             weighting_policy=weighting_policy,

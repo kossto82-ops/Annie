@@ -5,15 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
+from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 
 
@@ -55,6 +58,25 @@ class TestBeliefStore:
         reloaded = JsonBeliefStore(path).get_by_statement("x")
         assert reloaded is not None
         assert len(reloaded.explain().contradicting) == 1
+
+
+class TestCapabilityStore:
+    def test_a_capability_survives_a_reload_with_its_status(self, tmp_path: Path) -> None:
+        path = tmp_path / "capabilities.json"
+        capability = Capability(
+            name="search the web",
+            description="search the Internet",
+            requirement="an Internet source",
+            provenance="met a need",
+            status=CapabilityStatus.ACQUIRED,
+        )
+        JsonCapabilityStore(path).save(capability)
+
+        reloaded = JsonCapabilityStore(path).get_by_name("search the web")
+        assert reloaded is not None
+        assert reloaded.id == capability.id
+        assert reloaded.status is CapabilityStatus.ACQUIRED
+        assert reloaded.requirement == "an Internet source"
 
 
 class TestEpisodeStore:

@@ -20,6 +20,7 @@
                     │ Beliefs / Hypotheses        │
                     │ Reflection / Curiosity      │
                     │ Goals / Actions              │
+                    │ Capabilities (Odysseus)      │
                     │ Domain Events                │
                     └──────────────┬──────────────┘
                                    │ protocols
@@ -117,6 +118,39 @@ Learn
    ↓
 Act / recommend verification
 ```
+
+## Odysseus (capability acquisition)
+
+Odysseus is the mechanism by which Jarvis recognises and proposes new *capabilities* --
+extensions of its ability to act (Vision §34). It is Phase 1 as of this increment: core
+model + scout (discovery); evaluation against evidence and integration are later phases.
+
+The flow:
+
+```text
+CapabilityNeed (a recognised gap)
+        ↓
+capability_scout
+        ↓
+Capability proposals (PROPOSED)
+        ↓
+remember / evaluate / acquire or reject
+```
+
+Boundaries:
+
+- The scout is an evidence *producer* only: it pairs a need with plausible candidates from
+  a deterministic catalog (keyword-matched capability templates). It decides nothing
+  (Vision §32).
+- A `Capability` is bookkeeping of what Jarvis *can* do; the capability itself is always an
+  injectable, provider-agnostic capability at the edge (D7). No cognition lives inside a
+  capability.
+- Acquiring (`CapabilityStatus.ACQUIRED`) and rejecting (`REJECTED`) are deliberate, separate
+  steps -- autonomy is earned (Vision §28). Phase 1 implements proposing, remembering, and the
+  status bookkeeping; evidence-grounded evaluation is a later phase.
+
+Storage: `CapabilityRepository` (domain Protocol) with in-memory and JSON stores, wired into
+`Jarvis.persistent()` as `capabilities.json` so acquisitions survive a restart.
 
 ## LLM boundary
 
