@@ -16,6 +16,7 @@ from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.conversation.conversation_context import ConversationContext, Turn
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.capability_stance import CapabilityStance
+from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
@@ -69,6 +70,10 @@ from jarvis.executive.executive_controller import (
     working_statement,
 )
 from jarvis.infrastructure.agent_reach_source import build_agent_reach_source
+from jarvis.infrastructure.capability_registry import (
+    CapabilityRegistry,
+    build_default_registry,
+)
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_capability_store import InMemoryCapabilityStore
@@ -131,6 +136,7 @@ class Jarvis:
         trace: EpisodeTraceSink | None = None,
         weighting_policy: EvidenceWeightingPolicy | None = None,
         external_source: ExternalSource | None = None,
+        capability_providers: CapabilityRegistry | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -169,6 +175,14 @@ class Jarvis:
         # only retrieves documents with provenance; the core still interprets and
         # reasons over them.
         self._external_source: ExternalSource | None = external_source
+        # The live edge of Odysseus (D7): which acquired capability names are backed
+        # by a real provider. When no registry is given, the wired ExternalSource
+        # backs the web capabilities by default; None with no source -> offline.
+        self._external_providers_auto = capability_providers is None
+        if capability_providers is not None:
+            self._capability_providers: CapabilityRegistry | None = capability_providers
+        else:
+            self._capability_providers = build_default_registry(external_source)
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
         self._refutations: RefutationRepository = (
@@ -343,8 +357,12 @@ class Jarvis:
         ``None`` disables it: Jarvis simply stays offline. Setting one only changes
         what Jarvis *can* fetch -- it does not change how Jarvis reasons or how often
         it chooses to look outside (that stays a deliberate, explicit decision).
+        When a caller did not supply an explicit provider registry, the default
+        registry (the web capabilities backed by this source) follows along.
         """
         self._external_source = source
+        if self._external_providers_auto:
+            self._capability_providers = build_default_registry(source)
 
     def read_external(self, url: str) -> RetrievedDocument:
         """Fetch one external document by ``url`` through the Internet capability.
@@ -532,6 +550,38 @@ class Jarvis:
         """
         return self._capabilities.all_capabilities()
 
+    def can_do(self, capability: str) -> bool:
+        """Whether Jarvis can actually do ``capability`` right now (Odysseus, D7).
+
+        ``True`` only when the capability is *acquired* (bookkeeping) *and* a
+        ready edge provider backs it (the live side). A capability that is merely
+        proposed, rejected, or unwired reads as not doable -- so the surfaces say
+        honestly "I can't use it yet" instead of pretending.
+        """
+        current = self._capabilities.get_by_name(capability)
+        if current is None or current.status is not CapabilityStatus.ACQUIRED:
+            return False
+        provider = (
+            self._capability_providers.provider_for(capability)
+            if self._capability_providers is not None
+            else None
+        )
+        return provider is not None and provider.is_available()
+
+    def usable_capabilities(self) -> tuple[str, ...]:
+        """The capabilities Jarvis can actually use now, sorted by name.
+
+        Acquired capabilities with a ready backing provider (``can_do``), for the
+        surface to report what is genuinely live. Read-only.
+        """
+        return tuple(
+            sorted(
+                capability.name
+                for capability in self._capabilities.all_capabilities()
+                if self.can_do(capability.name)
+            )
+        )
+
     @staticmethod
     def _need_statement(statement: str) -> str:
         return f"{_NEED_PREFIX}{statement}"
@@ -552,6 +602,7 @@ class Jarvis:
         (Vision §3, §21, §26). It composes the JSON stores and the JSONL trace log.
         """
         base = Path(directory)
+        source = build_agent_reach_source()
         return cls(
             beliefs=JsonBeliefStore(base / "beliefs.json", weighting_policy),
             episodes=JsonEpisodeStore(base / "episodes.json"),
@@ -565,7 +616,8 @@ class Jarvis:
             refutations_store=JsonRefutationStore(base / "refutations.json"),
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
             weighting_policy=weighting_policy,
-            external_source=build_agent_reach_source(),
+            external_source=source,
+            capability_providers=build_default_registry(source),
         )
 
     def think(

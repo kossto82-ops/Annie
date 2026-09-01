@@ -101,11 +101,16 @@ becomes a *need belief* ("I need the ability to …") whose confidence is derive
 (never asserted, §8); `capability_scout` matches it against a deterministic catalog to
 propose `Capability` candidates. The evaluator then derives a stance -- suggest / ask first /
 withhold (Vision §28) -- and curiosity closes the loop: a confident, unmet need raises a
-`CuriosityImpulse` that `pursue` turns into an acquisition. It only *proposes*/suggests;
+`CuriosityImpulse` that `pursue` turns into an acquisition. Acquisition is *real*, not
+decorative: a `Capability` is bookkeeping, and its live side is a `CapabilityProvider` at the
+edge (D7) -- `Jarvis.can_do(name)` is true only when the capability is acquired *and* backed
+by a ready provider; the Internet command requires the earned capability, and `persistent()`
+backs the web capabilities with agent-reach. It only *proposes*/suggests;
 acquiring/rejecting is a deliberate, separate step (autonomy is earned, Vision §28), and the
 capability itself stays an injectable provider at the edge (D7). `CapabilityRepository` +
 need `BeliefRepository` (domain Protocols; in-memory + JSON stores) persist proposals and
-needs; `state_summary` and the Command Center `capability` command surface both.
+needs; `state_summary` and the Command Center `capability` command surface both, and the
+snapshot reports which acquisitions are live (`ready`).
 
 ## Current state snapshot
 
@@ -119,8 +124,8 @@ needs; `state_summary` and the Command Center `capability` command surface both.
 - Command Center: implemented.
 - Speech mouth synchronisation: implemented.
 - Reasoning/provenance visualisation: a strong next refinement, not a permanent requirement.
-- Odysseus (capability acquisition): core model + scout, evidence-grounded evaluation, and
-  curiosity/surface integration implemented.
+- Odysseus (capability acquisition): core model + scout, evidence-grounded evaluation,
+  curiosity/surface integration, and live edge providers backing acquisitions (D7) implemented.
 
 ## Known technical debt / future directions
 

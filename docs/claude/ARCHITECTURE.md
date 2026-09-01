@@ -161,6 +161,13 @@ Boundaries:
   ``CuriosityImpulse`` naming it, and ``pursue`` marks it acquired (so growth is both earned
   and acted on). ``state_summary`` and the Command Center ``capability`` command expose
   capabilities and needs.
+- A ``Capability`` is *bookkeeping*; the *live* side is a ``CapabilityProvider`` at the edge
+  (D7) -- a registry (`capability_registry.StaticCapabilityRegistry`) maps a capability name
+  to the concrete adapter that serves it. `Jarvis.can_do(name)` is true only when a
+  capability is *both* acquired and live-backed, so acquisition is real, not decorative: the
+  Internet command (`external` read/search) now requires the matching capability to be
+  earned, and the persistent edge (agent-reach) backs "search the web"/"read external
+  documents" by default.
 
 Storage: `CapabilityRepository` and the need beliefs (`BeliefRepository`) are domain Protocols
 with in-memory and JSON stores, wired into `Jarvis.persistent()` as `capabilities.json` and

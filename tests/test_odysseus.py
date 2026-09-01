@@ -18,6 +18,11 @@ from jarvis.domain.services.capability_scout import scout
 from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.infrastructure.capability_registry import (
+    ExternalSourceCapability,
+    StaticCapabilityRegistry,
+    build_default_registry,
+)
 
 
 def _confident_need_evidence() -> list[Evidence]:
@@ -226,3 +231,105 @@ class TestCapabilitiesInState:
         summary = jarvis.state_summary()
         assert ("search the web", "acquired") in summary.capabilities
         assert any("search the web" in statement for statement, _ in summary.capability_needs)
+
+
+class _OfflineSource:
+    """A stub ExternalSource (no network) for provider tests."""
+
+    def read(self, url: str) -> object:
+        return None
+
+    def search(self, query: str, *, limit: int = 5) -> tuple[object, ...]:
+        return ()
+
+    def available_channels(self) -> tuple[object, ...]:
+        return ()
+
+
+class _StubProvider:
+    """A ready CapabilityProvider serving a single named capability (offline)."""
+
+    def __init__(self, capability: str, available: bool = True) -> None:
+        self._capability = capability
+        self._available = available
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return self._available
+
+
+def _acquire(jarvis: Jarvis, name: str) -> None:
+    jarvis.remember_capability(jarvis.need_capability(name, "for growth")[0])
+    jarvis.acquire_capability(name)
+
+
+class TestCapabilityProviders:
+    def test_an_acquired_capability_without_a_provider_is_not_doable(self) -> None:
+        jarvis = Jarvis()
+        _acquire(jarvis, "search the web")
+        assert not jarvis.can_do("search the web")
+        assert jarvis.usable_capabilities() == ()
+
+    def test_an_acquired_backed_capability_is_doable(self) -> None:
+        source = _OfflineSource()
+        jarvis = Jarvis(
+            external_source=source,  # type: ignore[arg-type]
+            capability_providers=build_default_registry(source),  # type: ignore[arg-type]
+        )
+        _acquire(jarvis, "search the web")
+        assert jarvis.can_do("search the web")
+        assert jarvis.usable_capabilities() == ("search the web",)
+
+    def test_an_unacquired_capability_is_never_doable(self) -> None:
+        source = _OfflineSource()
+        jarvis = Jarvis(
+            external_source=source,  # type: ignore[arg-type]
+            capability_providers=build_default_registry(source),  # type: ignore[arg-type]
+        )
+        assert not jarvis.can_do("search the web")
+        assert jarvis.usable_capabilities() == ()
+
+    def test_an_unavailable_provider_is_not_doable(self) -> None:
+        registry = StaticCapabilityRegistry(
+            _by_name={"search the web": _StubProvider("search the web", available=False)}
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        _acquire(jarvis, "search the web")
+        assert not jarvis.can_do("search the web")
+        assert jarvis.usable_capabilities() == ()
+
+    def test_a_wired_source_auto_backs_the_web_capabilities(self) -> None:
+        source = _OfflineSource()
+        jarvis = Jarvis(external_source=source)  # type: ignore[arg-type]
+        _acquire(jarvis, "read external documents")
+        assert jarvis.can_do("read external documents")
+
+    def test_setting_a_source_at_runtime_rewires_the_default_registry(self) -> None:
+        jarvis = Jarvis()
+        _acquire(jarvis, "search the web")
+        assert not jarvis.can_do("search the web")
+        jarvis.set_external_source(_OfflineSource())  # type: ignore[arg-type]
+        assert jarvis.can_do("search the web")
+        jarvis.set_external_source(None)
+        assert not jarvis.can_do("search the web")
+
+    def test_an_explicit_registry_survives_set_external_source(self) -> None:
+        registry = StaticCapabilityRegistry(
+            _by_name={"search the web": _StubProvider("search the web")}
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        _acquire(jarvis, "search the web")
+        jarvis.set_external_source(_OfflineSource())  # type: ignore[arg-type]
+        assert jarvis.can_do("search the web")  # custom registry untouched
+
+    def test_build_default_registry_without_a_source_is_empty(self) -> None:
+        registry = build_default_registry(None)
+        assert registry.provider_for("search the web") is None
+
+    def test_external_source_capability_reports_service_and_availability(self) -> None:
+        provider = ExternalSourceCapability(_OfflineSource(), "read external documents")  # type: ignore[arg-type]
+        assert provider.capability == "read external documents"
+        assert provider.is_available()

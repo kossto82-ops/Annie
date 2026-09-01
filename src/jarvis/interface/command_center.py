@@ -123,6 +123,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
         "needs": [
             {"statement": s, "confidence": c} for s, c in summary.capability_needs
         ],
+        "ready": list(jarvis.usable_capabilities()),
     }
 
 
@@ -683,6 +684,42 @@ def _state(_jarvis: Jarvis, _payload: Reply) -> Reply:
     return {}
 
 
+# The Internet command (read/search) requires the matching Odysseus capability to
+# be *acquired and backed by a provider* -- using it is earned, not automatic.
+_EXTERNAL_CAPABILITIES = {
+    "read": "read external documents",
+    "search": "search the web",
+}
+
+
+def _external_not_ready(jarvis: Jarvis, capability: str) -> Reply:
+    """An honest decline when the Internet capability is not usable right now.
+
+    Distinguishes *not wired* (no provider at all -- Jarvis is simply offline)
+    from *not earned* (a provider exists but the capability is not yet acquired,
+    so using it is a growth the companion has not accepted). Both point forward
+    instead of pretending.
+    """
+    if jarvis.external_source is None:
+        return {
+            "reply": "No Internet capability is wired up right now — I can still think "
+            "and remember, I just can't fetch from the web (agent-reach isn't set up).",
+            "speak": False,
+        }
+    known = [c.name for c in jarvis.capabilities()]
+    if capability in known:
+        prompt = (
+            f"I've considered '{capability}' but haven't grown it yet — "
+            "use `capability acquire` to accept it."
+        )
+    else:
+        prompt = (
+            f"I could gain the '{capability}' capability to do that, but I haven't "
+            "proposed or earned it yet — use the `capability` command (scout → acquire)."
+        )
+    return {"reply": prompt, "speak": False}
+
+
 def _external(jarvis: Jarvis, payload: Reply) -> Reply:
     """Use the Internet capability: read, search, or report channels (Vision §38).
 
@@ -695,12 +732,8 @@ def _external(jarvis: Jarvis, payload: Reply) -> Reply:
     action = str(payload.get("action", "")).strip().lower()
     if not action:
         return {"reply": "Use external with action 'read', 'search' or 'channels'.", "speak": False}
-    if action in ("read", "search") and jarvis.external_source is None:
-        return {
-            "reply": "No Internet capability is wired up right now — I can still think "
-            "and remember, I just can't fetch from the web (agent-reach isn't set up).",
-            "speak": False,
-        }
+    if action in ("read", "search") and not jarvis.can_do(_EXTERNAL_CAPABILITIES[action]):
+        return _external_not_ready(jarvis, _EXTERNAL_CAPABILITIES[action])
     try:
         if action == "channels":
             channels = jarvis.internet_channels()
@@ -812,7 +845,8 @@ def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
                 "speak": False,
             }
         lines = [
-            f"- {c.name} ({c.status.value})" for c in capabilities
+            f"- {c.name} ({c.status.value}){_ready_marker(jarvis, c.name)}"
+            for c in capabilities
         ]
         reply = "Capabilities I know of:\n" + "\n".join(lines)
         recommendations = {c.name: jarvis.capability_stance(c.name).value for c in capabilities}
@@ -822,7 +856,10 @@ def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
         capabilities = jarvis.capabilities()
         if not capabilities:
             return {"reply": "No capabilities proposed or acquired yet.", "speak": False}
-        lines = [f"- {c.name} ({c.status.value})" for c in capabilities]
+        lines = [
+            f"- {c.name} ({c.status.value}){_ready_marker(jarvis, c.name)}"
+            for c in capabilities
+        ]
         return {
             "reply": "Capabilities I know of:\n" + "\n".join(lines),
             "speak": False,
@@ -912,6 +949,11 @@ def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
         }
 
     return {"reply": "Unknown capability action.", "speak": False}
+
+
+def _ready_marker(jarvis: Jarvis, capability: str) -> str:
+    """A concise "(ready)" taste when an acquired capability is live-backed."""
+    return " (ready)" if jarvis.can_do(capability) else ""
 
 
 _COMMANDS: dict[str, Command] = {

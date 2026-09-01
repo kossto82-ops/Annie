@@ -22,6 +22,7 @@ from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
+from jarvis.infrastructure.capability_registry import build_default_registry
 from jarvis.interface.command_center import handle, route, snapshot, stream_say
 
 
@@ -46,6 +47,7 @@ class TestSnapshot:
         assert state["self"] == []
         assert state["companion"] == []
         assert state["goals"] == []
+        assert state["ready"] == []
         energy = state["energy"]
         assert isinstance(energy, dict)
         assert energy["spent"] == 0
@@ -56,6 +58,12 @@ class TestSnapshot:
         energy = snapshot(jarvis)["energy"]
         assert isinstance(energy, dict)
         assert energy["remaining"] == 10
+
+    def test_ready_lists_acquired_capabilities_that_are_live_backed(self) -> None:
+        jarvis = _web_able_jarvis()
+        state = snapshot(jarvis)
+        assert isinstance(state["ready"], list)
+        assert "search the web" in state["ready"]
 
 
 class TestSay:
@@ -441,10 +449,25 @@ class _FakeExternalSource:
         return ()
 
 
+def _web_able_jarvis() -> Jarvis:
+    """A Jarvis that has *earned* the web capabilities: acquired + provider-backed."""
+    source = _FakeExternalSource()
+    jarvis = Jarvis(
+        external_source=source,  # type: ignore[arg-type]
+        capability_providers=build_default_registry(source),  # type: ignore[arg-type]
+    )
+    for name in ("read external documents", "search the web"):
+        candidate = jarvis.need_capability(name, "for outside information")[0]
+        jarvis.remember_capability(candidate)
+        jarvis.acquire_capability(name)
+    return jarvis
+
+
 class TestExternal:
     def test_read_returns_document_and_provenance(self) -> None:
-        jarvis = Jarvis(external_source=_FakeExternalSource())  # type: ignore[arg-type]
-        result = handle(jarvis, "external", {"action": "read", "url": "https://example.com"})
+        result = handle(
+            _web_able_jarvis(), "external", {"action": "read", "url": "https://example.com"}
+        )
         assert isinstance(result["reply"], str)
         assert "https://example.com" in result["reply"]
         assert result["source"] == "web"
@@ -454,16 +477,25 @@ class TestExternal:
         assert isinstance(result["reply"], str)
         assert "Internet capability" in result["reply"]
 
-    def test_failure_returns_a_message_not_a_crash(self) -> None:
+    def test_read_needs_the_capability_to_be_earned(self) -> None:
+        # A wired source alone is not enough: using the web capability is an
+        # acquisition the companion must accept first (Odysseus, D7).
         jarvis = Jarvis(external_source=_FakeExternalSource())  # type: ignore[arg-type]
+        result = handle(jarvis, "external", {"action": "read", "url": "https://a.com"})
+        assert isinstance(result["reply"], str)
+        assert "earn" in result["reply"].lower()
+
+    def test_failure_returns_a_message_not_a_crash(self) -> None:
         result = handle(
-            jarvis, "external", {"action": "read", "url": "https://example.com/fail"}
+            _web_able_jarvis(),
+            "external",
+            {"action": "read", "url": "https://example.com/fail"},
         )
         assert isinstance(result["reply"], str)
         assert "couldn't fetch" in result["reply"]
 
     def test_search_and_channels_work(self) -> None:
-        jarvis = Jarvis(external_source=_FakeExternalSource())  # type: ignore[arg-type]
+        jarvis = _web_able_jarvis()
         search = handle(jarvis, "external", {"action": "search", "query": "topic"})
         assert isinstance(search["reply"], str)
         assert "Search results" in search["reply"]
@@ -507,6 +539,17 @@ class TestCapabilityCommand:
             capability.status is CapabilityStatus.ACQUIRED
             for capability in jarvis.capabilities()
         )
+
+    def test_list_marks_backed_acquisitions_as_ready(self) -> None:
+        jarvis = _web_able_jarvis()
+        result = handle(jarvis, "capability", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        acquired = [
+            c for c in jarvis.capabilities()
+            if c.status is CapabilityStatus.ACQUIRED
+        ]
+        assert acquired
+        assert all("(ready)" in result["reply"] for c in acquired if jarvis.can_do(c.name))
 
     def test_recommend_reports_a_derived_stance(self) -> None:
         jarvis = Jarvis()

@@ -131,3 +131,15 @@ class TestPersistentFactory:
         jarvis = Jarvis.persistent(tmp_path / "fresh")
         assert jarvis.episodes.history() == ()
         assert jarvis.companion.beliefs() == ()
+
+    def test_acquired_capabilities_survive_restart_and_stay_backed(self, tmp_path: Path) -> None:
+        # Odysseus carries across restarts: an acquisition survives, and the
+        # persistent edge (agent-reach) keeps the web capability live-backed.
+        first = Jarvis.persistent(tmp_path)
+        candidate = first.need_capability("search the web", "for news")[0]
+        first.remember_capability(candidate)
+        first.acquire_capability("search the web")
+
+        second = Jarvis.persistent(tmp_path)
+        assert second.can_do("search the web")
+        assert "search the web" in second.usable_capabilities()
