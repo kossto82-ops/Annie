@@ -20,6 +20,7 @@ from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.interface.command_center import handle, route, snapshot, stream_say
 
 
@@ -414,6 +415,64 @@ class TestUnknownCommand:
         result = handle(Jarvis(), "does-not-exist", {})
         assert "error" in result
         assert "state" in result
+
+
+class _FakeExternalSource:
+    """A stub ExternalSource for command-center tests (no network)."""
+
+    def __init__(self) -> None:
+        self.doc = RetrievedDocument(
+            content="# Title\nbody text here",
+            source="web",
+            url="https://example.com",
+            title="Title",
+        )
+
+    def read(self, url: str) -> RetrievedDocument:
+        if "fail" in url:
+            raise RuntimeError("network down")
+        return self.doc
+
+    def search(self, query: str, *, limit: int = 5) -> tuple[RetrievedDocument, ...]:
+        return (self.doc,)
+
+    def available_channels(self) -> tuple[object, ...]:
+        return ()
+
+
+class TestExternal:
+    def test_read_returns_document_and_provenance(self) -> None:
+        jarvis = Jarvis(external_source=_FakeExternalSource())  # type: ignore[arg-type]
+        result = handle(jarvis, "external", {"action": "read", "url": "https://example.com"})
+        assert isinstance(result["reply"], str)
+        assert "https://example.com" in result["reply"]
+        assert result["source"] == "web"
+
+    def test_read_without_a_capability_is_a_clear_message(self) -> None:
+        result = handle(Jarvis(), "external", {"action": "read", "url": "https://a.com"})
+        assert isinstance(result["reply"], str)
+        assert "Internet capability" in result["reply"]
+
+    def test_failure_returns_a_message_not_a_crash(self) -> None:
+        jarvis = Jarvis(external_source=_FakeExternalSource())  # type: ignore[arg-type]
+        result = handle(
+            jarvis, "external", {"action": "read", "url": "https://example.com/fail"}
+        )
+        assert isinstance(result["reply"], str)
+        assert "couldn't fetch" in result["reply"]
+
+    def test_search_and_channels_work(self) -> None:
+        jarvis = Jarvis(external_source=_FakeExternalSource())  # type: ignore[arg-type]
+        search = handle(jarvis, "external", {"action": "search", "query": "topic"})
+        assert isinstance(search["reply"], str)
+        assert "Search results" in search["reply"]
+        channels = handle(jarvis, "external", {"action": "channels"})
+        assert isinstance(channels["reply"], str)
+
+    def test_missing_action_is_guided(self) -> None:
+        result = handle(Jarvis(), "external", {})
+        assert isinstance(result["reply"], str)
+        assert "read" in result["reply"]
 
 
 class TestRoute:

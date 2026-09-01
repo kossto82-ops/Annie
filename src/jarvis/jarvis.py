@@ -26,6 +26,7 @@ from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
+from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
@@ -53,12 +54,14 @@ from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
+from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
 from jarvis.executive.executive_controller import (
     ExecutiveController,
     subject_of,
     working_statement,
 )
+from jarvis.infrastructure.agent_reach_source import build_agent_reach_source
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
@@ -111,6 +114,7 @@ class Jarvis:
         reasoner: Reasoner | None = None,
         trace: EpisodeTraceSink | None = None,
         weighting_policy: EvidenceWeightingPolicy | None = None,
+        external_source: ExternalSource | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -133,6 +137,12 @@ class Jarvis:
         # language. Rides on the session object for the surface to use; the cognitive
         # core never calls it. Identity by default -> the canonical reply, unchanged.
         self._voice: ResponseRenderer = IdentityRenderer()
+        # The Internet capability (Vision §38): fetches *external* information
+        # (search/read) when Jarvis decides it needs updated outside knowledge. It is
+        # None by default -> offline, so a bare Jarvis never reaches the network. It
+        # only retrieves documents with provenance; the core still interprets and
+        # reasons over them.
+        self._external_source: ExternalSource | None = external_source
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
         self._refutations: RefutationRepository = (
@@ -291,6 +301,59 @@ class Jarvis:
             learned.append(belief)
         return tuple(learned)
 
+    @property
+    def external_source(self) -> ExternalSource | None:
+        """The Internet capability (Vision §38), or ``None`` when offline.
+
+        Read-only so a surface can *report* whether Jarvis has an Internet source
+        wired up. It is a capability provider: it retrieves external documents, never
+        decides or writes to memory.
+        """
+        return self._external_source
+
+    def set_external_source(self, source: ExternalSource | None) -> None:
+        """Wire (or clear) the Internet capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline. Setting one only changes
+        what Jarvis *can* fetch -- it does not change how Jarvis reasons or how often
+        it chooses to look outside (that stays a deliberate, explicit decision).
+        """
+        self._external_source = source
+
+    def read_external(self, url: str) -> RetrievedDocument:
+        """Fetch one external document by ``url`` through the Internet capability.
+
+        Raises a clear error when no Internet source is wired, or when the fetch
+        fails. The returned document carries its provenance (source/url/title/
+        metadata) so Jarvis can later tell it apart from internal knowledge.
+        """
+        if self._external_source is None:
+            raise RuntimeError("no Internet capability configured; set_external_source")
+        return self._external_source.read(url)
+
+    def search_external(
+        self, query: str, *, limit: int = 5
+    ) -> tuple[RetrievedDocument, ...]:
+        """Search the web through the Internet capability.
+
+        Raises a clear error when no Internet source is wired or no search provider
+        is configured (versus simply finding nothing). An empty result is an honest
+        "nothing found".
+        """
+        if self._external_source is None:
+            raise RuntimeError("no Internet capability configured; set_external_source")
+        return self._external_source.search(query, limit=limit)
+
+    def internet_channels(self) -> tuple[ChannelStatus, ...]:
+        """Report which external channels are reachable right now (doctor).
+
+        Returns an empty tuple when no Internet capability is wired. Report-only: it
+        tells Jarvis what it *can* reach, not what to use.
+        """
+        if self._external_source is None:
+            return ()
+        return self._external_source.available_channels()
+
     @classmethod
     def persistent(
         cls,
@@ -317,6 +380,7 @@ class Jarvis:
             refutations_store=JsonRefutationStore(base / "refutations.json"),
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
             weighting_policy=weighting_policy,
+            external_source=build_agent_reach_source(),
         )
 
     def think(

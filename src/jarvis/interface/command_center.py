@@ -34,6 +34,7 @@ from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
+from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.env_settings import settings_from_env
@@ -675,6 +676,110 @@ def _state(_jarvis: Jarvis, _payload: Reply) -> Reply:
     return {}
 
 
+def _external(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Use the Internet capability: read, search, or report channels (Vision §38).
+
+    Jarvis never reaches the Internet on its own for every message -- this command is
+    the *deliberate* gate a surface (or an explicit outer decision layer) uses when
+    updated/outside information is actually needed. Results carry provenance back to
+    Jarvis; it does not write them to memory here. Offline/absent capability or a
+    fetch failure is a clear message, never a crash.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {"reply": "Use external with action 'read', 'search' or 'channels'.", "speak": False}
+    if action in ("read", "search") and jarvis.external_source is None:
+        return {
+            "reply": "No Internet capability is wired up right now — I can still think "
+            "and remember, I just can't fetch from the web (agent-reach isn't set up).",
+            "speak": False,
+        }
+    try:
+        if action == "channels":
+            channels = jarvis.internet_channels()
+            if not channels:
+                return {
+                    "reply": "No Internet capability is wired up right now.",
+                    "speak": False,
+                }
+            lines = [
+                f"{c.name}: {c.status}"
+                + (f" ({c.active_backend})" if c.active_backend else "")
+                for c in channels
+            ]
+            return {"reply": "External channels:\n" + "\n".join(lines), "speak": False}
+        if action == "read":
+            url = str(payload.get("url", "")).strip()
+            if not url:
+                return {"reply": "Provide a url to read.", "speak": False}
+            doc = jarvis.read_external(url)
+            return {
+                "reply": _external_reply(doc),
+                "speak": False,
+                "source": doc.source,
+                "url": doc.url,
+            }
+        if action == "search":
+            query = str(payload.get("query", "")).strip()
+            if not query:
+                return {"reply": "Provide a query to search.", "speak": False}
+            limit_raw = payload.get("limit", 5)
+            try:
+                limit = int(limit_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                limit = 5
+            docs = jarvis.search_external(query, limit=limit)
+            return {
+                "reply": _external_search_reply(docs),
+                "speak": False,
+                "count": len(docs),
+            }
+    except Exception as error:  # noqa: BLE001 - the external-provider boundary
+        return {"reply": _external_error(error), "speak": False}
+    return {"reply": "Unknown external action.", "speak": False}
+
+
+def _external_error(error: Exception) -> str:
+    """A clear message for an Internet-capability failure (never a crash).
+
+    Kept apart from the LLM failure phrasing: an external fetch/search can fail
+    because no capability is wired, no search provider is configured, a URL is
+    unreachable/blocked, or the network is down -- and none of those should read as
+    a broken *language model*.
+    """
+    code = getattr(error, "code", None)
+    detail = f"HTTP {code}" if code is not None else type(error).__name__
+    return (
+        f"I couldn't fetch that from the Internet ({detail}). "
+        "It might be a network issue, an unreachable site, or a missing "
+        "search/read configuration. My reasoning and memory are unaffected."
+    )
+
+
+def _external_reply(doc: RetrievedDocument) -> str:
+    """A short readable summary of one fetched document (provenance plus head)."""
+    head = doc.content.strip()
+    if len(head) > 400:
+        head = head[:400].rstrip() + "…"
+    out = f"Source: {doc.source}\nURL: {doc.url or '(n/a)'}"
+    if doc.title:
+        out += f"\nTitle: {doc.title}"
+    return out + f"\n\n{head}"
+
+
+def _external_search_reply(docs: tuple[RetrievedDocument, ...]) -> str:
+    """A readable summary of search results, keeping their provenance."""
+    if not docs:
+        return "Nothing found for that search."
+    parts: list[str] = []
+    for i, doc in enumerate(docs, 1):
+        head = doc.content.strip().replace("\n", " ")
+        if len(head) > 200:
+            head = head[:200].rstrip() + "…"
+        parts.append(f"{i}. ({doc.source}) {head}")
+    return "Search results:\n" + "\n".join(parts)
+
+
 _COMMANDS: dict[str, Command] = {
     "say": _say,
     "explain": _explain,
@@ -687,6 +792,7 @@ _COMMANDS: dict[str, Command] = {
     "learn": _learn,
     "greeting": _greeting,
     "state": _state,
+    "external": _external,
 }
 
 
