@@ -19,6 +19,7 @@ from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.perception.perception_source import PerceptionSource
+from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.research_report import ResearchReport
@@ -555,6 +556,59 @@ class TestResearch:
         result = handle(jarvis, "research", {"query": "fail now"})
         assert isinstance(result["reply"], str)
         assert "couldn't complete that research" in result["reply"]
+
+
+class _FakeModelComparator:
+    """A comparator holding two stub models, one of which can fail."""
+
+    def compare(self, prompt: str, *, models=None):  # type: ignore[no-untyped-def]
+        if "fail" in prompt:
+            raise RuntimeError("model unreachable")
+        runs = [
+            ModelRun(model="alpha", response=f"alpha says: {prompt}"),
+            ModelRun(model="beta", response=f"beta says: {prompt}"),
+        ]
+        if models:
+            keep = set(models)
+            runs = [r for r in runs if r.model in keep]
+        return tuple(runs)
+
+
+class TestCompareCommand:
+    def test_compare_returns_each_model_blindly(self) -> None:
+        jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
+        result = handle(jarvis, "compare", {"prompt": "is this a good idea?"})
+        assert isinstance(result["reply"], str)
+        assert "alpha says: is this a good idea?" in result["reply"]
+        assert "beta says: is this a good idea?" in result["reply"]
+        assert result["count"] == 2
+
+    def test_compare_can_select_models(self) -> None:
+        jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
+        result = handle(jarvis, "compare", {"prompt": "q", "models": ["beta"]})
+        assert isinstance(result["reply"], str)
+        assert "beta says: q" in result["reply"]
+        assert "alpha" not in result["reply"]
+
+    def test_compare_without_a_comparator_is_a_clear_message(self) -> None:
+        result = handle(Jarvis(), "compare", {"prompt": "anything"})
+        assert isinstance(result["reply"], str)
+        assert "model comparison" in result["reply"]
+
+    def test_compare_requires_a_prompt(self) -> None:
+        result = handle(
+            Jarvis(model_compare=_FakeModelComparator()),  # type: ignore[arg-type]
+            "compare",
+            {},
+        )
+        assert isinstance(result["reply"], str)
+        assert "Provide a prompt" in result["reply"]
+
+    def test_failure_returns_a_message_not_a_crash(self) -> None:
+        jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
+        result = handle(jarvis, "compare", {"prompt": "fail now"})
+        assert isinstance(result["reply"], str)
+        assert "couldn't complete that comparison" in result["reply"]
 
 
 class TestCapabilityCommand:

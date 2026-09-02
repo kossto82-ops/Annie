@@ -32,6 +32,7 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
@@ -836,6 +837,61 @@ def _research_error(error: Exception) -> str:
     )
 
 
+def _compare(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Ask several language models the same question and gather their replies blind.
+
+    Like ``external`` and ``research``, this is a *deliberate* gate: a surface calls
+    it when it actually wants a model cross-check (Vision §33). The reply names each
+    model and shows its text verbatim -- it is candidate evidence for the surface to
+    reason over, never a verdict the adapter picked.
+    """
+    prompt = str(payload.get("prompt", "")).strip()
+    if not prompt:
+        return {"reply": "Provide a prompt to compare.", "speak": False}
+    if jarvis.model_compare is None:
+        return {
+            "reply": "No model comparison is wired up right now — I can't ask "
+            "several models the same question (no comparator configured).",
+            "speak": False,
+        }
+    try:
+        selected = payload.get("models")
+        models = None
+        if isinstance(selected, list):
+            raw = cast("list[object]", selected)
+            clean = [str(m).strip() for m in raw if str(m).strip()]
+            models = clean or None
+        runs = jarvis.compare_models(prompt, models=models)
+        return {
+            "reply": _compare_reply(runs),
+            "speak": False,
+            "count": len(runs),
+        }
+    except Exception as error:  # noqa: BLE001 - the model-provider boundary
+        return {"reply": _compare_error(error), "speak": False}
+
+
+def _compare_reply(runs: tuple[ModelRun, ...]) -> str:
+    """Each model's reply, labelled by model -- raw candidate evidence, no verdict."""
+    if not runs:
+        return "No models to compare."
+    lines: list[str] = []
+    for run in runs:
+        text = run.response.strip() or "(empty reply)"
+        lines.append(f"{run.model}:\n{text}")
+    return "\n\n".join(lines)
+
+
+def _compare_error(error: Exception) -> str:
+    """A clear message for a model-comparison failure (never a crash)."""
+    detail = type(error).__name__
+    return (
+        f"I couldn't complete that comparison ({detail}). "
+        "One of the models may be unreachable or misconfigured. "
+        "My reasoning and memory are unaffected."
+    )
+
+
 def _external_error(error: Exception) -> str:
     """A clear message for an Internet-capability failure (never a crash).
 
@@ -1084,6 +1140,7 @@ _COMMANDS: dict[str, Command] = {
     "state": _state,
     "external": _external,
     "research": _research,
+    "compare": _compare,
     "capability": _capability,
 }
 

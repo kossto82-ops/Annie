@@ -45,6 +45,7 @@ from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
 from jarvis.domain.services.hypothesis_generation import generate_hypotheses
+from jarvis.domain.services.model_compare import ModelComparator, ModelRun
 from jarvis.domain.services.reflection import find_reflections
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
@@ -163,6 +164,7 @@ class Jarvis:
         weighting_policy: EvidenceWeightingPolicy | None = None,
         external_source: ExternalSource | None = None,
         research_source: ResearchSource | None = None,
+        model_compare: ModelComparator | None = None,
         capability_providers: CapabilityRegistry | None = None,
         tool_policy: ToolPolicy | None = None,
     ) -> None:
@@ -209,6 +211,11 @@ class Jarvis:
         # gathers cited documents + a plain-language summary; the core still reasons
         # over the report and decides what to believe from it.
         self._research_source: ResearchSource | None = research_source
+        # Blind model comparison (Vision §33): asks several language models the same
+        # question and gathers their replies as candidate evidence. None by default
+        # -> no comparison is possible (and no model is ever auto-polled). Its runs
+        # are candidate text only; reasoning/synthesis over them stays in the core.
+        self._model_compare: ModelComparator | None = model_compare
         # The live edge of Odysseus (D7): which acquired capability names are backed
         # by a real provider. When no registry is given, the wired ExternalSource
         # backs the web capabilities by default; None with no source -> offline.
@@ -509,6 +516,38 @@ class Jarvis:
         if self._research_source is None:
             raise RuntimeError("no research capability configured; set research_source")
         return self._research_source.deep_research(query, depth=depth)
+
+    @property
+    def model_compare(self) -> ModelComparator | None:
+        """The blind model-comparison capability (Vision §33, §38), or ``None``.
+
+        Read-only so a surface can report whether Jarvis can compare models. It
+        gathers candidate replies, never a verdict, and never writes to memory.
+        """
+        return self._model_compare
+
+    def set_model_compare(self, comparator: ModelComparator | None) -> None:
+        """Wire (or clear) the model-comparison capability at runtime.
+
+        ``None`` disables it: Jarvis simply cannot ask several models one question.
+        Setting one only changes what Jarvis *can* gather -- it never makes Jarvis
+        depend on a specific model's opinions (Vision §33); it reasons over the
+        replies it chooses to use.
+        """
+        self._model_compare = comparator
+
+    def compare_models(
+        self, prompt: str, *, models: Sequence[str] | None = None
+    ) -> tuple[ModelRun, ...]:
+        """Ask the wired model comparator to gather blind replies to ``prompt``.
+
+        Raises a clear error when no comparator is wired. The returned runs are
+        candidate evidence only -- candidate text plus the model that produced it
+        (D6); weighing or synthesising them is Jarvis's, never the adapter's.
+        """
+        if self._model_compare is None:
+            raise RuntimeError("no model comparison configured; set model_compare")
+        return self._model_compare.compare(prompt, models=models)
 
     # -- Tools (Vision §34, 06_TOOLS_AGENCY) ------------------------------
 

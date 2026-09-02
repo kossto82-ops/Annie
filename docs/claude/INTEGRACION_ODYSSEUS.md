@@ -104,23 +104,34 @@ src/jarvis/infrastructure/odysseus_search_source.py  # adapter SearXNG (transpor
   `deep_research(query, depth)`; `persistent()` lo cablea *si hay instancia*.
 - Superficie Command Center: comando `research` (junto a `external` / `channels`).
 
-## Fase 2 — Compare (evaluación ciega de modelos)
+## Fase 2 — Compare (evaluación ciega de modelos) — ✅ completo
 
 Jarvis ya tiene ~14 providers (`OpenAiCompatibleModel` + registry). Compare = prompt a
 N modelos + síntesis ciega. No requiere red nueva.
 
-**Reutilizar de Odysseus** (AGPL, como referencia/adaptador): `model_capabilities.py`,
+**Reutilizar de Odysseus** (AGPL, como referencia): `model_capabilities.py`,
 `model_discovery.py`, `model_capability_readers/` (normalizar capacidades por modelo).
+En el código real, `model_discovery` sería descubrimiento por red local (Tailscale/ports);
+para la evaluación ciega de modelos basta **el registry de LLM ya existente en Jarvis**
+(`language_model_registry.py`), que expone ~14 providers vía `LanguageModel`.
 
 **Seam de dominio:**
 
 ```
-src/jarvis/domain/services/model_compare.py      # ModelComparator Protocol + ModelRun
-src/jarvis/infrastructure/model_compare_source.py # adapter sobre el registry de LLM
+src/jarvis/domain/services/model_compare.py       # ModelComparator Protocol + ModelRun
+   compare(prompt, *, models=None) -> tuple[ModelRun, ...]
+src/jarvis/infrastructure/model_compare_source.py # RegistryModelComparator sobre el registry
+   build_model_compare_source(models) -> None sin modelos configurados
 ```
 
-- Cada respuesta es **evidencia candidata** para el núcleo (D6: el LLM extrae, no juzga).
+- `ModelRun` = VO inmutable (`model`, `response`) con procedencia por modelo — la
+  respuesta es **evidencia candidata** para el núcleo (D6: el LLM extrae, no juzga).
+- El adapter solo **recoge**: no rankea, no elige "mejor", no sintetiza. Un modelo
+  que falla o no existe se reporta con error claro (nunca se fabrica).
 - La síntesis final la razona Jarvis; sin cara a cara con las creencias.
+- Superficie `Jarvis`: `model_compare` property, `set_model_compare()`,
+  `compare_models(prompt, models=...)` (opt-in, offline por defecto, D8).
+- Superficie Command Center: comando `compare` (junto a `external` / `research`).
 
 ---
 
@@ -134,8 +145,8 @@ src/jarvis/infrastructure/model_compare_source.py # adapter sobre el registry de
 | 1a | `ResearchSource` Protocol + `ResearchReport` VO | `pytest tests/domain/test_research_report.py` | ✅ hecho |
 | 1b | adaptador SearXNG (`odysseus_search_source`) | `pytest tests/infrastructure/test_odysseus_search_source.py` | ✅ hecho |
 | 1c | Superficie Jarvis + comando `research` | `pytest tests/test_command_center.py` | ✅ hecho |
-| 2a | `ModelComparator` + `ModelRun` | `pytest tests/domain/test_model_compare.py` | ⏳ |
-| 2b | adapter sobre registry LLM | tests con providers stub | ⏳ |
+| 2a | `ModelComparator` + `ModelRun` | `pytest tests/domain/test_model_compare.py` | ✅ hecho |
+| 2b | adapter sobre registry LLM | `pytest tests/infrastructure/test_model_compare_source.py` | ✅ hecho |
 
 Al cierre: `pytest` (suite completa), `ruff check src`, `pyright src` (strict) — sin
 errores, como exige el repo.
