@@ -85,6 +85,20 @@ class TestDeepResearch:
         assert len(src.deep_research("broad", depth=1).documents) == 5
         assert len(src.deep_research("broad", depth=3).documents) == 15
 
+    def test_depth_is_bounded(self) -> None:
+        results = {
+            "results": [
+                {"title": f"h{i}", "url": f"https://x/{i}", "content": "c"}
+                for i in range(500)
+            ]
+        }
+        src = SearXNGResearchSource(
+            instance="https://search.example", transport=_json_transport(results)  # type: ignore[arg-type]
+        )
+        # A hostile depth never requests an unbounded result set: the adapter clamps
+        # it to an upper bound (10 * base=5 = 50) before talking to the instance.
+        assert len(src.deep_research("broad", depth=10**6).documents) == 50
+
     def test_hits_the_searxng_json_api_endpoint(self) -> None:
         calls: list[str] = []
 

@@ -169,3 +169,12 @@ Auditoría post-integración (2026-09-02) y los dos hallazgos que se resolvieron
   center (`list` / `run`), ejecutando detrás del gate de política (external/
   destructivas exigen `approved: true`). El resultado vuelve como outcome, nunca
   como veredicto (D6).
+
+Limpieza de los hallazgos menores (C/D/F):
+- **C —** `depth` acotado en `SearXNGResearchSource` (`_MAX_DEPTH = 10`): un depth
+  hostil nunca pide un result-set ilimitado; docstrings aclaran que `depth` escala
+  resultados por ronda, no rondas.
+- **D —** `capability notice` etiqueta sus brechas como `SYSTEM_OBSERVATION`
+  (no `USER_STATEMENT`): un gap que Jarvis se observa a sí mismo pesa
+  `0.6 × peso`, nunca como una afirmación del companion.
+- **F —** `FileSystemTool` valida `operation`: un typo nunca escribe silenciosamente.

@@ -58,6 +58,15 @@ class FileSystemTool:
     def run(self, arguments: dict[str, str]) -> ToolCallResult:
         operation = arguments.get("operation", "read")
         path = arguments.get("path", "")
+        if operation not in ("read", "write"):
+            # A typo ("Read", "append") must never silently become a write.
+            return ToolCallResult(
+                ok=False,
+                error=(
+                    "filesystem requires operation 'read' or 'write', "
+                    f"got {operation!r}"
+                ),
+            )
         if not path:
             return ToolCallResult(ok=False, error="filesystem requires a path")
         try:

@@ -777,6 +777,20 @@ class TestCapabilityCommand:
         assert "quokka" in result["reply"]
         assert jarvis.capability_needs()  # a need was recorded
 
+    def test_notice_needs_are_weighted_as_self_observations(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think("what is the quokka")
+        handle(jarvis, "capability", {"action": "notice"})
+        needs = jarvis.capability_needs()
+        assert needs
+        confidence = needs[0][1].value
+        # SYSTEM_OBSERVATION weighs at factor 0.6, so a single 0.5-weight piece
+        # yields 0.3/1.3 ~= 0.23 -- never the ~0.33 a USER_STATEMENT would claim.
+        # A gap Jarvis notices about itself must not sound like the companion
+        # said it outright.
+        assert 0.2 < confidence < 0.3
+
     def test_notice_with_no_gaps_says_so_honestly(self) -> None:
         result = handle(Jarvis(), "capability", {"action": "notice"})
         assert isinstance(result["reply"], str)

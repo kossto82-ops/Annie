@@ -41,6 +41,10 @@ Transport = Callable[[str, Mapping[str, str], bytes, float], bytes]
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 _DEFAULT_INSTANCE = "https://searx.be"
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+# Depth scales how many results one round gathers -- bounded so a hostile or
+# malformed depth can never ask for an unbounded result set (a search still
+# returns what it returns; this only caps how far Jarvis reads into it).
+_MAX_DEPTH = 10
 
 
 def _urllib_transport(url: str, headers: Mapping[str, str], body: bytes, timeout: float) -> bytes:
@@ -49,11 +53,13 @@ def _urllib_transport(url: str, headers: Mapping[str, str], body: bytes, timeout
         return response.read()
 
 
-# How many results one research round of a given depth asks for.
+# How many results one research round of a given depth asks for. Depth is clamped
+# to [_MAX_DEPTH] so one round stays bounded; deeper investigation is the core's
+# job (it calls this seam again), never a single runaway request.
 def _limit_for(depth: int, base: int = 5) -> int:
     if depth < 1:
         return base
-    return base * depth
+    return base * min(depth, _MAX_DEPTH)
 
 
 class SearXNGResearchSource:
@@ -83,8 +89,10 @@ class SearXNGResearchSource:
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Search the instance for ``query`` and return a report with cited documents.
 
-        ``depth`` scales how many results one round gathers. Raises only on a real
-        failure of the instance; an empty result returns an honest sparse report.
+        ``depth`` scales how many results one round gathers (clamped to an upper
+        bound; it never turns one request into an unbounded one). Raises only on a
+        real failure of the instance; an empty result returns an honest sparse
+        report.
         """
         limit = _limit_for(depth)
         raw_results = self._search(query, limit)

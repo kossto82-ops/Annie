@@ -1113,7 +1113,11 @@ def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
                             f"I completed an episode about {subject} without a "
                             "grounded conclusion"
                         ),
-                        source=EvidenceSource.USER_STATEMENT,
+                        # A gap observed from Jarvis's *own* history, not something
+                        # the companion stated -- so it weighs like the other
+                        # internal observations the core makes about itself (it
+                        # must never carry the strength of a user statement).
+                        source=EvidenceSource.SYSTEM_OBSERVATION,
                         weight=Confidence(0.5),
                     )
                 ],

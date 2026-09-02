@@ -62,6 +62,19 @@ class TestFileSystemTool:
         assert result.ok is False
         assert "requires a path" in result.error
 
+    def test_an_unknown_operation_never_writes(self) -> None:
+        wrote: list[str] = []
+
+        def io(operation: str, path: str, content: str, _: str) -> str:
+            wrote.append(operation)
+            return ""
+
+        tool = FileSystemTool(root="C:\\work", io=io)
+        result = tool.run({"operation": "Read", "path": "a.txt", "content": "boom"})
+        assert result.ok is False
+        assert "'read' or 'write'" in result.error
+        assert wrote == [], "a typo must never silently become a write"
+
     @staticmethod
     def _null_io(operation: str, path: str, content: str, _: str) -> str:
         return ""
