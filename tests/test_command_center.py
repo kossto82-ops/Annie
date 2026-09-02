@@ -563,6 +563,20 @@ class TestCapabilityCommand:
         assert isinstance(result["reply"], str)
         assert "unknown" in result["reply"].lower()
 
+    def test_notice_turns_unanswered_subjects_into_needs(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think("what is the quokka")
+        result = handle(jarvis, "capability", {"action": "notice"})
+        assert isinstance(result["reply"], str)
+        assert "quokka" in result["reply"]
+        assert jarvis.capability_needs()  # a need was recorded
+
+    def test_notice_with_no_gaps_says_so_honestly(self) -> None:
+        result = handle(Jarvis(), "capability", {"action": "notice"})
+        assert isinstance(result["reply"], str)
+        assert "haven't noticed" in result["reply"].lower()
+
 
 class TestRoute:
     def test_root_serves_the_console_page(self) -> None:

@@ -124,7 +124,9 @@ Act / recommend verification
 Odysseus is the mechanism by which Jarvis recognises and grows new *capabilities* --
 extensions of its ability to act (Vision §34). Phase 1 delivered the core model + scout
 (discovery); Phase 2 grounds recognition in evidence and wires acquisition into curiosity
-and the surfaces.
+and the surfaces; Phase 3 put the *live* capability at the edge behind a provider registry;
+Phase 4 added the self-initiated half: Jarvis noticing recurring subjects it failed to
+answer, as the seed of a need.
 
 The flow:
 
@@ -140,6 +142,13 @@ capability_evaluator  (derived stance: suggest / ask first / withhold, §28)
 feel_curious → pursue  (a confident unmet need raises an acquisition impulse)
         ↓
 acquire or reject (deliberate; autonomy is earned, Vision §28)
+
+(Phase 4) observe_capability_gaps → detect_capability_gaps
+        ↓
+unanswered_subjects  (recurring failure subjects from the episode history)
+        ↓
+capability notice (Command Center): recognise_need with grounded evidence from those
+episodes → scout proposes how to answer better
 ```
 
 Boundaries:
@@ -161,6 +170,13 @@ Boundaries:
   ``CuriosityImpulse`` naming it, and ``pursue`` marks it acquired (so growth is both earned
   and acted on). ``state_summary`` and the Command Center ``capability`` command expose
   capabilities and needs.
+- Gap detection (Phase 4) is read-only observation: `capability_gap_observation.detect`
+  clusters the episode history by shared subject words and reports each subject Jarvis
+  concluded about *ungrounded* more than once (`observe_capability_gaps` /
+  `unanswered_subjects`). It only *detects*: turning a gap into an evidence-grounded need
+  is the surface's job — the Command Center ``capability notice`` action records it via
+  ``recognise_need``, so the need's confidence is derived from the failed episodes, never
+  asserted. Like the scout, this is shallow keyword matching (D11), deliberately.
 - A ``Capability`` is *bookkeeping*; the *live* side is a ``CapabilityProvider`` at the edge
   (D7) -- a registry (`capability_registry.StaticCapabilityRegistry`) maps a capability name
   to the concrete adapter that serves it. `Jarvis.can_do(name)` is true only when a

@@ -352,6 +352,42 @@ class TestOverconfidenceSelfObservation:
         assert any("sufficient evidence" in s for s in statements)
 
 
+class TestCapabilityGaps:
+    def test_recurring_unanswered_subjects_are_detected(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think("what is the quokka")
+        gaps = jarvis.observe_capability_gaps()
+        assert len(gaps) == 1
+        assert gaps[0].subject == "quokka"
+
+    def test_unanswered_subjects_reports_gap_subjects(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think("who is the minister")
+        assert jarvis.unanswered_subjects() == ("minister",)
+
+    def test_single_failure_is_not_yet_a_gap(self) -> None:
+        jarvis = Jarvis()
+        jarvis.think("what is the quokka")
+        assert jarvis.unanswered_subjects() == ()
+
+    def test_grounded_answers_are_not_gaps(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think(
+                "what is the quokka",
+                evidence=[
+                    Evidence(
+                        content="a quokka is a small marsupial",
+                        source=EvidenceSource.USER_STATEMENT,
+                        weight=Confidence(1.0),
+                    )
+                ],
+            )
+        assert jarvis.unanswered_subjects() == ()
+
+
 class TestCuriosity:
     def _make_habitually_ungrounded(self) -> Jarvis:
         jarvis = Jarvis()

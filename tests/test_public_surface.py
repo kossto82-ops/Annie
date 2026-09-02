@@ -40,6 +40,8 @@ _PUBLIC_METHODS = (
     "observe_self",
     "observe_overconfidence",
     "observe_prediction_accuracy",
+    "observe_capability_gaps",
+    "unanswered_subjects",
     "self_beliefs",
     "feel_curious",
     "pursue",

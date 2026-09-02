@@ -34,6 +34,10 @@ from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.capability_evaluator import recommend as recommend_capability
+from jarvis.domain.services.capability_gap_observation import (
+    CapabilityGap,
+    detect_capability_gaps,
+)
 from jarvis.domain.services.capability_scout import scout
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
@@ -581,6 +585,24 @@ class Jarvis:
                 if self.can_do(capability.name)
             )
         )
+
+    def observe_capability_gaps(self) -> tuple[CapabilityGap, ...]:
+        """The recurring subjects Jarvis keeps failing to answer, from its own
+        episode history (Odysseus self-initiated growth, Vision §34).
+
+        Read-only detection: each gap reports a subject it could not conclude
+        about more than once. Turning a gap into an evidence-grounded need is the
+        caller's job (e.g. the surface records it via :meth:`recognise_need`), so
+        this never writes state by itself.
+        """
+        return detect_capability_gaps(self.episodes.history())
+
+    def unanswered_subjects(self) -> tuple[str, ...]:
+        """The subjects Jarvis has noticed itself failing to answer about, as
+        plain strings for the surface (Odysseus). Read-only; the gaps are the
+        recurring failure subjects from the episode history.
+        """
+        return tuple(gap.subject for gap in self.observe_capability_gaps())
 
     @staticmethod
     def _need_statement(statement: str) -> str:

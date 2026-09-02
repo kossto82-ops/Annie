@@ -826,10 +826,12 @@ def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
 
     Actions: ``scout`` (recognise a need and propose candidates for it),
     ``acquire`` (mark a proposed capability as now-available), ``reject``
-    (decline a proposal so it is not re-proposed), ``list`` (what Jarvis
-    proposes/has), and ``recommend``/``stance`` (the evidence-derived stance on
-    acquiring a named capability). Acquisition is deliberate and earned; the
-    surface only ever *suggests* via the derived stance.
+    (decline a proposal so it is not re-proposed), ``notice`` (turn recurringly
+    unanswered subjects into evidence-grounded needs — the self-initiated half
+    of Odysseus), ``list`` (what Jarvis proposes/has), and
+    ``recommend``/``stance`` (the evidence-derived stance on acquiring a named
+    capability). Acquisition is deliberate and earned; the surface only ever
+    *suggests* via the derived stance.
     """
     action = str(payload.get("action", "")).strip().lower()
     name = str(payload.get("name", "")).strip()
@@ -946,6 +948,61 @@ def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
             "reply": f"Declined — I won't re-propose '{name}'.",
             "speak": False,
             "capability": {"name": rejected.name, "status": rejected.status.value},
+        }
+
+    if action == "notice":
+        subjects = jarvis.unanswered_subjects()
+        if not subjects:
+            return {
+                "reply": (
+                    "I haven't noticed any subject I keep failing to answer about — "
+                    "ask me something and I'll tell you if it becomes a recurring gap."
+                ),
+                "speak": False,
+            }
+        # Auto-initiated growth (Odysseus, Vision §34): I record the gap as an
+        # evidence-grounded need to be able to answer about it, then scout what
+        # could help. The request is loaded with M/2 evidence -- one for each
+        # way I failed -- so the need's confidence is derived, never asserted.
+        half = len(subjects) // 2 or 1
+
+        notices: list[dict[str, str | list[str]]] = []
+        for subject in subjects[:half]:
+            candidates = jarvis.recognise_need(
+                f"answer questions about {subject}",
+                rationale=(
+                    f"I keep failing to conclude about {subject} in my own "
+                    "episode history"
+                ),
+                evidence=[
+                    Evidence(
+                        content=(
+                            f"I completed an episode about {subject} without a "
+                            "grounded conclusion"
+                        ),
+                        source=EvidenceSource.USER_STATEMENT,
+                        weight=Confidence(0.5),
+                    )
+                ],
+            )
+            notices.append(
+                {
+                    "subject": subject,
+                    "candidates": [c.name for c in candidates],
+                }
+            )
+        lines = [
+            f"- {notice['subject']}: "
+            + (", ".join(notice["candidates"]) if notice["candidates"] else "no candidate yet")
+            for notice in notices
+        ]
+        return {
+            "reply": (
+                "I noticed subjects I keep failing to answer about, and recorded a "
+                "need to be able to answer them:\n" + "\n".join(lines)
+            ),
+            "speak": False,
+            "gaps": notices,
         }
 
     return {"reply": "Unknown capability action.", "speak": False}

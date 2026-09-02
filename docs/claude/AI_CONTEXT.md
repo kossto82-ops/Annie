@@ -112,6 +112,14 @@ need `BeliefRepository` (domain Protocols; in-memory + JSON stores) persist prop
 needs; `state_summary` and the Command Center `capability` command surface both, and the
 snapshot reports which acquisitions are live (`ready`).
 
+Growth can also start from Jarvis itself: `observe_capability_gaps` /
+`unanswered_subjects` (`capability_gap_observation.detect`) cluster the episode history by
+shared subject words and report subjects Jarvis concluded about *ungrounded* more than once.
+This is read-only detection (shallow keyword matching, D11); the Command Center
+`capability notice` turns a gap into an evidence-grounded need via `recognise_need`, so the
+need's confidence is derived from the failed episodes -- the self-initiated half of ordering
+capabilities (Vision §34).
+
 ## Current state snapshot
 
 - Reflective cycle: implemented.
