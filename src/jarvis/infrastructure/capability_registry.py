@@ -15,7 +15,9 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from jarvis.domain.retrieval.external_source import ExternalSource
+from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.services.capability_provider import CapabilityProvider
+from jarvis.domain.services.model_compare import ModelComparator
 
 
 class CapabilityRegistry(Protocol):
@@ -45,6 +47,8 @@ class StaticCapabilityRegistry:
 def build_default_registry(
     external_source: ExternalSource | None,
     *,
+    research_source: ResearchSource | None = None,
+    model_compare: ModelComparator | None = None,
     reasoner: CapabilityProvider | None = None,
     recall: CapabilityProvider | None = None,
 ) -> CapabilityRegistry:
@@ -54,7 +58,9 @@ def build_default_registry(
     live-backed -- Jarvis is simply offline. With one, agent-reach serves both
     web capabilities (read and search) as real, usable acquisitions. An optional
     ``reasoner``/``recall`` provider backs the reasoning and meaning-recall
-    capabilities (kept separate so they can reflect runtime seams).
+    capabilities (kept separate so they can reflect runtime seams). The deep-
+    research and blind model-comparison sources back their capabilities too, when
+    wired, so ``can_do`` is uniform across every edge (Odysseus, §28).
     """
     by_name: dict[str, CapabilityProvider] = {}
     if external_source is not None:
@@ -64,6 +70,10 @@ def build_default_registry(
                 for name in ("search the web", "read external documents")
             }
         )
+    if research_source is not None:
+        by_name["deep research"] = ResearchCapability(research_source)
+    if model_compare is not None:
+        by_name["compare language models"] = ModelCompareCapability(model_compare)
     if reasoner is not None:
         by_name["reason with a language model"] = reasoner
     if recall is not None:
@@ -131,6 +141,50 @@ class ExternalSourceCapability:
 
     def __init__(self, source: ExternalSource, capability: str) -> None:
         self._source = source
+        self._capability = capability
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return True
+
+
+class ResearchCapability:
+    """The 'deep research' capability backed by the research source (Odysseus).
+
+    A research source is itself the in-depth-investigation capability, so it
+    backs that capability name directly. It is available whenever it is wired;
+    whether Jarvis *uses* it stays a deliberate, earned decision in the core.
+    """
+
+    def __init__(self, source: ResearchSource, capability: str = "deep research") -> None:
+        self._source = source
+        self._capability = capability
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return True
+
+
+class ModelCompareCapability:
+    """The 'compare language models' capability backed by the model comparator.
+
+    The comparator is itself the blind-evaluation capability, so it backs that
+    capability name directly. It is available whenever it is wired; interpreting
+    the replies stays Jarvis's (D6) and using it stays a deliberate decision.
+    """
+
+    def __init__(
+        self,
+        comparator: ModelComparator,
+        capability: str = "compare language models",
+    ) -> None:
+        self._comparator = comparator
         self._capability = capability
 
     @property

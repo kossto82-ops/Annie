@@ -38,6 +38,8 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
+from jarvis.domain.value_objects.tool_call_result import ToolCallResult
+from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.env_settings import settings_from_env
@@ -693,6 +695,31 @@ _EXTERNAL_CAPABILITIES = {
     "search": "search the web",
 }
 
+_RESEARCH_CAPABILITY = "deep research"
+_COMPARE_CAPABILITY = "compare language models"
+
+
+def _capability_not_ready(jarvis: Jarvis, capability: str) -> Reply:
+    """An honest decline when a wired capability is not yet *earned*.
+
+    A capability that is proposed but not acquired reads as "considered but not
+    grown" (use `capability acquire`); a capability the scout has not even
+    proposed reads as "could gain it" (scout → acquire). Both point forward
+    instead of pretending -- acquisition is deliberate and earned (Vision §28).
+    """
+    known = [c.name for c in jarvis.capabilities()]
+    if capability in known:
+        prompt = (
+            f"I've considered '{capability}' but haven't grown it yet — "
+            "use `capability acquire` to accept it."
+        )
+    else:
+        prompt = (
+            f"I could gain the '{capability}' capability to do that, but I haven't "
+            "proposed or earned it yet — use the `capability` command (scout → acquire)."
+        )
+    return {"reply": prompt, "speak": False}
+
 
 def _external_not_ready(jarvis: Jarvis, capability: str) -> Reply:
     """An honest decline when the Internet capability is not usable right now.
@@ -708,18 +735,7 @@ def _external_not_ready(jarvis: Jarvis, capability: str) -> Reply:
             "and remember, I just can't fetch from the web (agent-reach isn't set up).",
             "speak": False,
         }
-    known = [c.name for c in jarvis.capabilities()]
-    if capability in known:
-        prompt = (
-            f"I've considered '{capability}' but haven't grown it yet — "
-            "use `capability acquire` to accept it."
-        )
-    else:
-        prompt = (
-            f"I could gain the '{capability}' capability to do that, but I haven't "
-            "proposed or earned it yet — use the `capability` command (scout → acquire)."
-        )
-    return {"reply": prompt, "speak": False}
+    return _capability_not_ready(jarvis, capability)
 
 
 def _external(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -799,6 +815,8 @@ def _research(jarvis: Jarvis, payload: Reply) -> Reply:
             "(SEARXNG_INSTANCE isn't configured).",
             "speak": False,
         }
+    if not jarvis.can_do(_RESEARCH_CAPABILITY):
+        return _capability_not_ready(jarvis, _RESEARCH_CAPABILITY)
     try:
         depth_raw = payload.get("depth", 1)
         try:
@@ -854,6 +872,8 @@ def _compare(jarvis: Jarvis, payload: Reply) -> Reply:
             "several models the same question (no comparator configured).",
             "speak": False,
         }
+    if not jarvis.can_do(_COMPARE_CAPABILITY):
+        return _capability_not_ready(jarvis, _COMPARE_CAPABILITY)
     try:
         selected = payload.get("models")
         models = None
@@ -1121,6 +1141,62 @@ def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
     return {"reply": "Unknown capability action.", "speak": False}
 
 
+def _tool(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Exercise Jarvis's acting tools — list or run one (Vision §34, 06_TOOLS_AGENCY).
+
+    ``list`` reports the registered tools (what Jarvis *can* act through); ``run``
+    executes one behind the permission gate, so external/destructive tools need an
+    explicit ``approved: true`` before anything happens. Nothing here decides
+    *whether* to act: the core keeps that deliberate choice; this surface only
+    makes an approved act possible and observable.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {"reply": "Use tool with action 'list' or 'run'.", "speak": False}
+    if action == "list":
+        specs = jarvis.tool_channels()
+        if not specs:
+            return {"reply": "No tools are registered yet.", "speak": False}
+        lines = [_tool_line(spec) for spec in specs]
+        return {
+            "reply": "Tools I have:\n" + "\n".join(lines),
+            "speak": False,
+            "count": len(specs),
+        }
+    if action == "run":
+        name = str(payload.get("name", "")).strip()
+        if not name:
+            return {"reply": "Name a tool to run.", "speak": False}
+        raw = payload.get("arguments")
+        arguments: dict[str, str] | None = None
+        if isinstance(raw, dict):
+            items = cast("dict[object, object]", raw)
+            arguments = {str(k): str(v) for k, v in items.items()}
+        approved = payload.get("approved", False)
+        if isinstance(approved, str):
+            approved = approved.strip().lower() in ("true", "1", "yes")
+        result = jarvis.run_tool(name, arguments, approved=bool(approved))
+        return {
+            "reply": _tool_run_reply(name, result),
+            "speak": False,
+            "ok": result.ok,
+        }
+    return {"reply": "Unknown tool action.", "speak": False}
+
+
+def _tool_line(spec: ToolSpec) -> str:
+    """A readable declaration of one tool, flagging when it needs approval."""
+    mark = " (needs approval)" if spec.requires_approval else ""
+    return f"- {spec.name}: {spec.description}{mark}"
+
+
+def _tool_run_reply(name: str, result: ToolCallResult) -> str:
+    """What a tool run produced -- its outcome, not a verdict on it (D6)."""
+    if result.ok:
+        return f"Tool '{name}' ran successfully:\n{result.value or '(no output)'}"
+    return f"Tool '{name}' could not run: {result.error}"
+
+
 def _ready_marker(jarvis: Jarvis, capability: str) -> str:
     """A concise "(ready)" taste when an acquired capability is live-backed."""
     return " (ready)" if jarvis.can_do(capability) else ""
@@ -1142,6 +1218,7 @@ _COMMANDS: dict[str, Command] = {
     "research": _research,
     "compare": _compare,
     "capability": _capability,
+    "tool": _tool,
 }
 
 

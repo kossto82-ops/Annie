@@ -17,14 +17,19 @@ import pytest
 from jarvis import Jarvis
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.services.model_compare import ModelRun
+from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
+from jarvis.domain.value_objects.tool_call_result import ToolCallResult
+from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.infrastructure.capability_registry import build_default_registry
+from jarvis.infrastructure.echo_tool import EchoTool
 from jarvis.interface.command_center import handle, route, snapshot, stream_say
 
 
@@ -530,6 +535,7 @@ class _FakeResearchSource:
 class TestResearch:
     def test_research_returns_summary_and_cited_documents(self) -> None:
         jarvis = Jarvis(research_source=_FakeResearchSource())  # type: ignore[arg-type]
+        _grow(jarvis, "deep research")
         result = handle(jarvis, "research", {"query": "why is the sky blue"})
         assert isinstance(result["reply"], str)
         assert "Found 1 result" in result["reply"]
@@ -542,6 +548,12 @@ class TestResearch:
         assert isinstance(result["reply"], str)
         assert "research capability" in result["reply"]
 
+    def test_research_wired_but_not_earned_is_honest(self) -> None:
+        jarvis = Jarvis(research_source=_FakeResearchSource())  # type: ignore[arg-type]
+        result = handle(jarvis, "research", {"query": "why is the sky blue"})
+        assert isinstance(result["reply"], str)
+        assert "haven't proposed or earned it yet" in result["reply"]
+
     def test_research_requires_a_query(self) -> None:
         result = handle(
             Jarvis(research_source=_FakeResearchSource()),  # type: ignore[arg-type]
@@ -553,6 +565,7 @@ class TestResearch:
 
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         jarvis = Jarvis(research_source=_FakeResearchSource())  # type: ignore[arg-type]
+        _grow(jarvis, "deep research")
         result = handle(jarvis, "research", {"query": "fail now"})
         assert isinstance(result["reply"], str)
         assert "couldn't complete that research" in result["reply"]
@@ -574,9 +587,23 @@ class _FakeModelComparator:
         return tuple(runs)
 
 
+def _grow(jarvis: Jarvis, name: str) -> None:
+    """Record a capability as already acquired (as `capability acquire` would)."""
+    jarvis.remember_capability(
+        Capability(
+            name=name,
+            description="test capability",
+            requirement="a test provider",
+            provenance="test harness",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )
+
+
 class TestCompareCommand:
     def test_compare_returns_each_model_blindly(self) -> None:
         jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
+        _grow(jarvis, "compare language models")
         result = handle(jarvis, "compare", {"prompt": "is this a good idea?"})
         assert isinstance(result["reply"], str)
         assert "alpha says: is this a good idea?" in result["reply"]
@@ -585,6 +612,7 @@ class TestCompareCommand:
 
     def test_compare_can_select_models(self) -> None:
         jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
+        _grow(jarvis, "compare language models")
         result = handle(jarvis, "compare", {"prompt": "q", "models": ["beta"]})
         assert isinstance(result["reply"], str)
         assert "beta says: q" in result["reply"]
@@ -594,6 +622,12 @@ class TestCompareCommand:
         result = handle(Jarvis(), "compare", {"prompt": "anything"})
         assert isinstance(result["reply"], str)
         assert "model comparison" in result["reply"]
+
+    def test_compare_wired_but_not_earned_is_honest(self) -> None:
+        jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
+        result = handle(jarvis, "compare", {"prompt": "anything"})
+        assert isinstance(result["reply"], str)
+        assert "haven't proposed or earned it yet" in result["reply"]
 
     def test_compare_requires_a_prompt(self) -> None:
         result = handle(
@@ -606,9 +640,77 @@ class TestCompareCommand:
 
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
+        _grow(jarvis, "compare language models")
         result = handle(jarvis, "compare", {"prompt": "fail now"})
         assert isinstance(result["reply"], str)
         assert "couldn't complete that comparison" in result["reply"]
+
+
+class TestToolCommand:
+    def test_list_reports_registered_tools(self) -> None:
+        jarvis = Jarvis()
+        jarvis.register_tool(EchoTool())
+        result = handle(jarvis, "tool", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "echo" in result["reply"]
+        assert result["count"] == 1
+
+    def test_list_without_tools_is_honest(self) -> None:
+        result = handle(Jarvis(), "tool", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "No tools are registered" in result["reply"]
+
+    def test_run_executes_a_tool(self) -> None:
+        jarvis = Jarvis()
+        jarvis.register_tool(EchoTool())
+        result = handle(
+            jarvis, "tool", {"action": "run", "name": "echo", "arguments": {"text": "hi"}}
+        )
+        assert isinstance(result["reply"], str)
+        assert "hi" in result["reply"]
+        assert result["ok"] is True
+
+    def test_run_refuses_an_unapproved_external_tool(self) -> None:
+        jarvis = Jarvis()
+        jarvis.register_tool(_FakeExternalTool())
+        result = handle(jarvis, "tool", {"action": "run", "name": "ping"})
+        assert isinstance(result["reply"], str)
+        assert "approval" in result["reply"]
+        assert result["ok"] is False
+
+    def test_run_external_tool_with_approval(self) -> None:
+        jarvis = Jarvis()
+        jarvis.register_tool(_FakeExternalTool())
+        result = handle(
+            jarvis, "tool", {"action": "run", "name": "ping", "approved": True}
+        )
+        assert isinstance(result["reply"], str)
+        assert "pong" in result["reply"]
+
+    def test_run_requires_a_name(self) -> None:
+        result = handle(Jarvis(), "tool", {"action": "run"})
+        assert isinstance(result["reply"], str)
+        assert "Name a tool" in result["reply"]
+
+    def test_unknown_tool_is_a_clear_message(self) -> None:
+        result = handle(
+            Jarvis(), "tool", {"action": "run", "name": "ghost", "approved": True}
+        )
+        assert isinstance(result["reply"], str)
+        assert "ghost" in result["reply"]
+
+
+class _FakeExternalTool:
+    """An external (approval-gated) tool for the tool command tests."""
+
+    spec = ToolSpec(
+        name="ping",
+        description="ping a remote host",
+        permission=PermissionLevel.EXTERNAL_ACTION,
+    )
+
+    def run(self, arguments):  # type: ignore[no-untyped-def]
+        return ToolCallResult(value="pong", ok=True)
 
 
 class TestCapabilityCommand:

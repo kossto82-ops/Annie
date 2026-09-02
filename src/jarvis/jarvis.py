@@ -217,8 +217,8 @@ class Jarvis:
         # are candidate text only; reasoning/synthesis over them stays in the core.
         self._model_compare: ModelComparator | None = model_compare
         # The live edge of Odysseus (D7): which acquired capability names are backed
-        # by a real provider. When no registry is given, the wired ExternalSource
-        # backs the web capabilities by default; None with no source -> offline.
+        # by a real provider. When no registry is given, the wired edge sources back
+        # the capability names by default; None with no source -> offline.
         self._external_providers_auto = capability_providers is None
         if capability_providers is not None:
             self._capability_providers: CapabilityRegistry | None = capability_providers
@@ -231,7 +231,9 @@ class Jarvis:
             # real provider, so `can_do` reflects what is actually usable.
             self._reasoner_capability = ReasonerCapability()
             self._recall_capability = SemanticRecallCapability()
-            self._capability_providers = self._build_auto_registry(external_source)
+            self._capability_providers = self._build_auto_registry(
+                external_source, research_source, model_compare
+            )
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
         self._refutations: RefutationRepository = (
@@ -437,16 +439,31 @@ class Jarvis:
         """
         self._external_source = source
         if self._external_providers_auto:
-            self._capability_providers = self._build_auto_registry(source)
+            self._refresh_providers()
 
-    def _build_auto_registry(self, source: ExternalSource | None) -> CapabilityRegistry:
-        """The default edge registry: the web source + Jarvis's reasoner/recall seams.
+    def _refresh_providers(self) -> None:
+        """Rebuild the default capability registry from whatever edges are wired."""
+        self._capability_providers = self._build_auto_registry(
+            self._external_source, self._research_source, self._model_compare
+        )
 
-        Used when no explicit registry was supplied, so `can_do` reflects whatever is
-        actually wired: the ExternalSource (web), the reasoner, and meaning-recall.
+    def _build_auto_registry(
+        self,
+        source: ExternalSource | None,
+        research: ResearchSource | None = None,
+        compare: ModelComparator | None = None,
+    ) -> CapabilityRegistry:
+        """The default edge registry: the wired sources + Jarvis's reasoner seams.
+
+        Used when no explicit registry was supplied, so `can_do` reflects whatever
+        is actually wired: the ExternalSource (web), the research source (deep
+        research), the model comparator (blind comparison), the reasoner, and
+        meaning-recall.
         """
         return build_default_registry(
             source,
+            research_source=research,
+            model_compare=compare,
             reasoner=self._reasoner_capability,
             recall=self._recall_capability,
         )
@@ -504,6 +521,8 @@ class Jarvis:
         explicit decision).
         """
         self._research_source = source
+        if self._external_providers_auto:
+            self._refresh_providers()
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Investigate ``query`` in depth through the research capability.
@@ -535,6 +554,8 @@ class Jarvis:
         replies it chooses to use.
         """
         self._model_compare = comparator
+        if self._external_providers_auto:
+            self._refresh_providers()
 
     def compare_models(
         self, prompt: str, *, models: Sequence[str] | None = None

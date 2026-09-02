@@ -60,6 +60,18 @@ _TEMPLATES: tuple[_Template, ...] = (
         cues=frozenset({"embedding", "semantic", "recall", "recuerdo", "significado"}),
     ),
     _Template(
+        name="deep research",
+        description="investigate a question in depth through a search instance",
+        requirement="a SearXNG (or compatible) instance",
+        cues=frozenset({"research", "investig", "profund", "indepth", "in depth"}),
+    ),
+    _Template(
+        name="compare language models",
+        description="ask several language models one question and gather their replies blind",
+        requirement="models configured in the language-model registry",
+        cues=frozenset({"compare", "compar", "benchmark", "several models", "modelos"}),
+    ),
+    _Template(
         name="reason with a language model",
         description="propose provisional answers when belief and memory cannot",
         requirement="a language-model provider",

@@ -150,3 +150,22 @@ src/jarvis/infrastructure/model_compare_source.py # RegistryModelComparator sobr
 
 Al cierre: `pytest` (suite completa), `ruff check src`, `pyright src` (strict) — sin
 errores, como exige el repo.
+
+---
+
+## Segunda pasada (auditoría de Fases 0–2) — ✅ completo
+
+Auditoría post-integración (2026-09-02) y los dos hallazgos que se resolvieron:
+
+- **A — Gate "earned" uniforme para research/compare:** `external` exigía
+  `can_do` (cap. adquirida + provider, §28) pero `research`/`compare` solo
+  verificaban el cableo. Ahora ambos pasan por el mismo gate: `build_default_registry`
+  registra `ResearchCapability`/`ModelCompareCapability` cuando el seam está cableado
+  (`set_research_source`/`set_model_compare` reconstruyen el auto-registry), y el
+  command center distingue *not wired* de *not earned* vía `_capability_not_ready`.
+  El scout ganó los templates `deep research` y `compare language models`, así el
+  flujo completo scout → acquire → use existe de extremo a extremo.
+- **B — Superficie UI para herramientas:** nuevo comando `tool` en el command
+  center (`list` / `run`), ejecutando detrás del gate de política (external/
+  destructivas exigen `approved: true`). El resultado vuelve como outcome, nunca
+  como veredicto (D6).
