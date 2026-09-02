@@ -1,7 +1,8 @@
-# Integración Odysseus → Jarvis (Fases 0–2)
+# Integración Odysseus → Jarvis (Fases 0–3)
 
 Plan de integración de capacidades de **Odysseus** (`odysseus-dev/odysseus`, AGPL-3.0)
-en Jarvis. Alcance acordado: **Fases 0–2** — Tool Registry, Deep Research y Compare.
+en Jarvis. Alcance acordado: **Fases 0–3** — Tool Registry, Deep Research, Compare y
+capacidades dentro de la cognición.
 
 ## Naturaleza de la integración
 
@@ -147,6 +148,8 @@ src/jarvis/infrastructure/model_compare_source.py # RegistryModelComparator sobr
 | 1c | Superficie Jarvis + comando `research` | `pytest tests/test_command_center.py` | ✅ hecho |
 | 2a | `ModelComparator` + `ModelRun` | `pytest tests/domain/test_model_compare.py` | ✅ hecho |
 | 2b | adapter sobre registry LLM | `pytest tests/infrastructure/test_model_compare_source.py` | ✅ hecho |
+| 3a | `KnowledgeSource` Protocol + procedencia en el episodio | `pytest tests/test_knowledge_source.py` | ✅ hecho |
+| 3b | adaptadores research/compare + guardas en el executive | `pytest tests/infrastructure/test_knowledge_source_adapters.py` | ✅ hecho |
 
 Al cierre: `pytest` (suite completa), `ruff check src`, `pyright src` (strict) — sin
 errores, como exige el repo.
@@ -178,3 +181,46 @@ Limpieza de los hallazgos menores (C/D/F):
   (no `USER_STATEMENT`): un gap que Jarvis se observa a sí mismo pesa
   `0.6 × peso`, nunca como una afirmación del companion.
 - **F —** `FileSystemTool` valida `operation`: un typo nunca escribe silenciosamente.
+
+---
+
+## Fase 3 — Capacidades dentro de la cognición (consulta deliberada) — ✅ completo
+
+Hasta Fase 2, las capacidades Odysseus eran **invocables a demanda** (comandos
+`research` / `compare`): la superficie pregunta, el núcleo espera. Fase 3 cierra la
+hélice: que el propio núcleo **decida** cuándo consultarlas como evidencia de
+entrada, del mismo modo deliberado con que decide recordar o razonar (Vision §37).
+
+**Seam de dominio** (`KnowledgeSource`, espejo de `Reasoner`/`MemoryRetriever`, D7):
+
+```
+src/jarvis/domain/services/knowledge_source.py   # KnowledgeSource Protocol
+   kind: str                                     # etiqueta de procedencia ("deep research")
+   gather(question) -> Evidence | None           # evidencia candidata, o None honesto
+src/jarvis/infrastructure/knowledge_source.py    # adaptadores sobre los edges Odysseus
+   ResearchKnowledgeSource(research)             # reporte -> EXTERNAL_SOURCE (0.4)
+   CompareKnowledgeSource(comparator)            # réplicas ciegas -> INFERENCE (0.5)
+```
+
+**Dónde y cuándo (todo en el executive, `ExecutiveController`):**
+
+- Guardas iguales a las del razonamiento (Vision §37): la creencia sin
+  fundamento real, sin recall fuerte (relevance ≥ 0.6), y **una sola** consulta por
+  episodio. Corre **antes** de razonar: si lo reunido fundamenta la creencia, el
+  episodio no pide una inferencia innecesaria.
+- El borde solo **recoge** (D6): la confianza se sigue derivando de la evidencia;
+  `None` es un consultar honesto "no hay nada" y el episodio sigue igual.
+- Procedencia en el episodio: `CognitiveEpisode.consulted` + `record_consult(kind)`
+  (Vision §26) — un trace puede decir *qué* edge se preguntó y qué volvió.
+- Fuentes honestas de la evidencia: research → `EXTERNAL_SOURCE` (débil, de fuera,
+  no verificada por los sentidos de Jarvis); compare → `INFERENCE` (texto candidato
+  de modelos, la fuente más débil; nunca supera una observación real, Vision §33).
+- Un edge que falla o no encuentra nada devuelve `None`, nunca una afirmación (D6, D8).
+
+**Superficie `Jarvis`:** param/property/setter `knowledge_source` (opt-in). No se
+cablea en `persistent()`: consultar un edge es una decisión explícita del operador.
+
+**Verificación:** suite completa (825 passed), `ruff`, `pyright src` (strict).
+Tests: `tests/test_knowledge_source.py` (protocolo + guardas + procedencia) y
+`tests/infrastructure/test_knowledge_source_adapters.py` (adapters + end-to-end
+offline por Jarvis), 19 tests nuevos.

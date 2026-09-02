@@ -45,6 +45,7 @@ from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
 from jarvis.domain.services.hypothesis_generation import generate_hypotheses
+from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.model_compare import ModelComparator, ModelRun
 from jarvis.domain.services.reflection import find_reflections
 from jarvis.domain.services.self_observation import (
@@ -165,6 +166,7 @@ class Jarvis:
         external_source: ExternalSource | None = None,
         research_source: ResearchSource | None = None,
         model_compare: ModelComparator | None = None,
+        knowledge_source: KnowledgeSource | None = None,
         capability_providers: CapabilityRegistry | None = None,
         tool_policy: ToolPolicy | None = None,
     ) -> None:
@@ -216,6 +218,12 @@ class Jarvis:
         # -> no comparison is possible (and no model is ever auto-polled). Its runs
         # are candidate text only; reasoning/synthesis over them stays in the core.
         self._model_compare: ModelComparator | None = model_compare
+        # The deliberate-consult seam (Vision §37): when an episode cannot conclude
+        # from what it knows, remembers, or reasons, it may deliberately ask a
+        # KnowledgeSource to gather candidate evidence about the trigger. None by
+        # default -> episodes never consult, exactly as before (D8). A wired source
+        # only gathers candidates; deriving confidence stays in the core (D6).
+        self._knowledge_source: KnowledgeSource | None = knowledge_source
         # The live edge of Odysseus (D7): which acquired capability names are backed
         # by a real provider. When no registry is given, the wired edge sources back
         # the capability names by default; None with no source -> offline.
@@ -297,6 +305,7 @@ class Jarvis:
             memory_retriever,
             reasoner,
             weighting_policy,
+            knowledge_source=knowledge_source,
         )
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
@@ -357,6 +366,27 @@ class Jarvis:
         # (Odysseus), so `can_do("recall by meaning")` reflects reality.
         if self._recall_capability is not None:
             self._recall_capability.set_live(True)
+
+    @property
+    def knowledge_source(self) -> KnowledgeSource | None:
+        """The deliberate-consult seam (Vision §37, §38), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis can deliberately consult.
+        A wired source only gathers candidate evidence; Jarvis's core still derives
+        the belief's confidence from it (D6).
+        """
+        return self._knowledge_source
+
+    def set_knowledge_source(self, source: KnowledgeSource | None) -> None:
+        """Wire (or clear) the deliberate-consult seam at runtime.
+
+        ``None`` disables it: episodes never consult, exactly as before. Wiring one
+        only lets the executive *choose* to consult it -- when a belief stays
+        ungrounded, unremembered, and unreasoned -- never forces it. Deliberately
+        not wired by :meth:`persistent`: consulting an edge is opt-in.
+        """
+        self._executive.set_knowledge_source(source)
+        self._knowledge_source = source
 
     @property
     def perception(self) -> PerceptionSource:

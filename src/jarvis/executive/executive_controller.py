@@ -31,6 +31,7 @@ from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
+from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
@@ -158,6 +159,7 @@ class ExecutiveController:
         memory_retriever: MemoryRetriever | None = None,
         reasoner: Reasoner | None = None,
         weighting_policy: EvidenceWeightingPolicy | None = None,
+        knowledge_source: KnowledgeSource | None = None,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
@@ -174,6 +176,11 @@ class ExecutiveController:
         # help (Vision §37). Absent -> an ungrounded, unremembered question stays an
         # honest "I don't have enough", exactly as before.
         self._reasoner = reasoner
+        # Optional: deliberately gathers candidate evidence when neither belief,
+        # memory, nor reasoning can settle a question (Vision §37, §38). Absent ->
+        # the episode never consults, exactly as before; wiring one only lets an
+        # episode *choose* to look -- it gathers candidates and never concludes (D6).
+        self._knowledge_source = knowledge_source
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
         """Swap the reasoner at runtime (matches the active provider, Vision §38)."""
@@ -182,6 +189,15 @@ class ExecutiveController:
     def set_memory_retriever(self, retriever: MemoryRetriever | None) -> None:
         """Swap the memory retriever at runtime -- e.g. lexical -> embedding (D11)."""
         self._memory_retriever = retriever
+
+    def set_knowledge_source(self, source: KnowledgeSource | None) -> None:
+        """Swap the deliberate-consult seam at runtime (matches the provider).
+
+        ``None`` disables it: episodes never consult. Like the reasoner, this is
+        config -- it sets only what an episode *can* gather, never that it must;
+        a live source stays a candidate, not a verdict (D6).
+        """
+        self._knowledge_source = source
 
     def reason(
         self,
@@ -259,6 +275,7 @@ class ExecutiveController:
             for piece in pieces:
                 episode.observe(piece)
             self._recall_into(episode)
+            self._consult_into(episode, belief)
             self._reason_into(episode, belief)
         self._beliefs.save(belief)
         self._flush(episode)  # dispatch evidence/belief events
@@ -464,6 +481,31 @@ class ExecutiveController:
                 context="reasoned via the language model",
             )
         )
+
+    def _consult_into(self, episode: CognitiveEpisode, belief: Belief) -> None:
+        """Deliberately gather candidate evidence when Jarvis cannot yet conclude.
+
+        The same guards that gate reasoning hold here (no real support, no strong
+        recall), plus: a seam is wired, and this episode has not consulted one
+        already. It runs *before* reasoning so gathered evidence that grounds the
+        belief keeps the episode from reaching for an unneeded inference (Vision
+        §37). The edge only gathers (D6): the belief's confidence is still derived
+        from whatever evidence comes back; a ``None`` consult is an honest "nothing
+        gathered" that leaves the episode exactly as it was.
+        """
+        if self._knowledge_source is None:
+            return
+        if self._has_real_support(belief):
+            return
+        recalled = episode.recalled_memories
+        if recalled and recalled[0].relevance >= STRONG_RECALL_RELEVANCE:
+            return
+        if episode.consulted is not None:
+            return
+        piece = self._knowledge_source.gather(episode.trigger)
+        episode.record_consult(self._knowledge_source.kind)
+        if piece is not None:
+            episode.observe(piece)
 
     @staticmethod
     def _has_real_support(belief: Belief) -> bool:

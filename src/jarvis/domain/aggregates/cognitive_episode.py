@@ -74,6 +74,7 @@ class CognitiveEpisode:
     _evidence_request: EvidenceRequest | None = field(default=None, repr=False)
     _recalled: tuple[RecalledMemory, ...] = field(default=(), repr=False)
     _inference: Inference | None = field(default=None, repr=False)
+    _consulted: str | None = field(default=None, repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
     )
@@ -182,6 +183,25 @@ class CognitiveEpisode:
     def inference(self) -> Inference | None:
         """The provisional answer reasoned for this trigger, if any (Vision §37)."""
         return self._inference
+
+    def record_consult(self, kind: str) -> None:
+        """Record that this episode deliberately consulted the ``kind`` edge.
+
+        Provenance only (Vision §26): the consult's findings arrive as ordinary
+        candidate evidence via :meth:`observe`; this marker exists so the same
+        episode never consults twice, and so a trace can later say *which* edge
+        was asked and what it returned.
+        """
+        if self.state.is_terminal:
+            raise InvalidStateTransition(
+                f"Episode {self.id} is {self.state.value}; cannot record a consult"
+            )
+        self._consulted = kind
+
+    @property
+    def consulted(self) -> str | None:
+        """The deliberate-consult edge this episode used, or None (Vision §26)."""
+        return self._consulted
 
     def attach_evidence_request(self, request: EvidenceRequest) -> None:
         """Record what evidence this episode is missing (Vision §16, §37)."""
