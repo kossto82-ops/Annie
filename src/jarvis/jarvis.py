@@ -76,6 +76,8 @@ from jarvis.executive.executive_controller import (
 from jarvis.infrastructure.agent_reach_source import build_agent_reach_source
 from jarvis.infrastructure.capability_registry import (
     CapabilityRegistry,
+    ReasonerCapability,
+    SemanticRecallCapability,
     build_default_registry,
 )
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
@@ -92,6 +94,7 @@ from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
+from jarvis.infrastructure.silent_reasoner import SilentReasoner
 from jarvis.infrastructure.text_embedder import TextEmbedder
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace, EpisodeTraceSink
@@ -113,6 +116,15 @@ _INSIGHT_CONFIDENCE = 0.5
 # distinguishes a need from other belief kinds and keeps retrieval deterministic
 # (D17) -- but it is machine bookkeeping, never shown to the companion.
 _NEED_PREFIX = "I need the ability to: "
+
+
+def _is_silent_reasoner(reasoner: Reasoner | None) -> bool:
+    """Whether ``reasoner`` is the offline no-op (never proposes anything).
+
+    A silent reasoner is not a usable "reason with a language model" capability --
+    it proposes nothing -- so it does not make that edge capability live.
+    """
+    return isinstance(reasoner, SilentReasoner)
 
 
 class Jarvis:
@@ -185,8 +197,16 @@ class Jarvis:
         self._external_providers_auto = capability_providers is None
         if capability_providers is not None:
             self._capability_providers: CapabilityRegistry | None = capability_providers
+            self._reasoner_capability = None
+            self._recall_capability = None
         else:
-            self._capability_providers = build_default_registry(external_source)
+            # Jarvis owns two mutable edge providers for the run-time seams: the
+            # reasoner and meaning-recall capabilities. They start offline (not
+            # live) and flip when `set_reasoner` / `enable_embedding_recall` wire a
+            # real provider, so `can_do` reflects what is actually usable.
+            self._reasoner_capability = ReasonerCapability()
+            self._recall_capability = SemanticRecallCapability()
+            self._capability_providers = self._build_auto_registry(external_source)
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
         self._refutations: RefutationRepository = (
@@ -242,8 +262,14 @@ class Jarvis:
         Like the perceiver and voice, the reasoning capability is config: switching
         provider from the command center updates it too, so a provisional answer comes
         from the same model that perceives and voices. ``None`` disables reasoning.
+        When Jarvis owns its edge, this also flips the "reason with a language model"
+        capability to live only for a *real* reasoner (silent/offline does not count).
         """
         self._executive.set_reasoner(reasoner)
+        if self._reasoner_capability is not None:
+            self._reasoner_capability.set_live(
+                reasoner is not None and not _is_silent_reasoner(reasoner)
+            )
 
     def reason(
         self,
@@ -284,6 +310,10 @@ class Jarvis:
                 fallback=lexical,
             )
         )
+        # Meaning-based recall is now live: flip the edge capability to available
+        # (Odysseus), so `can_do("recall by meaning")` reflects reality.
+        if self._recall_capability is not None:
+            self._recall_capability.set_live(True)
 
     @property
     def perception(self) -> PerceptionSource:
@@ -366,7 +396,19 @@ class Jarvis:
         """
         self._external_source = source
         if self._external_providers_auto:
-            self._capability_providers = build_default_registry(source)
+            self._capability_providers = self._build_auto_registry(source)
+
+    def _build_auto_registry(self, source: ExternalSource | None) -> CapabilityRegistry:
+        """The default edge registry: the web source + Jarvis's reasoner/recall seams.
+
+        Used when no explicit registry was supplied, so `can_do` reflects whatever is
+        actually wired: the ExternalSource (web), the reasoner, and meaning-recall.
+        """
+        return build_default_registry(
+            source,
+            reasoner=self._reasoner_capability,
+            recall=self._recall_capability,
+        )
 
     def read_external(self, url: str) -> RetrievedDocument:
         """Fetch one external document by ``url`` through the Internet capability.
@@ -639,7 +681,6 @@ class Jarvis:
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
             weighting_policy=weighting_policy,
             external_source=source,
-            capability_providers=build_default_registry(source),
         )
 
     def think(

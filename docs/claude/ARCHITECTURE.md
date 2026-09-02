@@ -126,7 +126,9 @@ extensions of its ability to act (Vision §34). Phase 1 delivered the core model
 (discovery); Phase 2 grounds recognition in evidence and wires acquisition into curiosity
 and the surfaces; Phase 3 put the *live* capability at the edge behind a provider registry;
 Phase 4 added the self-initiated half: Jarvis noticing recurring subjects it failed to
-answer, as the seed of a need.
+answer, as the seed of a need; Phase 5 backed the remaining seams -- reasoning and
+meaning-recall -- so every catalog capability except speech now reports live when its
+runtime provider is active.
 
 The flow:
 
@@ -183,7 +185,11 @@ Boundaries:
   capability is *both* acquired and live-backed, so acquisition is real, not decorative: the
   Internet command (`external` read/search) now requires the matching capability to be
   earned, and the persistent edge (agent-reach) backs "search the web"/"read external
-  documents" by default.
+  documents" by default. The crawl/backing is the same seam type for the runtime ones:
+  `ReasonerCapability` ("reason with a language model") and `SemanticRecallCapability`
+  ("recall by meaning") are mutable edge providers Jarvis or a caller flips when the live
+  reasoner / embedding recall is active — a silent (offline) reasoner and lexical-only
+  recall do *not* count, so `can_do` stays honest.
 
 Storage: `CapabilityRepository` and the need beliefs (`BeliefRepository`) are domain Protocols
 with in-memory and JSON stores, wired into `Jarvis.persistent()` as `capabilities.json` and

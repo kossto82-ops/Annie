@@ -105,7 +105,11 @@ withhold (Vision §28) -- and curiosity closes the loop: a confident, unmet need
 decorative: a `Capability` is bookkeeping, and its live side is a `CapabilityProvider` at the
 edge (D7) -- `Jarvis.can_do(name)` is true only when the capability is acquired *and* backed
 by a ready provider; the Internet command requires the earned capability, and `persistent()`
-backs the web capabilities with agent-reach. It only *proposes*/suggests;
+backs the web capabilities with agent-reach. The same edge covers the runtime seams:
+`ReasonerCapability` ("reason with a language model") and `SemanticRecallCapability`
+("recall by meaning") are mutable providers Jarvis flips when the live reasoner / embedding
+recall is active — a silent (offline) reasoner and lexical-only recall do not count, so only
+genuinely live capabilities report `can_do`. It only *proposes*/suggests;
 acquiring/rejecting is a deliberate, separate step (autonomy is earned, Vision §28), and the
 capability itself stays an injectable provider at the edge (D7). `CapabilityRepository` +
 need `BeliefRepository` (domain Protocols; in-memory + JSON stores) persist proposals and

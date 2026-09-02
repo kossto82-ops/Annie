@@ -329,7 +329,90 @@ class TestCapabilityProviders:
         registry = build_default_registry(None)
         assert registry.provider_for("search the web") is None
 
+    def test_default_registry_can_back_reasoner_and_recall_seams(self) -> None:
+        from jarvis.infrastructure.capability_registry import (
+            ReasonerCapability,
+            SemanticRecallCapability,
+        )
+
+        reason = ReasonerCapability()
+        recall = SemanticRecallCapability()
+        registry = build_default_registry(
+            None, reasoner=reason, recall=recall
+        )
+        assert registry.provider_for("reason with a language model") is reason
+        assert registry.provider_for("recall by meaning") is recall
+        # With a source, the web capabilities are backed alongside them.
+        web_registry = build_default_registry(
+            _OfflineSource(),  # type: ignore[arg-type]
+            reasoner=reason,
+            recall=recall,
+        )
+        assert web_registry.provider_for("search the web") is not None
+        assert web_registry.provider_for("reason with a language model") is reason
+
     def test_external_source_capability_reports_service_and_availability(self) -> None:
         provider = ExternalSourceCapability(_OfflineSource(), "read external documents")  # type: ignore[arg-type]
         assert provider.capability == "read external documents"
         assert provider.is_available()
+
+    def test_reasoner_capability_is_a_mutable_edge_seam(self) -> None:
+        from jarvis.infrastructure.capability_registry import ReasonerCapability
+
+        provider = ReasonerCapability()
+        assert provider.capability == "reason with a language model"
+        assert not provider.is_available()  # offline/silent by default
+        provider.set_live(True)
+        assert provider.is_available()
+        provider.set_live(False)
+        assert not provider.is_available()
+
+    def test_semantic_recall_capability_is_a_mutable_edge_seam(self) -> None:
+        from jarvis.infrastructure.capability_registry import SemanticRecallCapability
+
+        provider = SemanticRecallCapability()
+        assert provider.capability == "recall by meaning"
+        assert not provider.is_available()
+        provider.set_live(True)
+        assert provider.is_available()
+
+    def test_a_silent_reasoner_does_not_back_the_reason_capability(self) -> None:
+        from jarvis.infrastructure.silent_reasoner import SilentReasoner
+
+        jarvis = Jarvis()
+        _acquire(jarvis, "reason with a language model")
+        jarvis.set_reasoner(SilentReasoner())
+        # An offline reasoner proposes nothing -> not a usable reasoning capability.
+        assert not jarvis.can_do("reason with a language model")
+
+    def test_a_live_reasoner_backs_the_reason_capability(self) -> None:
+        from jarvis.domain.conversation.conversation_context import Turn
+        from jarvis.domain.value_objects.inference import Inference
+        from jarvis.domain.value_objects.recalled_memory import RecalledMemory
+
+        class _LiveReasoner:
+            def infer(
+                self,
+                query: str,
+                memory: tuple[RecalledMemory, ...] = (),
+                conversation: tuple[Turn, ...] = (),
+            ) -> Inference | None:
+                return None
+
+        jarvis = Jarvis()
+        _acquire(jarvis, "reason with a language model")
+        jarvis.set_reasoner(_LiveReasoner())
+        assert jarvis.can_do("reason with a language model")
+        assert "reason with a language model" in jarvis.usable_capabilities()
+
+    def test_enabling_embedding_recall_backs_the_recall_capability(self) -> None:
+        class _StubEmbedder:
+            def embed(self, texts: tuple[str, ...]) -> list[tuple[float, ...]]:
+                return [(0.0,) for _ in texts]
+
+        jarvis = Jarvis()
+        _acquire(jarvis, "recall by meaning")
+        assert not jarvis.can_do("recall by meaning")
+        jarvis.enable_embedding_recall(_StubEmbedder())  # type: ignore[arg-type]
+        assert jarvis.can_do("recall by meaning")
+        assert "recall by meaning" in jarvis.usable_capabilities()
