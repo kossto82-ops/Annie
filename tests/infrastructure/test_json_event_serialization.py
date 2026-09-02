@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.belief_events import (
     BeliefStrengthened,
@@ -19,7 +20,9 @@ from jarvis.domain.events.episode_events import (
 )
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.events.hypothesis_events import HypothesisCreated
+from jarvis.domain.events.tool_events import ToolCallRecorded
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.tool_call import ToolCall
 from jarvis.infrastructure.json_event_serialization import (
     UnregisteredEventError,
     deserialise_event,
@@ -49,6 +52,15 @@ _SAMPLES: list[CognitiveEvent] = [
     HypothesisCreated(correlation_id="e", hypothesis_id="h", statement="a common cause"),
     ActionOutcomeRecorded(
         correlation_id="e", action_id="a", description="did it", met_expectation=True
+    ),
+    ToolCallRecorded(
+        correlation_id="e",
+        call=ToolCall(
+            tool="echo",
+            arguments={"text": "hi"},
+            permission=PermissionLevel.EXECUTE,
+            ok=True,
+        ),
     ),
 ]
 

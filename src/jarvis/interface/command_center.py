@@ -35,6 +35,7 @@ from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
+from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import llm_config_store
@@ -779,6 +780,62 @@ def _external(jarvis: Jarvis, payload: Reply) -> Reply:
     return {"reply": "Unknown external action.", "speak": False}
 
 
+def _research(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Investigate a question in depth through the research capability (Vision §38).
+
+    Like ``external``, this is a *deliberate* gate: a surface asks for in-depth
+    research when outside knowledge is actually needed. The reply is the source's
+    plain-language summary plus each cited document's provenance, so the surface
+    (and Jarvis) can reason over *what was found* rather than a verdict.
+    """
+    query = str(payload.get("query", "")).strip()
+    if not query:
+        return {"reply": "Provide a query to research.", "speak": False}
+    if jarvis.research_source is None:
+        return {
+            "reply": "No research capability is wired up right now — I can still "
+            "think and remember, I just can't go look in depth anywhere "
+            "(SEARXNG_INSTANCE isn't configured).",
+            "speak": False,
+        }
+    try:
+        depth_raw = payload.get("depth", 1)
+        try:
+            depth = int(depth_raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            depth = 1
+        report = jarvis.deep_research(query, depth=depth)
+        return {
+            "reply": _research_reply(report),
+            "speak": False,
+            "count": len(report.documents),
+        }
+    except Exception as error:  # noqa: BLE001 - the research-provider boundary
+        return {"reply": _research_error(error), "speak": False}
+
+
+def _research_reply(report: ResearchReport) -> str:
+    """A readable summary of a research report, keeping the documents' provenance."""
+    lines = [report.summary]
+    for i, doc in enumerate(report.documents, 1):
+        head = doc.content.strip().replace("\n", " ")
+        if len(head) > 200:
+            head = head[:200].rstrip() + "…"
+        title = f" — {doc.title}" if doc.title else ""
+        lines.append(f"{i}. [{doc.source}]{title}\n   {doc.url or '(no url)'}\n   {head}")
+    return "\n".join(lines)
+
+
+def _research_error(error: Exception) -> str:
+    """A clear message for a research-capability failure (never a crash)."""
+    detail = type(error).__name__
+    return (
+        f"I couldn't complete that research ({detail}). "
+        "It might be a network issue or an unreachable SearXNG instance. "
+        "My reasoning and memory are unaffected."
+    )
+
+
 def _external_error(error: Exception) -> str:
     """A clear message for an Internet-capability failure (never a crash).
 
@@ -1026,6 +1083,7 @@ _COMMANDS: dict[str, Command] = {
     "greeting": _greeting,
     "state": _state,
     "external": _external,
+    "research": _research,
     "capability": _capability,
 }
 

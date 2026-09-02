@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.belief_events import (
     BeliefStrengthened,
@@ -32,7 +33,9 @@ from jarvis.domain.events.episode_events import (
 )
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.events.hypothesis_events import HypothesisCreated
+from jarvis.domain.events.tool_events import ToolCallRecorded
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.tool_call import ToolCall
 
 # Per event type, the fields to persist beyond the shared base. Every concrete
 # CognitiveEvent subclass MUST appear here (test_json_event_serialization enforces it).
@@ -47,9 +50,34 @@ _EXTRA_FIELDS: dict[type[CognitiveEvent], tuple[str, ...]] = {
     ContradictionDetected: ("belief_id", "evidence_id"),
     HypothesisCreated: ("hypothesis_id", "statement"),
     ActionOutcomeRecorded: ("action_id", "description", "met_expectation"),
+    ToolCallRecorded: ("call",),
 }
 
 _BY_NAME: dict[str, type[CognitiveEvent]] = {cls.__name__: cls for cls in _EXTRA_FIELDS}
+
+
+def _tool_call_to_dict(call: ToolCall) -> dict[str, Any]:
+    return {
+        "tool": call.tool,
+        "arguments": call.arguments,
+        "permission": call.permission.value,
+        "duration_seconds": call.duration_seconds,
+        "ok": call.ok,
+        "error": call.error,
+        "started_at": call.started_at.isoformat(),
+    }
+
+
+def _tool_call_from_dict(data: dict[str, Any]) -> ToolCall:
+    return ToolCall(
+        tool=data["tool"],
+        arguments=dict(data.get("arguments") or {}),
+        permission=PermissionLevel(data["permission"]),
+        duration_seconds=data.get("duration_seconds", 0.0),
+        ok=data.get("ok", True),
+        error=data.get("error", ""),
+        started_at=datetime.fromisoformat(data["started_at"]),
+    )
 
 
 class UnregisteredEventError(RuntimeError):
@@ -73,7 +101,12 @@ def serialise_event(event: CognitiveEvent) -> dict[str, Any]:
     }
     for name in extra:
         value = getattr(event, name)
-        data[name] = value.value if isinstance(value, Confidence) else value
+        if isinstance(value, Confidence):
+            data[name] = value.value
+        elif isinstance(value, ToolCall):
+            data[name] = _tool_call_to_dict(value)
+        else:
+            data[name] = value
     return data
 
 
@@ -91,5 +124,10 @@ def deserialise_event(data: dict[str, Any]) -> CognitiveEvent | None:
     }
     for name in _EXTRA_FIELDS[cls]:
         raw = data[name]
-        kwargs[name] = Confidence(raw) if name == "confidence" else raw
+        if name == "confidence":
+            kwargs[name] = Confidence(raw)
+        elif name == "call":
+            kwargs[name] = _tool_call_from_dict(raw)
+        else:
+            kwargs[name] = raw
     return cls(**kwargs)

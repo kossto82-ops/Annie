@@ -21,6 +21,7 @@ from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.infrastructure.capability_registry import build_default_registry
 from jarvis.interface.command_center import handle, route, snapshot, stream_say
@@ -506,6 +507,54 @@ class TestExternal:
         result = handle(Jarvis(), "external", {})
         assert isinstance(result["reply"], str)
         assert "read" in result["reply"]
+
+
+class _FakeResearchSource:
+    """A research source that returns a canned report unless asked to fail."""
+
+    def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
+        if "fail" in query:
+            raise RuntimeError("instance unreachable")
+        doc = RetrievedDocument(
+            content="the sky is blue because of Rayleigh scattering",
+            source="searxng",
+            url="https://example.edu/sky",
+            title="Why the sky is blue",
+        )
+        return ResearchReport(
+            query=query, summary=f"Found 1 result about {query}.", documents=(doc,)
+        )
+
+
+class TestResearch:
+    def test_research_returns_summary_and_cited_documents(self) -> None:
+        jarvis = Jarvis(research_source=_FakeResearchSource())  # type: ignore[arg-type]
+        result = handle(jarvis, "research", {"query": "why is the sky blue"})
+        assert isinstance(result["reply"], str)
+        assert "Found 1 result" in result["reply"]
+        assert "Why the sky is blue" in result["reply"]
+        assert "example.edu/sky" in result["reply"]
+        assert result["count"] == 1
+
+    def test_research_without_a_source_is_a_clear_message(self) -> None:
+        result = handle(Jarvis(), "research", {"query": "anything"})
+        assert isinstance(result["reply"], str)
+        assert "research capability" in result["reply"]
+
+    def test_research_requires_a_query(self) -> None:
+        result = handle(
+            Jarvis(research_source=_FakeResearchSource()),  # type: ignore[arg-type]
+            "research",
+            {},
+        )
+        assert isinstance(result["reply"], str)
+        assert "Provide a query" in result["reply"]
+
+    def test_failure_returns_a_message_not_a_crash(self) -> None:
+        jarvis = Jarvis(research_source=_FakeResearchSource())  # type: ignore[arg-type]
+        result = handle(jarvis, "research", {"query": "fail now"})
+        assert isinstance(result["reply"], str)
+        assert "couldn't complete that research" in result["reply"]
 
 
 class TestCapabilityCommand:

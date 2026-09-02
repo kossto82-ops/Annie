@@ -8,6 +8,7 @@
 | `docs/claude/DECISIONS.md` | Non-negotiable architectural decisions | Architecture tasks |
 | `docs/claude/DEVELOPMENT.md` | Efficient coding/testing workflow | Development tasks |
 | `docs/claude/CONTEXT_POLICY.md` | Context/token loading rules | Reference |
+| `docs/claude/INTEGRACION_ODYSSEUS.md` | Odysseus integration plan (Fases 0–2) | Integration tasks |
 | `JARVIS_VISION.md` | Foundational vision | Major design/vision tasks |
 | `STATUS.md` | Historical increment log | Historical questions only |
 

@@ -22,6 +22,7 @@ from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.belief_events import ContradictionDetected
 from jarvis.domain.events.domain_event import CognitiveEvent
+from jarvis.domain.events.tool_events import ToolCallRecorded
 from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.reasoning.reasoner import Reasoner
@@ -31,6 +32,7 @@ from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
 from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
+from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.capability_evaluator import recommend as recommend_capability
@@ -49,6 +51,9 @@ from jarvis.domain.services.self_observation import (
     observe_overconfidence,
     observe_prediction_accuracy,
 )
+from jarvis.domain.tools.tool import Tool
+from jarvis.domain.tools.tool_policy import ToolPolicy
+from jarvis.domain.tools.tool_registry import ToolRegistry
 from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
 from jarvis.domain.value_objects.capability import Capability
@@ -66,8 +71,12 @@ from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
+from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
+from jarvis.domain.value_objects.tool_call import ToolCall
+from jarvis.domain.value_objects.tool_call_result import ToolCallResult
+from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.executive.executive_controller import (
     ExecutiveController,
     subject_of,
@@ -92,6 +101,7 @@ from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
+from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
@@ -152,7 +162,9 @@ class Jarvis:
         trace: EpisodeTraceSink | None = None,
         weighting_policy: EvidenceWeightingPolicy | None = None,
         external_source: ExternalSource | None = None,
+        research_source: ResearchSource | None = None,
         capability_providers: CapabilityRegistry | None = None,
+        tool_policy: ToolPolicy | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -191,6 +203,12 @@ class Jarvis:
         # only retrieves documents with provenance; the core still interprets and
         # reasons over them.
         self._external_source: ExternalSource | None = external_source
+        # In-depth investigation (Vision §38): asks an edge provider to look in
+        # depth at a question and return a structured report of what it found. None
+        # by default -> offline, so a bare Jarvis never reaches the network. It only
+        # gathers cited documents + a plain-language summary; the core still reasons
+        # over the report and decides what to believe from it.
+        self._research_source: ResearchSource | None = research_source
         # The live edge of Odysseus (D7): which acquired capability names are backed
         # by a real provider. When no registry is given, the wired ExternalSource
         # backs the web capabilities by default; None with no source -> offline.
@@ -227,6 +245,22 @@ class Jarvis:
         # sink is injected by `persistent()` so the trace survives a restart.
         self._trace: EpisodeTraceSink = trace or EpisodeTrace()
         self.nervous_system.subscribe(CognitiveEvent, self._trace.handle)
+        # Tools (Vision §34, 06_TOOLS_AGENCY): Jarvis's ability to *act* in the
+        # world, never to think. The registry gates risky calls by policy and
+        # records every call as a ToolCallRecorded event so the trace can later
+        # evaluate what Jarvis did (D6/D9: the core still reasons over outcomes).
+        # Empty by default -- nothing can act until a tool is registered.
+        self._tool_policy = tool_policy or ToolPolicy()
+
+        def _record_tool_call(call: ToolCall) -> None:
+            self.nervous_system.publish(
+                ToolCallRecorded(call=call, correlation_id=call.started_at.isoformat())
+            )
+            self.nervous_system.dispatch()
+
+        self._tools: ToolRegistry = ToolRegistry(
+            policy=self._tool_policy, observer=_record_tool_call
+        )
         # Optional long-term-memory recall (Vision §3): when enabled, a deterministic
         # lexical retriever over Jarvis's own stores lets an episode answer from what
         # it remembers instead of a blank "insufficient evidence". Off by default, so
@@ -443,6 +477,86 @@ class Jarvis:
         if self._external_source is None:
             return ()
         return self._external_source.available_channels()
+
+    @property
+    def research_source(self) -> ResearchSource | None:
+        """The deep-research capability (Vision §38), or ``None`` when offline.
+
+        Read-only so a surface can *report* whether Jarvis has a research source
+        wired up. It gathers cited documents and a plain-language summary -- never
+        a verdict, and never a write to Jarvis's memory.
+        """
+        return self._research_source
+
+    def set_research_source(self, source: ResearchSource | None) -> None:
+        """Wire (or clear) the deep-research capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline to in-depth research.
+        Setting one only changes what Jarvis *can* gather -- it does not change how
+        Jarvis reasons or how often it chooses to research (that stays a deliberate,
+        explicit decision).
+        """
+        self._research_source = source
+
+    def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
+        """Investigate ``query`` in depth through the research capability.
+
+        Raises a clear error when no research source is wired. The returned
+        :class:`ResearchReport` carries its cited documents with provenance so
+        Jarvis can reason over *what was found*; it is retrieval, never a
+        conclusion.
+        """
+        if self._research_source is None:
+            raise RuntimeError("no research capability configured; set research_source")
+        return self._research_source.deep_research(query, depth=depth)
+
+    # -- Tools (Vision §34, 06_TOOLS_AGENCY) ------------------------------
+
+    def register_tool(self, tool: Tool) -> None:
+        """Register ``tool`` so Jarvis can *act* through it (Vision §34).
+
+        Tools extend Jarvis's ability to act, not to think: registration only makes
+        an action possible and observable. It never lets the tool or any model
+        decide anything on its own (the core reasons over outcomes; the policy
+        gates risky calls).
+        """
+        self._tools.register(tool)
+
+    def run_tool(
+        self,
+        name: str,
+        arguments: Mapping[str, str] | None = None,
+        *,
+        approved: bool = False,
+    ) -> ToolCallResult:
+        """Run the tool ``name`` with ``arguments`` through the policy gate.
+
+        ``approved`` must be True for a call at a permission level requiring
+        approval (external/distructive); otherwise the registry refuses before any
+        act happens. Every call is recorded as a :class:`ToolCallRecorded` event so
+        the trace later holds what Jarvis did and how it went.
+        """
+        if arguments is None:
+            arguments = {}
+        return self._tools.run(name, dict(arguments), approved=approved)
+
+    def tool_names(self) -> tuple[str, ...]:
+        """Every registered tool name (what Jarvis *can* act through)."""
+        return self._tools.tool_names()
+
+    def tool_spec(self, name: str) -> ToolSpec | None:
+        """The declaration of tool ``name``, or None when it is not registered."""
+        return self._tools.spec(name)
+
+    def tool_channels(self) -> tuple[ToolSpec, ...]:
+        """Report the registered tool declarations (doctor).
+
+        Report-only: it tells Jarvis what actions are possible, not to take them
+        (decision stays in the core, D6/D9).
+        """
+        return tuple(
+            spec for name in self._tools.tool_names() if (spec := self._tools.spec(name))
+        )
 
     # -- Odysseus: capability acquisition (Vision §34, §28) -------------------
 
@@ -667,6 +781,7 @@ class Jarvis:
         """
         base = Path(directory)
         source = build_agent_reach_source()
+        research = build_odysseus_search_source()
         return cls(
             beliefs=JsonBeliefStore(base / "beliefs.json", weighting_policy),
             episodes=JsonEpisodeStore(base / "episodes.json"),
@@ -681,6 +796,7 @@ class Jarvis:
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
             weighting_policy=weighting_policy,
             external_source=source,
+            research_source=research,
         )
 
     def think(
