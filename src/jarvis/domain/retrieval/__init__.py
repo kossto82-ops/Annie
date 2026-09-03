@@ -17,5 +17,12 @@ from jarvis.domain.retrieval.external_source import (
 )
 from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.research_source import ResearchSource
+from jarvis.domain.retrieval.task_agent_source import TaskAgent
 
-__all__ = ["ChannelStatus", "ExternalSource", "MailBox", "ResearchSource"]
+__all__ = [
+    "ChannelStatus",
+    "ExternalSource",
+    "MailBox",
+    "ResearchSource",
+    "TaskAgent",
+]

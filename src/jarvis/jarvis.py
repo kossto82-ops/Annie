@@ -34,6 +34,7 @@ from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSourc
 from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.retrieval.research_source import ResearchSource
+from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.capability_evaluator import recommend as recommend_capability
@@ -78,6 +79,7 @@ from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
+from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.domain.value_objects.tool_call import ToolCall
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
@@ -170,6 +172,7 @@ class Jarvis:
         model_compare: ModelComparator | None = None,
         knowledge_source: KnowledgeSource | None = None,
         mail_source: MailBox | None = None,
+        task_agent: TaskAgent | None = None,
         capability_providers: CapabilityRegistry | None = None,
         tool_policy: ToolPolicy | None = None,
     ) -> None:
@@ -232,6 +235,11 @@ class Jarvis:
         # acts on material messages with provenance; reasoning over them, and the
         # decision to *send*, stay gated in the core (D6, controlled autonomy).
         self._mail_source: MailBox | None = mail_source
+        # Delegation (D1-revised, Vision §34): an edge agent that runs a decided
+        # *material* task and returns its plain outcome. None by default -> offline.
+        # It only acts on a concrete, already-decided instruction; reasoning over
+        # the result, and deciding what to delegate, stay gated in the core (D6).
+        self._task_agent: TaskAgent | None = task_agent
         # The live edge of Odysseus (D7): which acquired capability names are backed
         # by a real provider. When no registry is given, the wired edge sources back
         # the capability names by default; None with no source -> offline.
@@ -248,7 +256,7 @@ class Jarvis:
             self._reasoner_capability = ReasonerCapability()
             self._recall_capability = SemanticRecallCapability()
             self._capability_providers = self._build_auto_registry(
-                external_source, research_source, model_compare, mail_source
+                external_source, research_source, model_compare, mail_source, task_agent
             )
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
@@ -486,6 +494,7 @@ class Jarvis:
             self._research_source,
             self._model_compare,
             self._mail_source,
+            self._task_agent,
         )
 
     def _build_auto_registry(
@@ -494,13 +503,14 @@ class Jarvis:
         research: ResearchSource | None = None,
         compare: ModelComparator | None = None,
         mail: MailBox | None = None,
+        agent: TaskAgent | None = None,
     ) -> CapabilityRegistry:
         """The default edge registry: the wired sources + Jarvis's reasoner seams.
 
         Used when no explicit registry was supplied, so `can_do` reflects whatever
         is actually wired: the ExternalSource (web), the research source (deep
         research), the model comparator (blind comparison), the mailbox (email),
-        the reasoner, and meaning-recall.
+        the task agent (delegation), the reasoner, and meaning-recall.
         """
         return build_default_registry(
             source,
@@ -509,6 +519,7 @@ class Jarvis:
             reasoner=self._reasoner_capability,
             recall=self._recall_capability,
             mail_source=mail,
+            task_agent=agent,
         )
 
     def read_external(self, url: str) -> RetrievedDocument:
@@ -615,6 +626,38 @@ class Jarvis:
         if self._mail_source is None:
             raise RuntimeError("no email capability configured; set_mail_source")
         return self._mail_source.send_message(to=to, subject=subject, body=body)
+
+    @property
+    def task_agent(self) -> TaskAgent | None:
+        """The delegation capability (D1-revised), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis can delegate. An edge
+        agent only *acts* on a decided material task and returns plain outcomes;
+        it never reasons (D6), and what to delegate stays gated in the caller.
+        """
+        return self._task_agent
+
+    def set_task_agent(self, agent: TaskAgent | None) -> None:
+        """Wire (or clear) the delegation capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline to delegation. Wired or
+        not, Jarvis never delegates without a deliberate, gated request (ask-first
+        for real-world effects, controlled autonomy).
+        """
+        self._task_agent = agent
+        if self._external_providers_auto:
+            self._refresh_providers()
+
+    def delegate(self, task: str) -> TaskResult:
+        """Run one delegated material task through the agent capability.
+
+        A material action: the caller (surface) is responsible for having it
+        approved by the controlled-autonomy policy before calling. Raises a clear
+        error when no agent is wired.
+        """
+        if self._task_agent is None:
+            raise RuntimeError("no agent capability configured; set_task_agent")
+        return self._task_agent.run_task(task)
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Investigate ``query`` in depth through the research capability.
