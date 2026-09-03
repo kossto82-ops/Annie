@@ -23,6 +23,9 @@ env/
 # Command-center persistent memory (JARVIS_HOME default) — local runtime state
 .jarvis/
 
+# Local launcher script (per-machine conveniences; never shared)
+start-jarvis.ps1
+
 # Graphify code-graph artifacts (regenerated locally via `graphify update .`)
 graphify-out/
 

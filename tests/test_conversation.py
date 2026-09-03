@@ -119,6 +119,27 @@ class TestConversationFirst:
         traits = [belief.explain().statement for belief in jarvis.companion.beliefs()]
         assert traits == ["prefiero trabajar por la noche"]
 
+    def test_an_explicit_remember_is_grounded_as_a_full_episode(self) -> None:  # Test E+
+        jarvis = Jarvis()
+        result = _reply(jarvis, "Recuerda que prefiero trabajar por la noche.")
+        assert result["stance"] == "memory"
+        # The fact is a companion trait AND a grounded world belief with an episode.
+        assert len(jarvis.companion.beliefs()) == 1
+        assert len(jarvis.beliefs.all_beliefs()) == 1
+        assert len(jarvis.episodes.history()) == 1
+        assert jarvis.episodes.history()[-1].trigger == "prefiero trabajar por la noche"
+
+    def test_a_yes_after_a_remember_matures_the_belief(self) -> None:  # confirmation loop
+        jarvis = Jarvis()
+        _reply(jarvis, "Recuerda que prefiero trabajar por la noche.")
+        first = jarvis.beliefs.all_beliefs()[0]
+        before = len(first.evidence)
+        result = _reply(jarvis, "Sí")
+        assert result["stance"] == "confirmation"
+        matured = jarvis.beliefs.all_beliefs()[0]
+        assert len(matured.evidence) > before  # the confirmation added supporting evidence
+        assert len(jarvis.episodes.history()) == 2
+
     def test_a_statement_and_follow_ups_stay_conversational(self) -> None:  # Test F
         reasoner = ContextReasoner(
             [

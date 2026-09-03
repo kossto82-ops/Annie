@@ -11,6 +11,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
+from jarvis.interface.command_center import handle
 
 
 def _ev(weight: float) -> Evidence:
@@ -131,6 +132,22 @@ class TestPersistentFactory:
         jarvis = Jarvis.persistent(tmp_path / "fresh")
         assert jarvis.episodes.history() == ()
         assert jarvis.companion.beliefs() == ()
+
+    def test_a_remember_turn_writes_the_missing_episode_files(self, tmp_path: Path) -> None:
+        # An explicit "remember" now grounds a full episode from the interface, so
+        # beliefs.json / episodes.json / trace.jsonl finally appear on disk and the
+        # episode survives a restart (Vision §3, §20).
+        first = Jarvis.persistent(tmp_path)
+        handle(first, "say", {"text": "Recuerda que prefiero la noche."})
+        assert (tmp_path / "beliefs.json").exists()
+        assert (tmp_path / "episodes.json").exists()
+        assert (tmp_path / "trace.jsonl").exists()
+        assert first.episodes.history()
+        assert first.beliefs.all_beliefs()
+
+        second = Jarvis.persistent(tmp_path)
+        assert len(second.episodes.history()) == 1
+        assert second.beliefs.all_beliefs()
 
     def test_acquired_capabilities_survive_restart_and_stay_backed(self, tmp_path: Path) -> None:
         # Odysseus carries across restarts: an acquisition survives, and the

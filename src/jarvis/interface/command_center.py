@@ -343,17 +343,22 @@ def _instruction_reply(jarvis: Jarvis, text: str) -> Reply:
 
 
 def _remember_reply(jarvis: Jarvis, text: str) -> Reply:
-    """The one intent that IS memory: store what the companion explicitly asked to keep."""
+    """The one intent that IS memory: store what the companion explicitly asked to keep.
+
+    The fact lands on the relational channel (companion trait) and is ALSO grounded as
+    a full cognitive episode (world belief + episode record + trace), so an explicit
+    "remember" is durable, shows up in the panel, and gives the yes/no confirmation
+    loop an episode to mature (Vision §5, §8, §20).
+    """
     fact = remembered_content(text)
-    jarvis.observe_companion(
-        fact,
-        Evidence(
-            content=fact,
-            source=EvidenceSource.USER_STATEMENT,
-            weight=Confidence(1.0),
-            context="the companion explicitly asked to remember this",
-        ),
+    evidence = Evidence(
+        content=fact,
+        source=EvidenceSource.USER_STATEMENT,
+        weight=Confidence(1.0),
+        context="the companion explicitly asked to remember this",
     )
+    jarvis.observe_companion(fact, evidence)
+    jarvis.think(fact, (evidence,))
     wording = f"Entendido. Recordaré que {fact}." if uses_spanish(text) else (
         f"Got it — I'll remember that: {fact}."
     )
