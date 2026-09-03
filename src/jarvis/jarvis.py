@@ -850,6 +850,45 @@ class Jarvis:
         """
         return tuple(gap.subject for gap in self.observe_capability_gaps())
 
+    def auto_scout_gaps(self) -> tuple[Capability, ...]:
+        """Detect recurring capability gaps and auto-scout candidates (Odysseus).
+
+        After the reflective cycle, Jarvis notices what it keeps failing to answer
+        and turns each recurring gap into an evidence-grounded capability need,
+        scouting what could help fill it. Each failed episode is a piece of
+        SYSTEM_OBSERVATION evidence, so the need's confidence grows with
+        recurrence (never asserted). Returns the newly proposed candidate
+        capabilities (possibly empty when no gap exists or none match).
+        """
+        proposals: list[Capability] = []
+        for gap in self.observe_capability_gaps():
+            statement = f"answer repeated questions about {gap.subject}"
+            rationale = (
+                f"I noticed I keep failing to conclude about '{gap.subject}' "
+                f"({len(gap.episodes)} ungrounded attempt(s))"
+            )
+            evidence = [
+                Evidence(
+                    content=(
+                        f"episode about '{record.trigger}' concluded ungrounded "
+                        f"(confidence {record.conclusion_confidence.value:.2f})"
+                    ),
+                    source=EvidenceSource.SYSTEM_OBSERVATION,
+                    weight=Confidence(1.0),
+                    supports=True,
+                )
+                for record in gap.episodes
+            ]
+            # Dedup: skip evidence already on the need (idempotent re-runs).
+            need = self._needs.get_by_statement(self._need_statement(statement))
+            if need is not None:
+                existing = {piece.content for piece in need.evidence}
+                evidence = [p for p in evidence if p.content not in existing]
+            if not evidence:
+                continue
+            proposals.extend(self.recognise_need(statement, rationale, evidence))
+        return tuple(proposals)
+
     @staticmethod
     def _need_statement(statement: str) -> str:
         return f"{_NEED_PREFIX}{statement}"
@@ -1559,15 +1598,18 @@ class Jarvis:
 
     def reflect_cycle(self) -> ReflectiveCycle:
         """Run the whole reflective cycle once and report what it produced (Vision
-        §31): Connect → Reflect → Hypothesise → Challenge → Learn → Act, end to end.
+        §31): Connect → Reflect → Hypothesise → Challenge → Learn → Act → Scout
+        (Odysseus), end to end.
 
-        One honest action for "think about what I know" — it *calls* the existing
+        One honest action for "think about what I know" -- it *calls* the existing
         stage methods in order (it does not re-implement them), and returns a
         summary of each stage's result, empty where nothing was load-bearing. Note
         it is not purely a read-model: the Learn stage adopts a surviving insight as
         a belief. Act runs *after* Learn so the just-learned insight is the one it
-        acts on, and it only *recommends* (autonomy is earned, §28). This is the seam
-        a future autonomous trigger will call.
+        acts on, and it only *recommends* (autonomy is earned, §28). After the
+        reflective stages, Jarvis notices what it keeps failing to answer and
+        auto-scouts capability gaps, so growth is self-initiated (Vision §34). This
+        is the seam a future autonomous trigger will call.
         """
         connections = self.connections()
         reflections = self.reflect()
@@ -1577,6 +1619,9 @@ class Jarvis:
         challenge = self.challenge()
         learned = self.learn_from_reflection()
         action = self.act_on_insight()
+        capability_proposals = tuple(
+            cap.name for cap in self.auto_scout_gaps()
+        )
         return ReflectiveCycle(
             connections=connections,
             reflection=reflection,
@@ -1584,6 +1629,7 @@ class Jarvis:
             challenge=challenge,
             learned=learned.statement if learned is not None else None,
             action=action,
+            capability_proposals=capability_proposals,
         )
 
     def _unmined_load_bearing(self) -> Reflection | None:

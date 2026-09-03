@@ -32,6 +32,7 @@ class ReflectiveCycle:
     challenge: Challenge | None  # the falsifier it raised, if any
     learned: str | None  # the statement of the belief it adopted, if any
     action: ActionRecommendation | None  # the stance it would take on the insight (Act)
+    capability_proposals: tuple[str, ...] = ()  # names of capabilities proposed (Odysseus)
 
     @property
     def produced_insight(self) -> bool:

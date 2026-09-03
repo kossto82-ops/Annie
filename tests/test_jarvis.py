@@ -387,6 +387,36 @@ class TestCapabilityGaps:
             )
         assert jarvis.unanswered_subjects() == ()
 
+    def test_auto_scout_turns_matching_gaps_into_proposals(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think("what is the internet")  # subject matches a template
+        proposals = jarvis.auto_scout_gaps()
+        names = {c.name for c in proposals}
+        assert "search the web" in names
+        assert jarvis.capability_needs()  # a need was recorded
+
+    def test_auto_scout_is_idempotent_across_runs(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think("what is the internet")
+        first = jarvis.auto_scout_gaps()
+        second = jarvis.auto_scout_gaps()
+        assert first and not second  # the gap's need is already recorded
+
+    def test_auto_scout_ignores_gaps_with_no_matching_template(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think("what is the quokka")  # no capability template matches
+        assert jarvis.auto_scout_gaps() == ()
+
+    def test_reflect_cycle_reports_capability_proposals(self) -> None:
+        jarvis = Jarvis()
+        for _ in range(2):
+            jarvis.think("what is the internet")
+        cycle = jarvis.reflect_cycle()
+        assert "search the web" in cycle.capability_proposals
+
 
 class TestCuriosity:
     def _make_habitually_ungrounded(self) -> Jarvis:

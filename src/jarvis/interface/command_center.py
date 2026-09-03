@@ -1089,62 +1089,29 @@ def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
         }
 
     if action == "notice":
-        subjects = jarvis.unanswered_subjects()
-        if not subjects:
+        # Auto-initiated growth (Odysseus, Vision §34): detect recurringly
+        # unanswered subjects and turn each gap into an evidence-grounded need,
+        # scouting what could help. Delegating to the same core path the
+        # reflective cycle uses keeps the surface and the autonomous loop aligned.
+        proposals = jarvis.auto_scout_gaps()
+        if not proposals:
             return {
                 "reply": (
-                    "I haven't noticed any subject I keep failing to answer about — "
+                    "I haven't noticed any new subject I keep failing to answer about — "
                     "ask me something and I'll tell you if it becomes a recurring gap."
                 ),
                 "speak": False,
             }
-        # Auto-initiated growth (Odysseus, Vision §34): I record the gap as an
-        # evidence-grounded need to be able to answer about it, then scout what
-        # could help. The request is loaded with M/2 evidence -- one for each
-        # way I failed -- so the need's confidence is derived, never asserted.
-        half = len(subjects) // 2 or 1
-
-        notices: list[dict[str, str | list[str]]] = []
-        for subject in subjects[:half]:
-            candidates = jarvis.recognise_need(
-                f"answer questions about {subject}",
-                rationale=(
-                    f"I keep failing to conclude about {subject} in my own "
-                    "episode history"
-                ),
-                evidence=[
-                    Evidence(
-                        content=(
-                            f"I completed an episode about {subject} without a "
-                            "grounded conclusion"
-                        ),
-                        # A gap observed from Jarvis's *own* history, not something
-                        # the companion stated -- so it weighs like the other
-                        # internal observations the core makes about itself (it
-                        # must never carry the strength of a user statement).
-                        source=EvidenceSource.SYSTEM_OBSERVATION,
-                        weight=Confidence(0.5),
-                    )
-                ],
-            )
-            notices.append(
-                {
-                    "subject": subject,
-                    "candidates": [c.name for c in candidates],
-                }
-            )
-        lines = [
-            f"- {notice['subject']}: "
-            + (", ".join(notice["candidates"]) if notice["candidates"] else "no candidate yet")
-            for notice in notices
-        ]
+        lines = [f"- {c.name}" for c in proposals]
         return {
             "reply": (
-                "I noticed subjects I keep failing to answer about, and recorded a "
-                "need to be able to answer them:\n" + "\n".join(lines)
+                "I noticed subjects I keep failing to answer about, and scouted "
+                "abilities that could help:\n" + "\n".join(lines)
             ),
             "speak": False,
-            "gaps": notices,
+            "gaps": [
+                {"subject": c.name, "candidates": [c.name]} for c in proposals
+            ],
         }
 
     return {"reply": "Unknown capability action.", "speak": False}

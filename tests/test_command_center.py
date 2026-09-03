@@ -771,25 +771,30 @@ class TestCapabilityCommand:
     def test_notice_turns_unanswered_subjects_into_needs(self) -> None:
         jarvis = Jarvis()
         for _ in range(2):
-            jarvis.think("what is the quokka")
+            jarvis.think("what is the internet")
         result = handle(jarvis, "capability", {"action": "notice"})
         assert isinstance(result["reply"], str)
-        assert "quokka" in result["reply"]
+        assert "search the web" in result["reply"]
         assert jarvis.capability_needs()  # a need was recorded
+        assert any(
+            c.name == "search the web"
+            and c.status is CapabilityStatus.PROPOSED
+            for c in jarvis.capabilities()
+        )
 
     def test_notice_needs_are_weighted_as_self_observations(self) -> None:
         jarvis = Jarvis()
         for _ in range(2):
-            jarvis.think("what is the quokka")
+            jarvis.think("what is the internet")
         handle(jarvis, "capability", {"action": "notice"})
         needs = jarvis.capability_needs()
         assert needs
         confidence = needs[0][1].value
-        # SYSTEM_OBSERVATION weighs at factor 0.6, so a single 0.5-weight piece
-        # yields 0.3/1.3 ~= 0.23 -- never the ~0.33 a USER_STATEMENT would claim.
-        # A gap Jarvis notices about itself must not sound like the companion
-        # said it outright.
-        assert 0.2 < confidence < 0.3
+        # SYSTEM_OBSERVATION weighs at factor 0.6; two 1.0-weight gap episodes
+        # yield 1.2/2.2 ~= 0.55 -- weaker than the ~0.67 two USER_STATEMENTs would
+        # claim. A gap Jarvis notices about itself must not sound like the
+        # companion said it outright.
+        assert 0.5 < confidence < 0.6
 
     def test_notice_with_no_gaps_says_so_honestly(self) -> None:
         result = handle(Jarvis(), "capability", {"action": "notice"})
