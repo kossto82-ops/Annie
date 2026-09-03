@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from jarvis.domain.retrieval.external_source import ExternalSource
+from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.services.capability_provider import CapabilityProvider
 from jarvis.domain.services.model_compare import ModelComparator
@@ -51,6 +52,7 @@ def build_default_registry(
     model_compare: ModelComparator | None = None,
     reasoner: CapabilityProvider | None = None,
     recall: CapabilityProvider | None = None,
+    mail_source: MailBox | None = None,
 ) -> CapabilityRegistry:
     """The built-in edge: the ExternalSource backs the Internet capabilities.
 
@@ -60,7 +62,8 @@ def build_default_registry(
     ``reasoner``/``recall`` provider backs the reasoning and meaning-recall
     capabilities (kept separate so they can reflect runtime seams). The deep-
     research and blind model-comparison sources back their capabilities too, when
-    wired, so ``can_do`` is uniform across every edge (Odysseus, §28).
+    wired, so ``can_do`` is uniform across every edge (Odysseus, §28). A wired
+    mailbox backs the email capability (D1-revised: material edge action).
     """
     by_name: dict[str, CapabilityProvider] = {}
     if external_source is not None:
@@ -78,6 +81,8 @@ def build_default_registry(
         by_name["reason with a language model"] = reasoner
     if recall is not None:
         by_name["recall by meaning"] = recall
+    if mail_source is not None:
+        by_name["send and read email"] = MailCapability(mail_source)
     return StaticCapabilityRegistry(_by_name=by_name)
 
 
@@ -185,6 +190,27 @@ class ModelCompareCapability:
         capability: str = "compare language models",
     ) -> None:
         self._comparator = comparator
+        self._capability = capability
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return True
+
+
+class MailCapability:
+    """The 'send and read email' capability backed by the mailbox edge (Odysseus).
+
+    A wired mailbox is itself the email capability, so it backs that capability
+    name directly. It is available whenever it is wired; whether Jarvis *uses* it
+    -- and especially whether it *sends* -- stays a deliberate, earned decision
+    gated by the controlled-autonomy policy (D1-revised: material edge action).
+    """
+
+    def __init__(self, mailbox: MailBox, capability: str = "send and read email") -> None:
+        self._mailbox = mailbox
         self._capability = capability
 
     @property

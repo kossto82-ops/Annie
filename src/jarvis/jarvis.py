@@ -31,6 +31,7 @@ from jarvis.domain.repositories.capability_repository import CapabilityRepositor
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
 from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
+from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
@@ -66,6 +67,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
+from jarvis.domain.value_objects.email_message import EmailMessage
 from jarvis.domain.value_objects.energy_costs import EnergyCosts
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
@@ -167,6 +169,7 @@ class Jarvis:
         research_source: ResearchSource | None = None,
         model_compare: ModelComparator | None = None,
         knowledge_source: KnowledgeSource | None = None,
+        mail_source: MailBox | None = None,
         capability_providers: CapabilityRegistry | None = None,
         tool_policy: ToolPolicy | None = None,
     ) -> None:
@@ -224,6 +227,11 @@ class Jarvis:
         # default -> episodes never consult, exactly as before (D8). A wired source
         # only gathers candidates; deriving confidence stays in the core (D6).
         self._knowledge_source: KnowledgeSource | None = knowledge_source
+        # The mail capability (D1-revised, Vision §34): a mailbox at the edge that
+        # lists/reads/sends messages on request. None by default -> offline. It only
+        # acts on material messages with provenance; reasoning over them, and the
+        # decision to *send*, stay gated in the core (D6, controlled autonomy).
+        self._mail_source: MailBox | None = mail_source
         # The live edge of Odysseus (D7): which acquired capability names are backed
         # by a real provider. When no registry is given, the wired edge sources back
         # the capability names by default; None with no source -> offline.
@@ -240,7 +248,7 @@ class Jarvis:
             self._reasoner_capability = ReasonerCapability()
             self._recall_capability = SemanticRecallCapability()
             self._capability_providers = self._build_auto_registry(
-                external_source, research_source, model_compare
+                external_source, research_source, model_compare, mail_source
             )
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
@@ -474,7 +482,10 @@ class Jarvis:
     def _refresh_providers(self) -> None:
         """Rebuild the default capability registry from whatever edges are wired."""
         self._capability_providers = self._build_auto_registry(
-            self._external_source, self._research_source, self._model_compare
+            self._external_source,
+            self._research_source,
+            self._model_compare,
+            self._mail_source,
         )
 
     def _build_auto_registry(
@@ -482,13 +493,14 @@ class Jarvis:
         source: ExternalSource | None,
         research: ResearchSource | None = None,
         compare: ModelComparator | None = None,
+        mail: MailBox | None = None,
     ) -> CapabilityRegistry:
         """The default edge registry: the wired sources + Jarvis's reasoner seams.
 
         Used when no explicit registry was supplied, so `can_do` reflects whatever
         is actually wired: the ExternalSource (web), the research source (deep
-        research), the model comparator (blind comparison), the reasoner, and
-        meaning-recall.
+        research), the model comparator (blind comparison), the mailbox (email),
+        the reasoner, and meaning-recall.
         """
         return build_default_registry(
             source,
@@ -496,6 +508,7 @@ class Jarvis:
             model_compare=compare,
             reasoner=self._reasoner_capability,
             recall=self._recall_capability,
+            mail_source=mail,
         )
 
     def read_external(self, url: str) -> RetrievedDocument:
@@ -553,6 +566,55 @@ class Jarvis:
         self._research_source = source
         if self._external_providers_auto:
             self._refresh_providers()
+
+    @property
+    def mail_source(self) -> MailBox | None:
+        """The email capability (Odysseus; D1-revised), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis has a mailbox wired. It
+        acts on material messages with provenance; it never reasons over them
+        (D6), and the decision to *send* stays gated in the caller.
+        """
+        return self._mail_source
+
+    def set_mail_source(self, source: MailBox | None) -> None:
+        """Wire (or clear) the email capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline to a mailbox. Wired or
+        not, Jarvis never sends email without a deliberate, gated request from the
+        surface (ask-first for outbound, controlled autonomy).
+        """
+        self._mail_source = source
+        if self._external_providers_auto:
+            self._refresh_providers()
+
+    def list_emails(self, *, folder: str = "inbox", limit: int = 10) -> tuple[EmailMessage, ...]:
+        """List the latest messages in ``folder`` through the email capability.
+
+        Raises a clear error when no mailbox is wired. Each message carries
+        provenance and becomes candidate evidence for the core (D6) -- reading an
+        inbox is not adopting its claims as facts.
+        """
+        if self._mail_source is None:
+            raise RuntimeError("no email capability configured; set_mail_source")
+        return self._mail_source.list_messages(folder=folder, limit=limit)
+
+    def read_email(self, message_id: str, *, folder: str = "inbox") -> EmailMessage:
+        """Read one message through the email capability, or raise when offline."""
+        if self._mail_source is None:
+            raise RuntimeError("no email capability configured; set_mail_source")
+        return self._mail_source.read_message(message_id, folder=folder)
+
+    def send_email(self, *, to: tuple[str, ...], subject: str, body: str) -> EmailMessage:
+        """Send an outbound message through the email capability.
+
+        A material action: the caller (surface) is responsible for having it
+        approved by the controlled-autonomy policy before calling. Raises a clear
+        error when no mailbox is wired.
+        """
+        if self._mail_source is None:
+            raise RuntimeError("no email capability configured; set_mail_source")
+        return self._mail_source.send_message(to=to, subject=subject, body=body)
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Investigate ``query`` in depth through the research capability.
