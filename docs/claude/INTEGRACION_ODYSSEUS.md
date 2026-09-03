@@ -224,3 +224,55 @@ cablea en `persistent()`: consultar un edge es una decisión explícita del oper
 Tests: `tests/test_knowledge_source.py` (protocolo + guardas + procedencia) y
 `tests/infrastructure/test_knowledge_source_adapters.py` (adapters + end-to-end
 offline por Jarvis), 19 tests nuevos.
+
+---
+
+# Fases 4–N — Ampliación del alcance (catálogo + respaldos)
+
+El investigador real de Odysseus va mucho más allá de los Fases 0–3 (agentes, email,
+notas, calendario, tareas, documentos, RAG, MCP). Esta ampliación extiende el alcance
+acordado **de 0–3 a 0–N**, siguiendo la misma regla de oro: cada dominio entra como
+**Protocol de dominio** con un adaptador en `infrastructure`, reutilizando el código de
+Odysseus (AGPL-3.0) solo como *referencia de diseño*, red en el borde, offline por
+defecto (D7/D8), y el juicio siempre en el núcleo (D6).
+
+## Revisión de D1 (delegar acción, no cognición)
+
+D1 sigue prohibiendo que un agente exterior *simule la cognición* de Jarvis (el ciclo
+reflexivo permanece en el núcleo). Pero ahora se **permite explícitamente** delegar
+**acciones materiales** a un agente-borde (el "agent mode" de Odysseus): el agente
+ejecuta tareas concretas con su catálogo de herramientas y vuelve *outcomes* con
+procedencia, nunca razonamiento/decisiones de Jarvis (D6), nunca escribe sobre
+creencias/memoria de Jarvis directamente. La delegación se gobierna por
+`09_CONTROLLED_AUTONOMY` (riesgo+permiso+confianza+reversibilidad → EXECUTE/ASK/REFUSE)
+y por los niveles de permiso del Tool Registry (destructivas/externas exigen aprobación).
+
+## Mapa de dominios de Odysseus → capacidades de Jarvis
+
+| # | Capacidad en el catálogo | Edge/Provider (borde) | Riesgo | Estado |
+|---|---|---|---|---|
+| 1 | `search the web` | Agent-Reach (Jina); opcional consolidar con SearXNG/DDG de deep research | bajo | ✅ (agent-reach) |
+| 2 | `read external documents` | Agent-Reach (Jina Reader) | bajo | ✅ |
+| 3 | `deep research` | SearXNG (Fase 1) | bajo | ✅ |
+| 4 | `compare language models` | registry LLM (Fase 2) | bajo | ✅ |
+| 5 | `reason with a language model` | reasoner edge (Fase 5) | bajo | ✅ |
+| 6 | `recall by meaning` | embeddings (Fase 5); opcional RAG via ChromaDB | bajo | ✅ |
+| 7 | `send and read email` | adaptador IMAP/SMTP (list/read/send/draft) | medio (ASK al enviar) | ⏳ catálogo + edge |
+| 8 | `manage notes` | notas/todos/reminders locales | bajo, reversible | ⏳ catalogo + edge |
+| 9 | `manage calendar` | CalDAV (list/create) | bajo–medio | ⏳ catálogo + edge |
+| 10 | `manage tasks` | scheduler cron (tareas recurrentes) | medio | ⏳ catálogo + edge |
+| 11 | `delegate to an agent` | agente-borde (Odysseus agent mode) con su toolset | alto (bounded) | ⏳ catálogo + edge |
+| 12 | `perceive speech` | STT (única del catálogo sin respaldo) | bajo | ⏳ edge |
+| 13 | *(MCP client)* | cliente MCP detrás del Tool Registry | alto | ⏳ opcional |
+
+## Orden de ejecución
+
+| Paso | Trabajo | Verificación |
+|---|---|---|
+| B | Ampliar catálogo del scout: templates email/agent/notes/calendar/tasks (+descripciones y cues) | `pytest tests/domain/test_capability_scout.py` |
+| C1 | Seam `MailBox` Protocol + VO `EmailMessage` + adapter IMAP/SMTP (`build_mail_source()` → None sin config) | `pytest tests/infrastructure/test_mail_source.py` |
+| C2 | Seam `TaskAgent` Protocol + VO `TaskResult` + adapter sobre agent mode | `pytest tests/infrastructure/test_task_agent_source.py` |
+| C3+ | notes/calendar/tasks locales detrás de sus seams | `pytest` por seam |
+
+Al cierre de cada fase: `pytest` (suite completa), `ruff check src`, `pyright src`
+(strict) — sin errores, como exige el repo. Transportes inyectables y tests offline (D8).

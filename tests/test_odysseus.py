@@ -83,6 +83,60 @@ class TestScout:
         names = [c.name for c in scout(need)]
         assert names[0] == "search the web"  # strongest cue match first
 
+    def test_email_need_proposes_send_and_read_email(self) -> None:
+        candidates = scout(
+            CapabilityNeed(
+                statement="I want to read my inbox",
+                rationale="I need to check my email",
+            )
+        )
+        assert any(c.name == "send and read email" for c in candidates)
+
+    def test_notes_need_proposes_manage_notes(self) -> None:
+        candidates = scout(
+            CapabilityNeed(
+                statement="keep a note and remind me later",
+                rationale="a todo I must not forget",
+            )
+        )
+        assert any(c.name == "manage notes" for c in candidates)
+
+    def test_calendar_need_proposes_manage_calendar(self) -> None:
+        candidates = scout(
+            CapabilityNeed(
+                statement="schedule a meeting on my calendar",
+                rationale="I need to manage my agenda",
+            )
+        )
+        assert any(c.name == "manage calendar" for c in candidates)
+
+    def test_scheduled_task_need_proposes_manage_tasks(self) -> None:
+        candidates = scout(
+            CapabilityNeed(
+                statement="do this every morning automatically",
+                rationale="a recurring task I want on a schedule",
+            )
+        )
+        assert any(c.name == "manage tasks" for c in candidates)
+
+    def test_agent_delegation_need_proposes_delegate_to_an_agent(self) -> None:
+        candidates = scout(
+            CapabilityNeed(
+                statement="delegate this to an agent",
+                rationale="hand a concrete task to an executor",
+            )
+        )
+        assert any(c.name == "delegate to an agent" for c in candidates)
+
+    def test_new_shortcuts_do_not_break_unknown_needs(self) -> None:
+        candidates = scout(
+            CapabilityNeed(
+                statement="I would like to paint a mural",
+                rationale="to decorate the studio",
+            )
+        )
+        assert candidates == ()
+
 
 class TestJarvisOdysseus:
     def test_scouting_does_not_store_by_default(self) -> None:

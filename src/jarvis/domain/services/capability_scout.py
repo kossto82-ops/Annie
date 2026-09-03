@@ -83,6 +83,40 @@ _TEMPLATES: tuple[_Template, ...] = (
         requirement="a speech-to-text provider",
         cues=frozenset({"speech", "voice", "hear", "habla", "voz", "audio"}),
     ),
+    _Template(
+        name="send and read email",
+        description="read, triage and send email through a mailbox",
+        requirement="a configured IMAP/SMTP mailbox",
+        cues=frozenset({"email", "mail", "inbox", "correo", "mensaje", "message"}),
+    ),
+    _Template(
+        name="manage notes",
+        description="keep notes, todos and reminders",
+        requirement="the local notes store",
+        cues=frozenset({"note", "notes", "todo", "reminder", "nota", "apunte", "tarea"}),
+    ),
+    _Template(
+        name="manage calendar",
+        description="see and schedule calendar events",
+        requirement="a CalDAV (or local) calendar",
+        cues=frozenset({"calendar", "agenda", "event", "schedule", "calendario", "evento", "cita"}),
+    ),
+    _Template(
+        name="manage tasks",
+        description="create and run scheduled recurring tasks",
+        requirement="the local task scheduler",
+        cues=frozenset(
+            {"task", "cron", "scheduled", "recurring", "every", "automatically", "programa"}
+        ),
+    ),
+    _Template(
+        name="delegate to an agent",
+        description="hand a concrete task to an edge agent that executes it with its tools",
+        requirement="an edge agent (a tool-backed executor, e.g. Odysseus agent mode)",
+        cues=frozenset(
+            {"agent", "delegate", "do it", "execute", "run it", "agente", "delegar", "hazlo"}
+        ),
+    ),
 )
 
 

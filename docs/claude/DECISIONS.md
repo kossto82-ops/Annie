@@ -2,9 +2,20 @@
 
 This file is intentionally short. It contains decisions Claude should treat as constraints unless the user explicitly asks to revisit them.
 
-## D1 — Jarvis is not an agent wrapper
+## D1 — Jarvis is not an agent wrapper; the core owns cognition
 
-Do not introduce an outer autonomous-agent framework that calls Jarvis methods to simulate cognition. The reflective cycle belongs inside Jarvis's core.
+Do not introduce an outer autonomous-agent framework that calls Jarvis methods to
+*simulate cognition*. The reflective cycle and all reasoning/deciding stay inside
+Jarvis's core (Delegating any of *that* is forbidden).
+
+Jarvis MAY delegate **material actions** to an edge agent (e.g. Odysseus agent mode)
+behind a domain seam (D7): the agent executes concrete tasks with its own tool
+catalog (email, notes, calendar, shell, web, …) and returns *outcomes with
+provenance*. It never substitutes for Jarvis's judgement (D6) and never writes to
+Jarvis's beliefs/memory directly. Delegation is governed by the existing
+controlled-autonomy policy (risk + permission + confidence + reversibility →
+EXECUTE / ASK / REFUSE) and by the Tool Registry's permission levels (destructive /
+external demand approval). The boundaries are earned, observable, reversible, bounded.
 
 ## D2 — Cognitive Episode is the unit of cognition
 
