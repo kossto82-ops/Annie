@@ -16,6 +16,7 @@ from typing import Protocol
 
 from jarvis.domain.retrieval.external_source import ExternalSource
 from jarvis.domain.retrieval.mail_source import MailBox
+from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.services.capability_provider import CapabilityProvider
@@ -55,6 +56,7 @@ def build_default_registry(
     recall: CapabilityProvider | None = None,
     mail_source: MailBox | None = None,
     task_agent: TaskAgent | None = None,
+    notes_store: NotesStore | None = None,
 ) -> CapabilityRegistry:
     """The built-in edge: the ExternalSource backs the Internet capabilities.
 
@@ -88,6 +90,8 @@ def build_default_registry(
         by_name["send and read email"] = MailCapability(mail_source)
     if task_agent is not None:
         by_name["delegate to an agent"] = AgentCapability(task_agent)
+    if notes_store is not None:
+        by_name["manage notes"] = NotesCapability(notes_store)
     return StaticCapabilityRegistry(_by_name=by_name)
 
 
@@ -237,6 +241,27 @@ class AgentCapability:
 
     def __init__(self, agent: TaskAgent, capability: str = "delegate to an agent") -> None:
         self._agent = agent
+        self._capability = capability
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return True
+
+
+class NotesCapability:
+    """The 'manage notes' capability backed by the notes store edge (Odysseus #8).
+
+    A wired notes store is itself the notes capability, so it backs that
+    capability name directly. It is available whenever it is wired; whether Jarvis
+    *chooses* to create/edit/delete a note -- reversible, low-risk material
+    actions -- stays a deliberate request gated by the surface.
+    """
+
+    def __init__(self, store: NotesStore, capability: str = "manage notes") -> None:
+        self._store = store
         self._capability = capability
 
     @property

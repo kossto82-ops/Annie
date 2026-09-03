@@ -2,8 +2,9 @@
 
 The domain owns the *contracts*: :class:`MemoryRetriever` for recall of what
 Jarvis already holds, :class:`ExternalSource` for read/search access to the
-Internet, :class:`ResearchSource` for in-depth investigation, and
-:class:`MailBox` for the email capability at the edge. Concrete implementations
+Internet, :class:`ResearchSource` for in-depth investigation,
+:class:`MailBox` for the email capability, and :class:`NotesStore` for the notes
+capability at the edge. Concrete implementations
 live in :mod:`jarvis.infrastructure`, exactly like perception.
 Retrieval surfaces candidates carrying provenance; it never decides (Vision §32,
 §38).
@@ -16,6 +17,7 @@ from jarvis.domain.retrieval.external_source import (
     ExternalSource,
 )
 from jarvis.domain.retrieval.mail_source import MailBox
+from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 
@@ -23,6 +25,7 @@ __all__ = [
     "ChannelStatus",
     "ExternalSource",
     "MailBox",
+    "NotesStore",
     "ResearchSource",
     "TaskAgent",
 ]

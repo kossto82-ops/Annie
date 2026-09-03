@@ -33,6 +33,7 @@ from jarvis.domain.repositories.refutation_repository import RefutationRepositor
 from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
 from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
+from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
@@ -73,6 +74,7 @@ from jarvis.domain.value_objects.energy_costs import EnergyCosts
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.inference import Inference
+from jarvis.domain.value_objects.note import Note
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
@@ -173,6 +175,7 @@ class Jarvis:
         knowledge_source: KnowledgeSource | None = None,
         mail_source: MailBox | None = None,
         task_agent: TaskAgent | None = None,
+        notes_store: NotesStore | None = None,
         capability_providers: CapabilityRegistry | None = None,
         tool_policy: ToolPolicy | None = None,
     ) -> None:
@@ -240,6 +243,12 @@ class Jarvis:
         # It only acts on a concrete, already-decided instruction; reasoning over
         # the result, and deciding what to delegate, stay gated in the core (D6).
         self._task_agent: TaskAgent | None = task_agent
+        # Notes (Odysseus #8): a local store that lists/searches/creates/updates
+        # and deletes notes on request. None by default -> offline. It only keeps
+        # and returns plain note content with provenance; reasoning over notes
+        # stays in the core (D6), and mutating them is a reversible action gated
+        # in the caller.
+        self._notes_store: NotesStore | None = notes_store
         # The live edge of Odysseus (D7): which acquired capability names are backed
         # by a real provider. When no registry is given, the wired edge sources back
         # the capability names by default; None with no source -> offline.
@@ -256,7 +265,12 @@ class Jarvis:
             self._reasoner_capability = ReasonerCapability()
             self._recall_capability = SemanticRecallCapability()
             self._capability_providers = self._build_auto_registry(
-                external_source, research_source, model_compare, mail_source, task_agent
+                external_source,
+                research_source,
+                model_compare,
+                mail_source,
+                task_agent,
+                notes_store,
             )
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
@@ -495,6 +509,7 @@ class Jarvis:
             self._model_compare,
             self._mail_source,
             self._task_agent,
+            self._notes_store,
         )
 
     def _build_auto_registry(
@@ -504,13 +519,15 @@ class Jarvis:
         compare: ModelComparator | None = None,
         mail: MailBox | None = None,
         agent: TaskAgent | None = None,
+        notes: NotesStore | None = None,
     ) -> CapabilityRegistry:
         """The default edge registry: the wired sources + Jarvis's reasoner seams.
 
         Used when no explicit registry was supplied, so `can_do` reflects whatever
         is actually wired: the ExternalSource (web), the research source (deep
         research), the model comparator (blind comparison), the mailbox (email),
-        the task agent (delegation), the reasoner, and meaning-recall.
+        the task agent (delegation), the notes store (manage notes), the reasoner,
+        and meaning-recall.
         """
         return build_default_registry(
             source,
@@ -520,6 +537,7 @@ class Jarvis:
             recall=self._recall_capability,
             mail_source=mail,
             task_agent=agent,
+            notes_store=notes,
         )
 
     def read_external(self, url: str) -> RetrievedDocument:
@@ -658,6 +676,91 @@ class Jarvis:
         if self._task_agent is None:
             raise RuntimeError("no agent capability configured; set_task_agent")
         return self._task_agent.run_task(task)
+
+    @property
+    def notes_store(self) -> NotesStore | None:
+        """The notes capability (Odysseus #8), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis can keep notes. A local
+        store only lists/searches/creates/updates/deletes plain note content with
+        provenance; it never reasons (D6), and mutating a note stays gated in the
+        caller.
+        """
+        return self._notes_store
+
+    def set_notes_store(self, store: NotesStore | None) -> None:
+        """Wire (or clear) the notes capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline to notes. Notes are
+        reversible, local-side effects, so wiring/unwiring refreshes ``can_do``
+        without asking first (unlike email/agent, which act outward).
+        """
+        self._notes_store = store
+        if self._external_providers_auto:
+            self._refresh_providers()
+
+    def list_notes(self, *, limit: int = 100) -> tuple[Note, ...]:
+        """List the latest notes through the notes capability.
+
+        Raises a clear error when no notes store is wired. Plain note content is
+        candidate context for the core; it is not adopted as fact (D6).
+        """
+        if self._notes_store is None:
+            raise RuntimeError("no notes capability configured; set_notes_store")
+        return self._notes_store.list_notes(limit=limit)
+
+    def get_note(self, note_id: str) -> Note:
+        """Read one note by id, or raise when offline or unknown."""
+        if self._notes_store is None:
+            raise RuntimeError("no notes capability configured; set_notes_store")
+        return self._notes_store.get_note(note_id)
+
+    def create_note(
+        self, *, title: str, body: str = "", tags: tuple[str, ...] = ()
+    ) -> Note:
+        """Create a local note through the notes capability.
+
+        A local, reversible side-effect: the caller (surface) is responsible for
+        having it approved by the controlled-autonomy policy. Raises a clear error
+        when no notes store is wired.
+        """
+        if self._notes_store is None:
+            raise RuntimeError("no notes capability configured; set_notes_store")
+        return self._notes_store.create_note(title=title, body=body, tags=tags)
+
+    def update_note(
+        self,
+        note_id: str,
+        *,
+        title: str,
+        body: str,
+        tags: tuple[str, ...],
+    ) -> Note:
+        """Update a local note through the notes capability.
+
+        A local, reversible side-effect, gated in the caller. Raises a clear error
+        when no notes store is wired or the note is unknown.
+        """
+        if self._notes_store is None:
+            raise RuntimeError("no notes capability configured; set_notes_store")
+        return self._notes_store.update_note(note_id, title=title, body=body, tags=tags)
+
+    def delete_note(self, note_id: str) -> None:
+        """Delete a local note through the notes capability.
+
+        A local, reversible side-effect, gated in the caller. Raises a clear error
+        when no notes store is wired; deleting an unknown note is a no-op at the
+        store, and this method does not pre-check it (the store reports).
+        """
+        if self._notes_store is None:
+            raise RuntimeError("no notes capability configured; set_notes_store")
+        self._notes_store.delete_note(note_id)
+
+    def search_notes(self, query: str, *, limit: int = 10) -> tuple[Note, ...]:
+        """Search notes by query through the notes capability, or raise when offline."""
+        if self._notes_store is None:
+            raise RuntimeError("no notes capability configured; set_notes_store")
+        return self._notes_store.search_notes(query, limit=limit)
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Investigate ``query`` in depth through the research capability.
