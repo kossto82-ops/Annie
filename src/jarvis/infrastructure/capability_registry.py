@@ -14,11 +14,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from jarvis.domain.retrieval.calendar_store import CalendarStore
 from jarvis.domain.retrieval.external_source import ExternalSource
 from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
+from jarvis.domain.retrieval.task_scheduler import TaskScheduler
 from jarvis.domain.services.capability_provider import CapabilityProvider
 from jarvis.domain.services.model_compare import ModelComparator
 
@@ -57,6 +59,9 @@ def build_default_registry(
     mail_source: MailBox | None = None,
     task_agent: TaskAgent | None = None,
     notes_store: NotesStore | None = None,
+    calendar_store: CalendarStore | None = None,
+    task_scheduler: TaskScheduler | None = None,
+    speech: CapabilityProvider | None = None,
 ) -> CapabilityRegistry:
     """The built-in edge: the ExternalSource backs the Internet capabilities.
 
@@ -67,8 +72,9 @@ def build_default_registry(
     capabilities (kept separate so they can reflect runtime seams). The deep-
     research and blind model-comparison sources back their capabilities too, when
     wired, so ``can_do`` is uniform across every edge (Odysseus, §28). A wired
-    mailbox backs the email capability, and a wired task agent backs delegation
-    (D1-revised: material edge action).
+    mailbox backs the email capability, a wired task agent backs delegation
+    (D1-revised: material edge action), a wired calendar store backs the
+    calendar capability, and a wired task scheduler backs the task capability.
     """
     by_name: dict[str, CapabilityProvider] = {}
     if external_source is not None:
@@ -92,6 +98,12 @@ def build_default_registry(
         by_name["delegate to an agent"] = AgentCapability(task_agent)
     if notes_store is not None:
         by_name["manage notes"] = NotesCapability(notes_store)
+    if calendar_store is not None:
+        by_name["manage calendar"] = CalendarCapability(calendar_store)
+    if task_scheduler is not None:
+        by_name["manage tasks"] = TaskSchedulerCapability(task_scheduler)
+    if speech is not None:
+        by_name["perceive speech"] = speech
     return StaticCapabilityRegistry(_by_name=by_name)
 
 
@@ -185,6 +197,31 @@ class ResearchCapability:
         return True
 
 
+class SpeechPerceptionCapability:
+    """'perceive speech' backed by the ear seam (the input mirror of the mouth).
+
+    Reports whether Jarvis can currently hear spoken input. The provider is mutable
+    so the runtime seam (`set_speech_perception`) flips availability when a
+    ``SpeechPerceptionSource`` is wired -- the browser's Web Speech API, or a richer
+    transcriber, behind the same edge (Vision §3, §32).
+    """
+
+    def __init__(self, capability: str = "perceive speech") -> None:
+        self._capability = capability
+        self._live = False
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return self._live
+
+    def set_live(self, live: bool) -> None:
+        """Mark whether speech input is live right now."""
+        self._live = live
+
+
 class ModelCompareCapability:
     """The 'compare language models' capability backed by the model comparator.
 
@@ -262,6 +299,50 @@ class NotesCapability:
 
     def __init__(self, store: NotesStore, capability: str = "manage notes") -> None:
         self._store = store
+        self._capability = capability
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return True
+
+
+class CalendarCapability:
+    """The 'manage calendar' capability backed by the calendar store edge (Odysseus #6).
+
+    A wired calendar store is itself the calendar capability, so it backs that
+    capability name directly. It is available whenever it is wired; whether Jarvis
+    *chooses* to create/edit/delete a calendar event -- reversible, low-risk
+    material actions -- stays a deliberate request gated by the surface.
+    """
+
+    def __init__(self, store: CalendarStore, capability: str = "manage calendar") -> None:
+        self._store = store
+        self._capability = capability
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return True
+
+
+class TaskSchedulerCapability:
+    """The 'manage tasks' capability backed by the task scheduler edge (Odysseus #7).
+
+    A wired task scheduler is itself the task capability, so it backs that
+    capability name directly. It is available whenever it is wired; whether Jarvis
+    *chooses* to create/edit/delete/enable/disable a scheduled task -- reversible,
+    low-risk material actions -- stays a deliberate request gated by the surface.
+    """
+
+    def __init__(
+        self, scheduler: TaskScheduler, capability: str = "manage tasks"
+    ) -> None:
+        self._scheduler = scheduler
         self._capability = capability
 
     @property

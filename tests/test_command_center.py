@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -21,11 +22,13 @@ from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.perception.companion_perception import CompanionObservation
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.services.model_compare import ModelRun
+from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
+from jarvis.domain.value_objects.scheduled_task import ScheduledTask
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.infrastructure.capability_registry import build_default_registry
@@ -802,6 +805,406 @@ class TestCapabilityCommand:
         assert "haven't noticed" in result["reply"].lower()
 
 
+class _FakeCalendarStore:
+    """An in-memory calendar store for the calendar command tests."""
+
+    def __init__(self) -> None:
+        self._events: dict[str, CalendarEvent] = {}
+        self.deleted: list[str] = []
+
+    def list_events(self, *, limit: int = 100) -> tuple[CalendarEvent, ...]:
+        events = sorted(self._events.values(), key=lambda e: e.start)
+        return tuple(events[:limit])
+
+    def get_event(self, event_id: str) -> CalendarEvent:
+        return self._events[event_id]
+
+    def create_event(
+        self,
+        *,
+        title: str,
+        start: datetime,
+        end: datetime,
+        description: str = "",
+        location: str = "",
+        all_day: bool = False,
+    ) -> CalendarEvent:
+        n = len(self._events) + 1
+        event = CalendarEvent(
+            id=f"e{n}", title=title, start=start, end=end,
+            description=description, location=location, all_day=all_day,
+        )
+        self._events[event.id] = event
+        return event
+
+    def update_event(
+        self,
+        event_id: str,
+        *,
+        title: str,
+        start: datetime,
+        end: datetime,
+        description: str,
+        location: str,
+        all_day: bool,
+    ) -> CalendarEvent:
+        event = CalendarEvent(
+            id=event_id, title=title, start=start, end=end,
+            description=description, location=location, all_day=all_day,
+        )
+        self._events[event_id] = event
+        return event
+
+    def delete_event(self, event_id: str) -> None:
+        self.deleted.append(event_id)
+        self._events.pop(event_id, None)
+
+    def events_in_range(
+        self, start: datetime, end: datetime, *, limit: int = 100
+    ) -> tuple[CalendarEvent, ...]:
+        return tuple(
+            e for e in self._events.values()
+            if e.start <= end and e.end >= start
+        )[:limit]
+
+
+class _FakeTaskScheduler:
+    """An in-memory task scheduler for the tasks command tests."""
+
+    def __init__(self) -> None:
+        self.tasks: dict[str, ScheduledTask] = {}
+        self.deleted: list[str] = []
+
+    def list_tasks(self, *, limit: int = 100) -> tuple[ScheduledTask, ...]:
+        tasks = sorted(
+            self.tasks.values(), key=lambda t: t.created_at, reverse=True,
+        )
+        return tuple(tasks[:limit])
+
+    def get_task(self, task_id: str) -> ScheduledTask:
+        return self.tasks[task_id]
+
+    def create_task(
+        self,
+        *,
+        name: str,
+        command: str,
+        cron: str = "",
+        description: str = "",
+        enabled: bool = True,
+    ) -> ScheduledTask:
+        n = len(self.tasks) + 1
+        task = ScheduledTask(
+            id=f"t{n}", name=name, command=command, cron=cron,
+            description=description, enabled=enabled,
+        )
+        self.tasks[task.id] = task
+        return task
+
+    def update_task(
+        self,
+        task_id: str,
+        *,
+        name: str,
+        command: str,
+        cron: str,
+        description: str,
+        enabled: bool,
+    ) -> ScheduledTask:
+        task = ScheduledTask(
+            id=task_id, name=name, command=command, cron=cron,
+            description=description, enabled=enabled,
+        )
+        self.tasks[task_id] = task
+        return task
+
+    def delete_task(self, task_id: str) -> None:
+        self.deleted.append(task_id)
+        self.tasks.pop(task_id, None)
+
+    def enable_task(self, task_id: str) -> ScheduledTask:
+        task = self.tasks[task_id]
+        enabled = ScheduledTask(
+            id=task.id, name=task.name, command=task.command, cron=task.cron,
+            description=task.description, enabled=True,
+        )
+        self.tasks[task_id] = enabled
+        return enabled
+
+    def disable_task(self, task_id: str) -> ScheduledTask:
+        task = self.tasks[task_id]
+        disabled = ScheduledTask(
+            id=task.id, name=task.name, command=task.command, cron=task.cron,
+            description=task.description, enabled=False,
+        )
+        self.tasks[task_id] = disabled
+        return disabled
+
+    def due_tasks(self) -> tuple[ScheduledTask, ...]:
+        now = datetime.now(UTC)
+        return tuple(
+            t for t in self.tasks.values()
+            if t.enabled and t.next_run is not None and t.next_run <= now
+        )
+
+
+def _calendar_able_jarvis() -> Jarvis:
+    """A Jarvis that has a wire calendar store and has earned the capability."""
+    jarvis = Jarvis(calendar_store=_FakeCalendarStore())  # type: ignore[arg-type]
+    jarvis.remember_capability(
+        Capability(
+            name="manage calendar",
+            description="see and schedule calendar events",
+            requirement="a wired calendar store at the edge (CalendarStore)",
+            provenance="test harness",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )
+    return jarvis
+
+
+def _tasks_able_jarvis() -> Jarvis:
+    """A Jarvis that has a wired task scheduler and has earned the capability."""
+    scheduler = _FakeTaskScheduler()
+    jarvis = Jarvis(task_scheduler=scheduler)  # type: ignore[arg-type]
+    jarvis.remember_capability(
+        Capability(
+            name="manage tasks",
+            description="schedule and manage recurring tasks",
+            requirement="a wired task scheduler at the edge (TaskScheduler)",
+            provenance="test harness",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )
+    return jarvis
+
+
+def _event_start(offset_hours: int = 1) -> datetime:
+    return datetime(2026, 9, 1, 10, 0, tzinfo=UTC) + timedelta(hours=offset_hours)
+
+
+def _event_end(offset_hours: int = 2) -> datetime:
+    return datetime(2026, 9, 1, 10, 0, tzinfo=UTC) + timedelta(hours=offset_hours)
+
+
+class TestCalendarCommand:
+    def test_list_returns_formatted_events(self) -> None:
+        jarvis = _calendar_able_jarvis()
+        jarvis.create_calendar_event(
+            title="standup", start=_event_start(), end=_event_end(),
+            location="Room A",
+        )
+        result = handle(jarvis, "calendar", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "standup" in result["reply"]
+        assert "Room A" in result["reply"]
+        assert "ID: e1" in result["reply"]
+        assert result["count"] == 1
+
+    def test_list_without_a_store_is_a_clear_message(self) -> None:
+        result = handle(Jarvis(), "calendar", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "calendar capability" in result["reply"]
+
+    def test_list_wired_but_not_earned_is_honest(self) -> None:
+        jarvis = Jarvis(calendar_store=_FakeCalendarStore())  # type: ignore[arg-type]
+        result = handle(jarvis, "calendar", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "capability" in result["reply"]
+
+    def test_get_returns_one_event(self) -> None:
+        jarvis = _calendar_able_jarvis()
+        event = jarvis.create_calendar_event(
+            title="review", start=_event_start(), end=_event_end(),
+        )
+        result = handle(jarvis, "calendar", {"action": "get", "id": event.id})
+        assert isinstance(result["reply"], str)
+        assert "review" in result["reply"]
+
+    def test_get_requires_an_id(self) -> None:
+        result = handle(_calendar_able_jarvis(), "calendar", {"action": "get"})
+        assert isinstance(result["reply"], str)
+        assert "id" in result["reply"].lower()
+
+    def test_create_persists_an_event(self) -> None:
+        jarvis = _calendar_able_jarvis()
+        result = handle(jarvis, "calendar", {
+            "action": "create",
+            "title": "demo",
+            "start": _event_start().isoformat(),
+            "end": _event_end().isoformat(),
+        })
+        assert isinstance(result["reply"], str)
+        assert "demo" in result["reply"]
+        assert jarvis.list_calendar_events()
+
+    def test_create_requires_a_title(self) -> None:
+        result = handle(_calendar_able_jarvis(), "calendar", {
+            "action": "create",
+            "start": _event_start().isoformat(),
+            "end": _event_end().isoformat(),
+        })
+        assert isinstance(result["reply"], str)
+        assert "title" in result["reply"].lower()
+
+    def test_delete_removes_an_event(self) -> None:
+        jarvis = _calendar_able_jarvis()
+        event = jarvis.create_calendar_event(
+            title="gone soon", start=_event_start(), end=_event_end(),
+        )
+        result = handle(jarvis, "calendar", {"action": "delete", "id": event.id})
+        assert isinstance(result["reply"], str)
+        assert "Deleted" in result["reply"]
+        assert not jarvis.list_calendar_events()
+
+    def test_range_filters_events(self) -> None:
+        jarvis = _calendar_able_jarvis()
+        jarvis.create_calendar_event(
+            title="early", start=_event_start(), end=_event_end(),
+        )
+        jarvis.create_calendar_event(
+            title="late", start=_event_start(50), end=_event_end(51),
+        )
+        start = _event_start(-1).isoformat()
+        end = _event_end(5).isoformat()
+        result = handle(jarvis, "calendar", {"action": "range", "start": start, "end": end})
+        assert isinstance(result["reply"], str)
+        assert "early" in result["reply"]
+        assert "late" not in result["reply"]
+        assert result["count"] == 1
+
+    def test_missing_action_is_guided(self) -> None:
+        result = handle(_calendar_able_jarvis(), "calendar", {})
+        assert isinstance(result["reply"], str)
+        assert "calendar" in result["reply"]
+
+    def test_failure_returns_a_message_not_a_crash(self) -> None:
+        jarvis = _calendar_able_jarvis()
+        jarvis.create_calendar_event(
+            title="x", start=_event_start(), end=_event_end(),
+        )
+        result = handle(jarvis, "calendar", {"action": "get", "id": "missing"})
+        assert isinstance(result["reply"], str)
+        assert "couldn't" in result["reply"]
+
+
+class TestTasksCommand:
+    def test_list_returns_formatted_tasks(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        jarvis.create_scheduled_task(
+            name="backup", command="tar czf /tmp/bak.tar.gz ~", cron="0 2 * * *",
+        )
+        result = handle(jarvis, "tasks", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "backup" in result["reply"]
+        assert "0 2 * * *" in result["reply"]
+        assert "ID: t1" in result["reply"]
+        assert result["count"] == 1
+
+    def test_list_without_a_scheduler_is_a_clear_message(self) -> None:
+        result = handle(Jarvis(), "tasks", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "task-scheduler" in result["reply"]
+
+    def test_list_wired_but_not_earned_is_honest(self) -> None:
+        jarvis = Jarvis(task_scheduler=_FakeTaskScheduler())  # type: ignore[arg-type]
+        result = handle(jarvis, "tasks", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "capability" in result["reply"]
+
+    def test_get_returns_one_task(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        task = jarvis.create_scheduled_task(name="cron", command="echo hi")
+        result = handle(jarvis, "tasks", {"action": "get", "id": task.id})
+        assert isinstance(result["reply"], str)
+        assert "cron" in result["reply"]
+
+    def test_get_requires_an_id(self) -> None:
+        result = handle(_tasks_able_jarvis(), "tasks", {"action": "get"})
+        assert isinstance(result["reply"], str)
+        assert "id" in result["reply"].lower()
+
+    def test_create_persists_a_task(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        result = handle(jarvis, "tasks", {
+            "action": "create",
+            "name": "daily report",
+            "command": "scripts/report.py",
+            "cron": "0 9 * * *",
+        })
+        assert isinstance(result["reply"], str)
+        assert "daily report" in result["reply"]
+        assert jarvis.list_scheduled_tasks()
+
+    def test_create_requires_a_name(self) -> None:
+        result = handle(_tasks_able_jarvis(), "tasks", {
+            "action": "create", "command": "echo"
+        })
+        assert isinstance(result["reply"], str)
+        assert "name" in result["reply"].lower()
+
+    def test_enable_and_disable_toggle_state(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        task = jarvis.create_scheduled_task(
+            name="cron", command="echo", enabled=True,
+        )
+        disabled = handle(jarvis, "tasks", {"action": "disable", "id": task.id})
+        assert isinstance(disabled["reply"], str)
+        assert "Disabled" in disabled["reply"]
+        assert not jarvis.get_scheduled_task(task.id).enabled
+        enabled = handle(jarvis, "tasks", {"action": "enable", "id": task.id})
+        assert isinstance(enabled["reply"], str)
+        assert jarvis.get_scheduled_task(task.id).enabled
+
+    def test_delete_removes_a_task(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        task = jarvis.create_scheduled_task(name="cleanup", command="rm -rf /tmp/x")
+        result = handle(jarvis, "tasks", {"action": "delete", "id": task.id})
+        assert isinstance(result["reply"], str)
+        assert "Deleted" in result["reply"]
+        assert not jarvis.list_scheduled_tasks()
+
+    def test_due_returns_only_due_tasks(self) -> None:
+        jarvis = Jarvis()  # type: ignore[arg-type]
+        scheduler = _FakeTaskScheduler()
+        jarvis.set_task_scheduler(scheduler)
+        jarvis.remember_capability(
+            Capability(
+                name="manage tasks",
+                description="schedule and manage recurring tasks",
+                requirement="a wired task scheduler at the edge (TaskScheduler)",
+                provenance="test harness",
+                status=CapabilityStatus.ACQUIRED,
+            )
+        )
+        task = scheduler.create_task(name="overdue", command="echo")
+        overdue = ScheduledTask(
+            id=task.id, name=task.name, command=task.command,
+            next_run=datetime.now(UTC) - timedelta(hours=1),
+        )
+        scheduler.tasks[task.id] = overdue
+        later = ScheduledTask(
+            id="t2", name="later", command="echo",
+            next_run=datetime.now(UTC) + timedelta(hours=5),
+        )
+        scheduler.tasks[later.id] = later
+        result = handle(jarvis, "tasks", {"action": "due"})
+        assert isinstance(result["reply"], str)
+        assert "overdue" in result["reply"]
+        assert "later" not in result["reply"]
+
+    def test_missing_action_is_guided(self) -> None:
+        result = handle(_tasks_able_jarvis(), "tasks", {})
+        assert isinstance(result["reply"], str)
+        assert "tasks" in result["reply"]
+
+    def test_failure_returns_a_message_not_a_crash(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        result = handle(jarvis, "tasks", {"action": "get", "id": "missing"})
+        assert isinstance(result["reply"], str)
+        assert "couldn't" in result["reply"]
+
+
 class TestRoute:
     def test_root_serves_the_console_page(self) -> None:
         response = route(Jarvis(), "GET", "/", b"")
@@ -837,3 +1240,21 @@ class TestRoute:
         # A body that isn't valid UTF-8 must not 500 (Latin-1 "ñ" = 0xf1).
         response = route(Jarvis(), "POST", "/api/say", b'{"text": "monta\xf1a"}')
         assert response.status == 200
+
+    def test_post_calendar_list_returns_json(self) -> None:
+        jarvis = _calendar_able_jarvis()
+        jarvis.create_calendar_event(
+            title="standup", start=_event_start(), end=_event_end(),
+        )
+        response = route(jarvis, "POST", "/api/calendar", b'{"action": "list"}')
+        assert response.status == 200
+        assert b"standup" in response.body
+        assert b"reply" in response.body
+
+    def test_post_tasks_list_returns_json(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        jarvis.create_scheduled_task(name="backup", command="echo hi")
+        response = route(jarvis, "POST", "/api/tasks", b'{"action": "list"}')
+        assert response.status == 200
+        assert b"backup" in response.body
+        assert b"reply" in response.body

@@ -10,6 +10,8 @@ evaluator derives a stance (suggest / ask first / withhold) from that evidence.
 
 from __future__ import annotations
 
+import pytest
+
 from jarvis import Jarvis
 from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
@@ -470,3 +472,28 @@ class TestCapabilityProviders:
         jarvis.enable_embedding_recall(_StubEmbedder())  # type: ignore[arg-type]
         assert jarvis.can_do("recall by meaning")
         assert "recall by meaning" in jarvis.usable_capabilities()
+
+    def test_the_ear_backs_the_perceive_speech_capability(self) -> None:
+        from jarvis.infrastructure.speech_perception import EchoSpeechPerception
+
+        jarvis = Jarvis()
+        _acquire(jarvis, "perceive speech")
+        assert not jarvis.can_do("perceive speech")
+        assert jarvis.speech_perception is None
+        jarvis.set_speech_perception(EchoSpeechPerception())
+        assert jarvis.can_do("perceive speech")
+        assert "perceive speech" in jarvis.usable_capabilities()
+        # The default ear (browser Web Speech) passes the transcribed text through.
+        assert jarvis.perceive_speech("hello") == "hello"
+
+    def test_disabling_the_ear_clears_the_perceive_speech_capability(self) -> None:
+        from jarvis.infrastructure.speech_perception import EchoSpeechPerception
+
+        jarvis = Jarvis()
+        _acquire(jarvis, "perceive speech")
+        jarvis.set_speech_perception(EchoSpeechPerception())
+        assert jarvis.can_do("perceive speech")
+        jarvis.set_speech_perception(None)
+        assert not jarvis.can_do("perceive speech")
+        with pytest.raises(RuntimeError):
+            jarvis.perceive_speech("hello")

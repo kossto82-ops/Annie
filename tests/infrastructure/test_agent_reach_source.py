@@ -7,6 +7,7 @@ an unavailable package, and Jarvis's offline default are all exercised directly.
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Mapping
 
 import pytest
@@ -14,8 +15,8 @@ import pytest
 from jarvis import Jarvis
 from jarvis.infrastructure.agent_reach_source import (
     AgentReachSource,
-    AgentReachUnavailable,
     build_agent_reach_source,
+    build_web_source,
 )
 
 
@@ -53,13 +54,25 @@ class TestRead:
 
 
 class TestSearch:
-    def test_search_raises_clear_error_without_a_key(self) -> None:
+    def test_search_raises_clear_error_without_a_backend(self) -> None:
         src = AgentReachSource(
             environ={}, transport=_transport("x")  # type: ignore[arg-type]
         )
         with pytest.raises(RuntimeError) as exc:
             src.search("hello")
-        assert "JINA_API_KEY" in str(exc.value)
+        assert "no web-search backend configured" in str(exc.value)
+
+    def test_search_uses_the_llm_search_backend(self) -> None:
+        def llm_search(query: str) -> str:
+            return f"results for {query}"
+
+        src = AgentReachSource(
+            environ={}, transport=_transport("x"), llm_search=llm_search  # type: ignore[arg-type]
+        )
+        docs = src.search("hello")
+        assert len(docs) == 1
+        assert docs[0].source == "web_search"
+        assert "results for hello" in docs[0].content
 
     def test_search_works_with_a_key(self) -> None:
         src = AgentReachSource(
@@ -73,23 +86,31 @@ class TestSearch:
 
 
 class TestAvailableChannels:
-    def test_reports_the_installed_channels(self) -> None:
-        src = AgentReachSource()
+    def test_reports_its_own_channels_without_the_package(self) -> None:
+        src = AgentReachSource(environ={})
         channels = src.available_channels()
-        assert channels
         by_name = {c.name: c for c in channels}
         assert by_name["web"].status == "ok"
+        assert by_name["search"].status == "off"
 
-    def test_raises_when_package_is_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        src = AgentReachSource()
-        import importlib
+    def test_reports_search_ok_when_an_llm_backend_is_wired(self) -> None:
+        src = AgentReachSource(environ={}, llm_search=lambda q: "found " + q)
+        by_name = {c.name: c for c in src.available_channels()}
+        assert by_name["search"].status == "ok"
+        assert by_name["search"].active_backend == "llm-search"
+
+    def test_keeps_reporting_own_channels_when_package_is_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = AgentReachSource(environ={})
 
         def boom(name: str) -> object:
             raise ModuleNotFoundError(name)
 
         monkeypatch.setattr(importlib, "import_module", boom)
-        with pytest.raises(AgentReachUnavailable):
-            src.available_channels()
+        channels = src.available_channels()
+        assert channels
+        assert any(c.name == "web" and c.status == "ok" for c in channels)
 
 
 class TestFactory:
@@ -106,6 +127,18 @@ class TestFactory:
             lambda _name: None,
         )
         assert build_agent_reach_source() is None
+
+
+class TestWebSource:
+    def test_builds_with_an_llm_search_backend(self) -> None:
+        src = build_web_source(llm_search=lambda q: "found " + q)
+        assert src is not None
+        docs = src.search("question")
+        assert len(docs) == 1
+        assert "found question" in docs[0].content
+
+    def test_none_without_any_backend(self) -> None:
+        assert build_web_source(environ={}) is None
 
 
 class TestJarvisIntegration:

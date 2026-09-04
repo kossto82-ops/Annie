@@ -18,8 +18,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.parse
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
@@ -33,6 +35,7 @@ from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.services.model_compare import ModelRun
+from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
@@ -41,7 +44,7 @@ from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.executive.executive_controller import subject_of, working_statement
-from jarvis.infrastructure import llm_config_store
+from jarvis.infrastructure import google_calendar, llm_config_store
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.perceiver_factory import (
@@ -128,6 +131,14 @@ def snapshot(jarvis: Jarvis) -> Reply:
             {"statement": s, "confidence": c} for s, c in summary.capability_needs
         ],
         "ready": list(jarvis.usable_capabilities()),
+        "tools": [
+            {
+                "name": spec.name,
+                "description": spec.description,
+                "requires_approval": spec.requires_approval,
+            }
+            for spec in jarvis.tool_channels()
+        ],
     }
 
 
@@ -300,9 +311,15 @@ def _greeting_reply(jarvis: Jarvis, text: str) -> Reply:
     name = _companion_name(jarvis)
     if uses_spanish(text):
         opener = f"Hola, {name}" if name else "Hola"
-        return _plain(f"{opener}. Me alegra verte. ¿Qué tienes en mente?", "greeting")
+        return _plain(
+            f"{opener}. Soy Jarvis, tu compañero. Me alegra verte. ¿Qué tienes en mente?",
+            "greeting",
+        )
     opener = f"Hi {name}" if name else "Hi"
-    return _plain(f"{opener} — good to see you. What's on your mind?", "greeting")
+    return _plain(
+        f"{opener} — I'm Jarvis, your companion. Good to see you. What's on your mind?",
+        "greeting",
+    )
 
 
 def _smalltalk_reply(text: str) -> Reply:
@@ -731,13 +748,23 @@ def _external_not_ready(jarvis: Jarvis, capability: str) -> Reply:
 
     Distinguishes *not wired* (no provider at all -- Jarvis is simply offline)
     from *not earned* (a provider exists but the capability is not yet acquired,
-    so using it is a growth the companion has not accepted). Both point forward
-    instead of pretending.
+    so using it is a growth the companion has not accepted). When nothing is
+    wired, name the exact missing prerequisite (the agent-reach package and, for
+    search, JINA_API_KEY) so fixing it is a clear next step, not a mystery.
     """
     if jarvis.external_source is None:
+        search_hint = (
+            " to search I need a web-search backend (point JARVIS_LLM_* at an "
+            "OmniRoute gateway, or set JINA_API_KEY in .env\n"
+            "   then 'capability scout'"
+        )
         return {
-            "reply": "No Internet capability is wired up right now — I can still think "
-            "and remember, I just can't fetch from the web (agent-reach isn't set up).",
+            "reply": (
+                "No Internet capability is wired up right now — I can still think "
+                "and remember, I just can't fetch from the web. To enable it:\n"
+                f"   install the agent-reach package and restart (and {search_hint}"
+                "then 'capability acquire'. I can offer these as a growth you accept.)"
+            ),
             "speak": False,
         }
     return _capability_not_ready(jarvis, capability)
@@ -1173,6 +1200,403 @@ def _tool_run_reply(name: str, result: ToolCallResult) -> str:
     return f"Tool '{name}' could not run: {result.error}"
 
 
+def _format_calendar_event(event: object) -> str:
+    """A readable summary of one calendar event."""
+    from jarvis.domain.value_objects.calendar_event import CalendarEvent
+
+    if not isinstance(event, CalendarEvent):
+        return str(event)
+    lines = [f"Title: {event.title}", f"When: {event.start} \u2192 {event.end}"]
+    if event.location:
+        lines.append(f"Location: {event.location}")
+    if event.description:
+        lines.append(f"Description: {event.description}")
+    lines.append(f"ID: {event.id}")
+    return "\n".join(lines)
+
+
+def _format_scheduled_task(task: object) -> str:
+    """A readable summary of one scheduled task."""
+    from jarvis.domain.value_objects.scheduled_task import ScheduledTask
+
+    if not isinstance(task, ScheduledTask):
+        return str(task)
+    lines = [
+        f"Name: {task.name}",
+        f"Command: {task.command}",
+    ]
+    if task.cron:
+        lines.append(f"Schedule: {task.cron}")
+    lines.append(f"Enabled: {'yes' if task.enabled else 'no'}")
+    if task.next_run is not None:
+        lines.append(f"Next run: {task.next_run}")
+    if task.description:
+        lines.append(f"Description: {task.description}")
+    lines.append(f"ID: {task.id}")
+    return "\n".join(lines)
+
+
+_GOOGLE_REDIRECT_URI = "http://127.0.0.1:8765/api/auth/google/callback"
+
+
+def _gain_calendar_capability(jarvis: Jarvis) -> None:
+    """Propose and acquire the "manage calendar" capability, if not held yet.
+
+    Used after wiring a live Google store so ``can_do`` reflects the new backing; this
+    is the deliberate, earned acquisition (Odysseus, Vision §28). Matches the capability
+    the CalendarCapability provider reports, so `can_do` and `calendar list` agree.
+    """
+    known = [c.name for c in jarvis.capabilities()]
+    if "manage calendar" in known:
+        return
+    jarvis.remember_capability(
+        Capability(
+            name="manage calendar",
+            description="see and schedule events on a live Google Calendar",
+            requirement="a connected calendar store at the edge (CalendarStore)",
+            provenance="google calendar",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )
+
+
+def _google_calendar(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Connect Jarvis to a real Google Calendar (Odysseus #6, live edge).
+
+    Actions: ``status`` (is Google wired + connected), ``auth`` (returns the consent
+    URL to open in a browser), ``complete`` (hands back the authorisation code to
+    exchange for a refresh token and wire the store), and ``disconnect`` (clear the
+    saved token and go offline to Google).
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {
+            "reply": "Use google_calendar with action 'status', 'auth', 'complete', "
+            "or 'disconnect'.",
+            "speak": False,
+        }
+    if action == "status":
+        store = google_calendar.build_google_calendar_store()
+        if store is None:
+            return {
+                "reply": "Google Calendar is not connected. Run `google_calendar "
+                "auth` to link it.",
+                "speak": False,
+                "connected": False,
+            }
+        return {
+            "reply": "Google Calendar is configured; it serves the calendar capability "
+            "when that capability is also earned.",
+            "speak": False,
+            "connected": True,
+        }
+    if action == "auth":
+        client_id = google_calendar.client_id_from_environ()
+        if not client_id:
+            return {
+                "reply": "Google Calendar isn't configured: set "
+                "JARVIS_GOOGLE_CALENDAR_CLIENT_ID and "
+                "JARVIS_GOOGLE_CALENDAR_CLIENT_SECRET in .env first.",
+                "speak": False,
+            }
+        url = google_calendar.authorize_url(
+            client_id, redirect_uri=_GOOGLE_REDIRECT_URI
+        )
+        return {
+            "reply": "Open this URL in your browser to authorise: " + url,
+            "speak": False,
+            "authorize_url": url,
+        }
+    if action == "complete":
+        code = str(payload.get("code", "")).strip()
+        if not code:
+            return {
+                "reply": "Provide the authorisation code from the redirect.",
+                "speak": False,
+            }
+        client_id = google_calendar.client_id_from_environ()
+        client_secret = os.environ.get(google_calendar.ENV_CLIENT_SECRET, "")
+        if not client_id or not client_secret:
+            return {
+                "reply": "Google Calendar isn't configured: set "
+                "JARVIS_GOOGLE_CALENDAR_CLIENT_ID and "
+                "JARVIS_GOOGLE_CALENDAR_CLIENT_SECRET in .env first.",
+                "speak": False,
+            }
+        try:
+            refresh, access = google_calendar.exchange_code(
+                client_id, client_secret, code, redirect_uri=_GOOGLE_REDIRECT_URI
+            )
+        except google_calendar.GoogleCalendarAuthError as error:
+            return {"reply": f"Couldn't connect Google Calendar: {error}", "speak": False}
+        if refresh:
+            llm_config_store.persist({google_calendar.ENV_REFRESH_TOKEN: refresh})
+        # Wire the store directly from the freshly exchanged token — env may not yet hold
+        # the refresh token in this process, so a factory read of the environment would
+        # (correctly) conclude Google is unconfigured for this run.
+        jarvis.set_calendar_store(
+            google_calendar.GoogleCalendarStore(
+                client_id,
+                client_secret,
+                refresh,
+                access_token=access,
+            )
+        )
+        _gain_calendar_capability(jarvis)
+        return {
+            "reply": "Google Calendar is now wired as the live calendar store. "
+            "Use `calendar list` to see your events.",
+            "speak": False,
+        }
+    if action == "disconnect":
+        llm_config_store.persist({google_calendar.ENV_REFRESH_TOKEN: ""})
+        jarvis.set_calendar_store(None)
+        return {"reply": "Google Calendar disconnected.", "speak": False}
+    return {"reply": "Unknown google_calendar action.", "speak": False}
+
+
+def _calendar(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Manage calendar events through the calendar capability (Odysseus #6).
+
+    Actions: ``list``, ``get``, ``create``, ``update``, ``delete``, ``range``.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {
+            "reply": "Use calendar with action 'list', 'get', 'create', "
+            "'update', 'delete', or 'range'.",
+            "speak": False,
+        }
+    if jarvis.calendar_store is None:
+        return {
+            "reply": "No calendar capability is wired up right now.",
+            "speak": False,
+        }
+    if not jarvis.can_do("manage calendar"):
+        return _capability_not_ready(jarvis, "manage calendar")
+    try:
+        if action == "list":
+            limit_raw = payload.get("limit", 20)
+            try:
+                limit = int(limit_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                limit = 20
+            events = jarvis.list_calendar_events(limit=limit)
+            if not events:
+                return {"reply": "No calendar events found.", "speak": False}
+            lines = [_format_calendar_event(e) for e in events]
+            return {
+                "reply": "Calendar events:\n\n" + "\n\n".join(lines),
+                "speak": False,
+                "count": len(events),
+            }
+        if action == "get":
+            event_id = str(payload.get("id", "")).strip()
+            if not event_id:
+                return {"reply": "Provide an event id.", "speak": False}
+            event = jarvis.get_calendar_event(event_id)
+            return {"reply": _format_calendar_event(event), "speak": False}
+        if action == "create":
+            title = str(payload.get("title", "")).strip()
+            if not title:
+                return {"reply": "Provide a title for the event.", "speak": False}
+            start_raw = str(payload.get("start", "")).strip()
+            end_raw = str(payload.get("end", "")).strip()
+            if not start_raw or not end_raw:
+                return {"reply": "Provide start and end datetimes (ISO format).", "speak": False}
+            start = datetime.fromisoformat(start_raw)
+            end = datetime.fromisoformat(end_raw)
+            description = str(payload.get("description", "")).strip()
+            location = str(payload.get("location", "")).strip()
+            all_day_raw = payload.get("all_day", False)
+            all_day = bool(all_day_raw)
+            event = jarvis.create_calendar_event(
+                title=title, start=start, end=end,
+                description=description, location=location, all_day=all_day,
+            )
+            return {
+                "reply": f"Created event: {event.title} (ID: {event.id})",
+                "speak": False,
+            }
+        if action == "update":
+            event_id = str(payload.get("id", "")).strip()
+            if not event_id:
+                return {"reply": "Provide the event id to update.", "speak": False}
+            title = str(payload.get("title", "")).strip()
+            if not title:
+                return {"reply": "Provide a title.", "speak": False}
+            start_raw = str(payload.get("start", "")).strip()
+            end_raw = str(payload.get("end", "")).strip()
+            if not start_raw or not end_raw:
+                return {"reply": "Provide start and end datetimes (ISO format).", "speak": False}
+            start = datetime.fromisoformat(start_raw)
+            end = datetime.fromisoformat(end_raw)
+            description = str(payload.get("description", "")).strip()
+            location = str(payload.get("location", "")).strip()
+            all_day_raw = payload.get("all_day", False)
+            all_day = bool(all_day_raw)
+            event = jarvis.update_calendar_event(
+                event_id, title=title, start=start, end=end,
+                description=description, location=location, all_day=all_day,
+            )
+            return {
+                "reply": f"Updated event: {event.title} (ID: {event.id})",
+                "speak": False,
+            }
+        if action == "delete":
+            event_id = str(payload.get("id", "")).strip()
+            if not event_id:
+                return {"reply": "Provide the event id to delete.", "speak": False}
+            jarvis.delete_calendar_event(event_id)
+            return {"reply": f"Deleted event {event_id}.", "speak": False}
+        if action == "range":
+            start_raw = str(payload.get("start", "")).strip()
+            end_raw = str(payload.get("end", "")).strip()
+            if not start_raw or not end_raw:
+                return {"reply": "Provide start and end datetimes (ISO format).", "speak": False}
+            start = datetime.fromisoformat(start_raw)
+            end = datetime.fromisoformat(end_raw)
+            limit_raw = payload.get("limit", 20)
+            try:
+                limit = int(limit_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                limit = 20
+            events = jarvis.calendar_events_in_range(start, end, limit=limit)
+            if not events:
+                return {"reply": "No events in that range.", "speak": False}
+            lines = [_format_calendar_event(e) for e in events]
+            return {
+                "reply": "Events in range:\n\n" + "\n\n".join(lines),
+                "speak": False,
+                "count": len(events),
+            }
+    except Exception as error:  # noqa: BLE001 - the store boundary
+        return {"reply": f"I couldn't do that ({type(error).__name__}).", "speak": False}
+    return {"reply": "Unknown calendar action.", "speak": False}
+
+
+def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Manage scheduled tasks through the task-scheduler capability (Odysseus #7).
+
+    Actions: ``list``, ``get``, ``create``, ``update``, ``delete``,
+    ``enable``, ``disable``, ``due``.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {
+            "reply": "Use tasks with action 'list', 'get', 'create', 'update', "
+            "'delete', 'enable', 'disable', or 'due'.",
+            "speak": False,
+        }
+    if jarvis.task_scheduler is None:
+        return {
+            "reply": "No task-scheduler capability is wired up right now.",
+            "speak": False,
+        }
+    if not jarvis.can_do("manage tasks"):
+        return _capability_not_ready(jarvis, "manage tasks")
+    try:
+        if action == "list":
+            limit_raw = payload.get("limit", 20)
+            try:
+                limit = int(limit_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                limit = 20
+            tasks = jarvis.list_scheduled_tasks(limit=limit)
+            if not tasks:
+                return {"reply": "No scheduled tasks found.", "speak": False}
+            lines = [_format_scheduled_task(t) for t in tasks]
+            return {
+                "reply": "Scheduled tasks:\n\n" + "\n\n".join(lines),
+                "speak": False,
+                "count": len(tasks),
+            }
+        if action == "get":
+            task_id = str(payload.get("id", "")).strip()
+            if not task_id:
+                return {"reply": "Provide a task id.", "speak": False}
+            task = jarvis.get_scheduled_task(task_id)
+            return {"reply": _format_scheduled_task(task), "speak": False}
+        if action == "create":
+            name = str(payload.get("name", "")).strip()
+            if not name:
+                return {"reply": "Provide a name for the task.", "speak": False}
+            command = str(payload.get("command", "")).strip()
+            if not command:
+                return {"reply": "Provide a command for the task.", "speak": False}
+            cron = str(payload.get("cron", "")).strip()
+            description = str(payload.get("description", "")).strip()
+            enabled_raw = payload.get("enabled", True)
+            enabled = bool(enabled_raw)
+            task = jarvis.create_scheduled_task(
+                name=name, command=command, cron=cron,
+                description=description, enabled=enabled,
+            )
+            return {
+                "reply": f"Created task: {task.name} (ID: {task.id})",
+                "speak": False,
+            }
+        if action == "update":
+            task_id = str(payload.get("id", "")).strip()
+            if not task_id:
+                return {"reply": "Provide the task id to update.", "speak": False}
+            name = str(payload.get("name", "")).strip()
+            if not name:
+                return {"reply": "Provide a name.", "speak": False}
+            command = str(payload.get("command", "")).strip()
+            if not command:
+                return {"reply": "Provide a command.", "speak": False}
+            cron = str(payload.get("cron", "")).strip()
+            description = str(payload.get("description", "")).strip()
+            enabled_raw = payload.get("enabled", True)
+            enabled = bool(enabled_raw)
+            task = jarvis.update_scheduled_task(
+                task_id, name=name, command=command, cron=cron,
+                description=description, enabled=enabled,
+            )
+            return {
+                "reply": f"Updated task: {task.name} (ID: {task.id})",
+                "speak": False,
+            }
+        if action == "delete":
+            task_id = str(payload.get("id", "")).strip()
+            if not task_id:
+                return {"reply": "Provide the task id to delete.", "speak": False}
+            jarvis.delete_scheduled_task(task_id)
+            return {"reply": f"Deleted task {task_id}.", "speak": False}
+        if action == "enable":
+            task_id = str(payload.get("id", "")).strip()
+            if not task_id:
+                return {"reply": "Provide the task id to enable.", "speak": False}
+            task = jarvis.enable_scheduled_task(task_id)
+            return {
+                "reply": f"Enabled task: {task.name} (ID: {task.id})",
+                "speak": False,
+            }
+        if action == "disable":
+            task_id = str(payload.get("id", "")).strip()
+            if not task_id:
+                return {"reply": "Provide the task id to disable.", "speak": False}
+            task = jarvis.disable_scheduled_task(task_id)
+            return {
+                "reply": f"Disabled task: {task.name} (ID: {task.id})",
+                "speak": False,
+            }
+        if action == "due":
+            tasks = jarvis.due_scheduled_tasks()
+            if not tasks:
+                return {"reply": "No tasks are currently due.", "speak": False}
+            lines = [_format_scheduled_task(t) for t in tasks]
+            return {
+                "reply": "Due tasks:\n\n" + "\n\n".join(lines),
+                "speak": False,
+                "count": len(tasks),
+            }
+    except Exception as error:  # noqa: BLE001 - the store boundary
+        return {"reply": f"I couldn't do that ({type(error).__name__}).", "speak": False}
+    return {"reply": "Unknown tasks action.", "speak": False}
+
+
 def _ready_marker(jarvis: Jarvis, capability: str) -> str:
     """A concise "(ready)" taste when an acquired capability is live-backed."""
     return " (ready)" if jarvis.can_do(capability) else ""
@@ -1195,6 +1619,9 @@ _COMMANDS: dict[str, Command] = {
     "compare": _compare,
     "capability": _capability,
     "tool": _tool,
+    "calendar": _calendar,
+    "google_calendar": _google_calendar,
+    "tasks": _tasks,
 }
 
 
@@ -1233,6 +1660,43 @@ def _json(payload: Reply) -> bytes:
     return json.dumps(payload).encode("utf-8")
 
 
+def _google_oauth_callback(jarvis: Jarvis, path: str) -> Response:
+    """Complete the Google OAuth handshake from the browser callback and send Jarvis home.
+
+    A browser GET (Google redirects here with ``?code=...``), so the response is a small
+    HTML page that bounces the user to ``/``. The ``code`` is single-use: it feeds the
+    ``google_calendar complete`` command which exchanges it, persists the refresh token,
+    wires the store, and acquires the capability. Any failure is a clear message, not a
+    crash.
+    """
+    query = urllib.parse.parse_qs(path.split("?", 1)[1] if "?" in path else "")
+    codes = query.get("code", [])
+    error = query.get("error", [None])[0]
+    if error:
+        message = f"Google refused authorisation: {error}"
+    elif not codes:
+        message = "Google Calendar callback received no authorisation code."
+    else:
+        result = handle(
+            jarvis, "google_calendar", {"action": "complete", "code": codes[0]}
+        )
+        message = "OK — you can close this tab and return to the command center."
+        if "error" in result:
+            message = f"Couldn't connect Google Calendar: {result['error']}"
+        elif result.get("reply"):
+            message = str(result["reply"])
+    body = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<title>Jarvis — Google Calendar</title></head>"
+        f"<body style='font-family:system-ui;background:#05070d;color:#dfe9ff;"
+        f"font-size:16px;line-height:1.6;padding:2em'>"
+        f"<p>{message}</p>"
+        "<p><a href='/' style='color:#38e6d0'>Return to the command center</a></p>"
+        "</body></html>"
+    ).encode()
+    return Response(200, "text/html; charset=utf-8", body)
+
+
 def route(jarvis: Jarvis, method: str, path: str, body: bytes) -> Response:
     """Decide the response for one HTTP request — pure, no socket (Vision §30).
 
@@ -1243,6 +1707,11 @@ def route(jarvis: Jarvis, method: str, path: str, body: bytes) -> Response:
     clean = path.split("?", 1)[0]
     if method == "GET" and clean in ("/", "/index.html"):
         return Response(200, "text/html; charset=utf-8", _CONSOLE_HTML.read_bytes())
+    # Google OAuth redirects the browser back here with ?code=...&state=.... We swallow
+    # it into the `google_calendar complete` command and bounce the user back to the
+    # console with a small page (this is a browser GET, not a JSON API call).
+    if method == "GET" and clean == "/api/auth/google/callback":
+        return _google_oauth_callback(jarvis, path)
     if clean.startswith("/api/"):
         command = clean[len("/api/") :].strip("/") or "state"
         payload = _parse(body) if method == "POST" else {}

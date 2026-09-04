@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
 
-Last updated: 2026-08-27 (Increment 103)
+Last updated: 2026-09-03 (Increment 104)
 
 ---
 
@@ -1428,6 +1428,31 @@ with belief + episode events dispatched through the NervousSystem at each step.
   switching back to a provider recalls its saved model. (The intermittent English seen while testing was
   Groq free-tier TPM under heavy probing, not a bug — `reasoning_effort=low` also lowers token use.)
 - Gates: ruff clean · pytest 512 passed, 3 skipped (per-provider model tests + recall-on-switch).
+
+### Increment 104 — calendar & tasks capabilities (Odysseus #6/#7) ✅ (2026-09-03)
+- **Calendar capability (Odysseus #6):** `CalendarEvent` value object (id, title, start, end,
+  description, location, all_day, provenance), `CalendarStore` domain Protocol (list/get/create/
+  update/delete/events_in_range), `LocalCalendarStore` infrastructure adapter (file-backed,
+  injectable `io` for offline tests, env-gated via `JARVIS_CALENDAR_ROOT`), `CalendarCapability`
+  provider in the registry, wired into `build_default_registry` and Jarvis (constructor param,
+  `_build_auto_registry`, `_refresh_providers`, property `calendar_store`, setter
+  `set_calendar_store`, delegation methods: `list_calendar_events`, `get_calendar_event`,
+  `create_calendar_event`, `update_calendar_event`, `delete_calendar_event`,
+  `events_in_range`).
+- **Task scheduler capability (Odysseus #7):** `ScheduledTask` value object (id, name, command,
+  cron, description, enabled, next_run, provenance), `TaskScheduler` domain Protocol (list/get/
+  create/update/delete/enable/disable/due_tasks), `LocalTaskScheduler` infrastructure adapter
+  (file-backed, injectable `io`, env-gated via `JARVIS_TASKS_ROOT`), `TaskSchedulerCapability`
+  provider in the registry, wired into Jarvis (same pattern as calendar: constructor param,
+  auto-registry, property, setter, delegation methods: `list_scheduled_tasks`,
+  `get_scheduled_task`, `create_scheduled_task`, `update_scheduled_task`,
+  `delete_scheduled_task`, `enable_scheduled_task`, `disable_scheduled_task`,
+  `due_scheduled_tasks`).
+- Both follow the NotesStore pattern exactly: domain protocol at the edge, immutable value
+  objects with provenance, reversible material actions gated by the caller, `can_do` reflects
+  both acquisition status and provider availability.
+- Gates: ruff clean · pyright strict (0 new errors) · pytest 957 passed, 3 skipped (2 pre-existing
+  failures unrelated to this increment).
 
 ---
 

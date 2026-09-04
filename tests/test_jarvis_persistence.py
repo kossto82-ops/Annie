@@ -150,13 +150,14 @@ class TestPersistentFactory:
         assert second.beliefs.all_beliefs()
 
     def test_acquired_capabilities_survive_restart_and_stay_backed(self, tmp_path: Path) -> None:
-        # Odysseus carries across restarts: an acquisition survives, and the
-        # persistent edge (agent-reach) keeps the web capability live-backed.
+        # Odysseus carries across restarts: an acquisition survives, and the persistent
+        # ear (browser Web Speech) keeps the "perceive speech" capability live-backed --
+        # environment-independent, unlike the web capability which needs a provider.
         first = Jarvis.persistent(tmp_path)
-        candidate = first.need_capability("search the web", "for news")[0]
+        candidate = first.need_capability("perceive speech", "to hear me")[0]
         first.remember_capability(candidate)
-        first.acquire_capability("search the web")
+        first.acquire_capability("perceive speech")
 
         second = Jarvis.persistent(tmp_path)
-        assert second.can_do("search the web")
-        assert "search the web" in second.usable_capabilities()
+        assert second.can_do("perceive speech")
+        assert "perceive speech" in second.usable_capabilities()

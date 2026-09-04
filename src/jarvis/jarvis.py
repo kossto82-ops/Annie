@@ -8,6 +8,7 @@ subscribe to cognitive events *before* thinking begins.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import datetime
 from pathlib import Path
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
@@ -25,17 +26,20 @@ from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.tool_events import ToolCallRecorded
 from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
 from jarvis.domain.perception.perception_source import PerceptionSource
+from jarvis.domain.perception.speech_perception import SpeechPerceptionSource
 from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.capability_repository import CapabilityRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
+from jarvis.domain.retrieval.calendar_store import CalendarStore
 from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
 from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
+from jarvis.domain.retrieval.task_scheduler import TaskScheduler
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.capability_evaluator import recommend as recommend_capability
@@ -61,6 +65,7 @@ from jarvis.domain.tools.tool_policy import ToolPolicy
 from jarvis.domain.tools.tool_registry import ToolRegistry
 from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
+from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.capability_recommendation import CapabilityRecommendation
@@ -80,6 +85,7 @@ from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
+from jarvis.domain.value_objects.scheduled_task import ScheduledTask
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
 from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.domain.value_objects.tool_call import ToolCall
@@ -90,14 +96,19 @@ from jarvis.executive.executive_controller import (
     subject_of,
     working_statement,
 )
-from jarvis.infrastructure.agent_reach_source import build_agent_reach_source
+from jarvis.infrastructure.agent_reach_source import (
+    build_web_source,
+    llm_search_from_model,
+)
 from jarvis.infrastructure.capability_registry import (
     CapabilityRegistry,
     ReasonerCapability,
     SemanticRecallCapability,
+    SpeechPerceptionCapability,
     build_default_registry,
 )
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
+from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_capability_store import InMemoryCapabilityStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
@@ -108,11 +119,13 @@ from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
+from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
+from jarvis.infrastructure.speech_perception import EchoSpeechPerception
 from jarvis.infrastructure.text_embedder import TextEmbedder
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace, EpisodeTraceSink
@@ -143,6 +156,11 @@ def _is_silent_reasoner(reasoner: Reasoner | None) -> bool:
     it proposes nothing -- so it does not make that edge capability live.
     """
     return isinstance(reasoner, SilentReasoner)
+
+
+# Provider names that mean "no real model": they must never back a live web-search
+# capability (a scripted/stub model does not actually search the web).
+_OFFLINE_PROVIDERS: frozenset[str] = frozenset({"", "scripted", "stub", "keyword"})
 
 
 class Jarvis:
@@ -176,6 +194,9 @@ class Jarvis:
         mail_source: MailBox | None = None,
         task_agent: TaskAgent | None = None,
         notes_store: NotesStore | None = None,
+        calendar_store: CalendarStore | None = None,
+        task_scheduler: TaskScheduler | None = None,
+        speech_perception: SpeechPerceptionSource | None = None,
         capability_providers: CapabilityRegistry | None = None,
         tool_policy: ToolPolicy | None = None,
     ) -> None:
@@ -249,6 +270,18 @@ class Jarvis:
         # stays in the core (D6), and mutating them is a reversible action gated
         # in the caller.
         self._notes_store: NotesStore | None = notes_store
+        # Calendar (Odysseus #6): a local calendar that lists/searches/creates/updates
+        # and deletes events on request. None by default -> offline. It only keeps
+        # and returns plain calendar-event content with provenance; reasoning over
+        # events stays in the core (D6), and mutating them is a reversible action
+        # gated in the caller.
+        self._calendar_store: CalendarStore | None = calendar_store
+        # Task scheduler (Odysseus #7): a local scheduler that lists/creates/updates/
+        # deletes/enables/disables recurring tasks on request. None by default ->
+        # offline. It only keeps and returns plain task content with provenance;
+        # reasoning over tasks stays in the core (D6), and mutating them is a
+        # reversible action gated in the caller.
+        self._task_scheduler: TaskScheduler | None = task_scheduler
         # The live edge of Odysseus (D7): which acquired capability names are backed
         # by a real provider. When no registry is given, the wired edge sources back
         # the capability names by default; None with no source -> offline.
@@ -257,13 +290,16 @@ class Jarvis:
             self._capability_providers: CapabilityRegistry | None = capability_providers
             self._reasoner_capability = None
             self._recall_capability = None
+            self._speech_capability = None
         else:
-            # Jarvis owns two mutable edge providers for the run-time seams: the
-            # reasoner and meaning-recall capabilities. They start offline (not
-            # live) and flip when `set_reasoner` / `enable_embedding_recall` wire a
-            # real provider, so `can_do` reflects what is actually usable.
+            # Jarvis owns three mutable edge providers for the run-time seams: the
+            # reasoner, meaning-recall, and speech-input capabilities. They start
+            # offline (not live) and flip when `set_reasoner` /
+            # `enable_embedding_recall` / `set_speech_perception` wire a real provider,
+            # so `can_do` reflects what is actually usable.
             self._reasoner_capability = ReasonerCapability()
             self._recall_capability = SemanticRecallCapability()
+            self._speech_capability = SpeechPerceptionCapability()
             self._capability_providers = self._build_auto_registry(
                 external_source,
                 research_source,
@@ -271,7 +307,12 @@ class Jarvis:
                 mail_source,
                 task_agent,
                 notes_store,
+                calendar_store,
+                task_scheduler,
             )
+        self._speech_perception: SpeechPerceptionSource | None = speech_perception
+        if speech_perception is not None and self._speech_capability is not None:
+            self._speech_capability.set_live(True)
         # (observation, belief statement) pairs Challenge has refuted -- the belief
         # would hold without the observation, so it no longer rests on it (Incr 77).
         self._refutations: RefutationRepository = (
@@ -398,6 +439,41 @@ class Jarvis:
             self._recall_capability.set_live(True)
 
     @property
+    def speech_perception(self) -> SpeechPerceptionSource | None:
+        """The ear seam (the input mirror of the mouth), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis can currently hear. The
+        browser's Web Speech API is the default ear; a richer transcriber replaces it
+        behind the same Protocol. The ear only delivers text, never a decision (D6).
+        """
+        return self._speech_perception
+
+    def set_speech_perception(self, source: SpeechPerceptionSource | None) -> None:
+        """Wire (or clear) the ear seam at runtime (the input mirror of the mouth).
+
+        ``None`` disables it: Jarvis cannot hear, exactly as before. Wiring one flips
+        the "perceive speech" capability to live, so `can_do("perceive speech")`
+        reflects whether spoken input is actually available right now.
+        """
+        self._speech_perception = source
+        if self._speech_capability is not None:
+            self._speech_capability.set_live(source is not None)
+
+    def perceive_speech(self, utterance: str) -> str:
+        """Lift a spoken utterance into text through the ear seam.
+
+        When the browser has already transcribed it (the default Web Speech path),
+        this returns the text unchanged; a richer transcriber would turn raw audio
+        into text here. The result is an *observation* the caller may then feed
+        through the ordinary perceiver -- the ear never decides anything on its own.
+        """
+        if self._speech_perception is None:
+            raise RuntimeError(
+                "no speech capability configured; set_speech_perception"
+            )
+        return self._speech_perception.transcribe(utterance)
+
+    @property
     def knowledge_source(self) -> KnowledgeSource | None:
         """The deliberate-consult seam (Vision §37, §38), or ``None`` when offline.
 
@@ -510,6 +586,8 @@ class Jarvis:
             self._mail_source,
             self._task_agent,
             self._notes_store,
+            self._calendar_store,
+            self._task_scheduler,
         )
 
     def _build_auto_registry(
@@ -520,14 +598,17 @@ class Jarvis:
         mail: MailBox | None = None,
         agent: TaskAgent | None = None,
         notes: NotesStore | None = None,
+        calendar: CalendarStore | None = None,
+        tasks: TaskScheduler | None = None,
     ) -> CapabilityRegistry:
         """The default edge registry: the wired sources + Jarvis's reasoner seams.
 
         Used when no explicit registry was supplied, so `can_do` reflects whatever
         is actually wired: the ExternalSource (web), the research source (deep
         research), the model comparator (blind comparison), the mailbox (email),
-        the task agent (delegation), the notes store (manage notes), the reasoner,
-        and meaning-recall.
+        the task agent (delegation), the notes store (manage notes), the calendar
+        store (manage calendar), the task scheduler (manage tasks), the reasoner,
+        meaning-recall, and speech-input.
         """
         return build_default_registry(
             source,
@@ -538,6 +619,9 @@ class Jarvis:
             mail_source=mail,
             task_agent=agent,
             notes_store=notes,
+            calendar_store=calendar,
+            task_scheduler=tasks,
+            speech=self._speech_capability,
         )
 
     def read_external(self, url: str) -> RetrievedDocument:
@@ -761,6 +845,244 @@ class Jarvis:
         if self._notes_store is None:
             raise RuntimeError("no notes capability configured; set_notes_store")
         return self._notes_store.search_notes(query, limit=limit)
+
+    # -- Calendar (Odysseus #6) -----------------------------------------------
+
+    @property
+    def calendar_store(self) -> CalendarStore | None:
+        """The calendar capability (Odysseus #6), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis can manage calendar
+        events. A local store only lists/gets/creates/updates/deletes plain
+        event content with provenance; it never reasons (D6), and mutating an
+        event stays gated in the caller.
+        """
+        return self._calendar_store
+
+    def set_calendar_store(self, store: CalendarStore | None) -> None:
+        """Wire (or clear) the calendar capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline to the calendar.
+        Calendar events are reversible, local-side effects, so wiring/unwiring
+        refreshes ``can_do`` without asking first.
+        """
+        self._calendar_store = store
+        if self._external_providers_auto:
+            self._refresh_providers()
+
+    def list_calendar_events(
+        self, *, limit: int = 100
+    ) -> tuple[CalendarEvent, ...]:
+        """List the soonest calendar events through the calendar capability.
+
+        Raises a clear error when no calendar store is wired. Plain event
+        content is candidate context for the core; it is not adopted as fact
+        (D6).
+        """
+        if self._calendar_store is None:
+            raise RuntimeError("no calendar capability configured; set_calendar_store")
+        return self._calendar_store.list_events(limit=limit)
+
+    def get_calendar_event(self, event_id: str) -> CalendarEvent:
+        """Read one calendar event by id, or raise when offline or unknown."""
+        if self._calendar_store is None:
+            raise RuntimeError("no calendar capability configured; set_calendar_store")
+        return self._calendar_store.get_event(event_id)
+
+    def create_calendar_event(
+        self,
+        *,
+        title: str,
+        start: datetime,
+        end: datetime,
+        description: str = "",
+        location: str = "",
+        all_day: bool = False,
+    ) -> CalendarEvent:
+        """Create a calendar event through the calendar capability.
+
+        A local, reversible side-effect: the caller (surface) is responsible
+        for having it approved by the controlled-autonomy policy. Raises a
+        clear error when no calendar store is wired.
+        """
+        if self._calendar_store is None:
+            raise RuntimeError("no calendar capability configured; set_calendar_store")
+        return self._calendar_store.create_event(
+            title=title,
+            start=start,
+            end=end,
+            description=description,
+            location=location,
+            all_day=all_day,
+        )
+
+    def update_calendar_event(
+        self,
+        event_id: str,
+        *,
+        title: str,
+        start: datetime,
+        end: datetime,
+        description: str,
+        location: str,
+        all_day: bool,
+    ) -> CalendarEvent:
+        """Update a calendar event through the calendar capability.
+
+        A local, reversible side-effect, gated in the caller. Raises a clear
+        error when no calendar store is wired or the event is unknown.
+        """
+        if self._calendar_store is None:
+            raise RuntimeError("no calendar capability configured; set_calendar_store")
+        return self._calendar_store.update_event(
+            event_id,
+            title=title,
+            start=start,
+            end=end,
+            description=description,
+            location=location,
+            all_day=all_day,
+        )
+
+    def delete_calendar_event(self, event_id: str) -> None:
+        """Delete a calendar event through the calendar capability.
+
+        A local, reversible side-effect, gated in the caller. Raises a clear
+        error when no calendar store is wired.
+        """
+        if self._calendar_store is None:
+            raise RuntimeError("no calendar capability configured; set_calendar_store")
+        self._calendar_store.delete_event(event_id)
+
+    def calendar_events_in_range(
+        self, start: datetime, end: datetime, *, limit: int = 100
+    ) -> tuple[CalendarEvent, ...]:
+        """Return calendar events overlapping ``[start, end]``, or raise when offline."""
+        if self._calendar_store is None:
+            raise RuntimeError("no calendar capability configured; set_calendar_store")
+        return self._calendar_store.events_in_range(start, end, limit=limit)
+
+    # -- Task scheduler (Odysseus #7) -----------------------------------------
+
+    @property
+    def task_scheduler(self) -> TaskScheduler | None:
+        """The task-scheduler capability (Odysseus #7), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis can manage scheduled
+        tasks. A local scheduler only lists/gets/creates/updates/deletes/
+        enables/disables plain task content with provenance; it never reasons
+        (D6), and mutating a task stays gated in the caller.
+        """
+        return self._task_scheduler
+
+    def set_task_scheduler(self, scheduler: TaskScheduler | None) -> None:
+        """Wire (or clear) the task-scheduler capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline to scheduled tasks.
+        Tasks are reversible, local-side effects, so wiring/unwiring refreshes
+        ``can_do`` without asking first.
+        """
+        self._task_scheduler = scheduler
+        if self._external_providers_auto:
+            self._refresh_providers()
+
+    def list_scheduled_tasks(
+        self, *, limit: int = 100
+    ) -> tuple[ScheduledTask, ...]:
+        """List the latest scheduled tasks through the task-scheduler capability.
+
+        Raises a clear error when no task scheduler is wired. Plain task
+        content is candidate context for the core; it is not adopted as fact
+        (D6).
+        """
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        return self._task_scheduler.list_tasks(limit=limit)
+
+    def get_scheduled_task(self, task_id: str) -> ScheduledTask:
+        """Read one scheduled task by id, or raise when offline or unknown."""
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        return self._task_scheduler.get_task(task_id)
+
+    def create_scheduled_task(
+        self,
+        *,
+        name: str,
+        command: str,
+        cron: str = "",
+        description: str = "",
+        enabled: bool = True,
+    ) -> ScheduledTask:
+        """Create a scheduled task through the task-scheduler capability.
+
+        A local, reversible side-effect: the caller (surface) is responsible
+        for having it approved by the controlled-autonomy policy. Raises a
+        clear error when no task scheduler is wired.
+        """
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        return self._task_scheduler.create_task(
+            name=name,
+            command=command,
+            cron=cron,
+            description=description,
+            enabled=enabled,
+        )
+
+    def update_scheduled_task(
+        self,
+        task_id: str,
+        *,
+        name: str,
+        command: str,
+        cron: str,
+        description: str,
+        enabled: bool,
+    ) -> ScheduledTask:
+        """Update a scheduled task through the task-scheduler capability.
+
+        A local, reversible side-effect, gated in the caller. Raises a clear
+        error when no task scheduler is wired or the task is unknown.
+        """
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        return self._task_scheduler.update_task(
+            task_id,
+            name=name,
+            command=command,
+            cron=cron,
+            description=description,
+            enabled=enabled,
+        )
+
+    def delete_scheduled_task(self, task_id: str) -> None:
+        """Delete a scheduled task through the task-scheduler capability.
+
+        A local, reversible side-effect, gated in the caller. Raises a clear
+        error when no task scheduler is wired.
+        """
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        self._task_scheduler.delete_task(task_id)
+
+    def enable_scheduled_task(self, task_id: str) -> ScheduledTask:
+        """Enable a scheduled task through the task-scheduler capability, or raise."""
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        return self._task_scheduler.enable_task(task_id)
+
+    def disable_scheduled_task(self, task_id: str) -> ScheduledTask:
+        """Disable a scheduled task through the task-scheduler capability, or raise."""
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        return self._task_scheduler.disable_task(task_id)
+
+    def due_scheduled_tasks(self) -> tuple[ScheduledTask, ...]:
+        """Return all enabled tasks whose next_run is in the past, or raise when offline."""
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        return self._task_scheduler.due_tasks()
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Investigate ``query`` in depth through the research capability.
@@ -1117,7 +1439,19 @@ class Jarvis:
         (Vision §3, §21, §26). It composes the JSON stores and the JSONL trace log.
         """
         base = Path(directory)
-        source = build_agent_reach_source()
+        # The persistent edge: web read via the free Jina Reader and web search via
+        # the configured chat model (e.g. the local OmniRoute gateway, no package and
+        # no JINA_API_KEY needed) when a real provider is set -- else offline. The ear
+        # is the browser's Web Speech path, live by default.
+        settings = settings_from_env()
+        search_model = (
+            build_language_model(settings)
+            if settings.model and settings.provider not in _OFFLINE_PROVIDERS
+            else None
+        )
+        source = build_web_source(
+            llm_search_from_model(search_model) if search_model is not None else None
+        )
         research = build_odysseus_search_source()
         return cls(
             beliefs=JsonBeliefStore(base / "beliefs.json", weighting_policy),
@@ -1134,6 +1468,7 @@ class Jarvis:
             weighting_policy=weighting_policy,
             external_source=source,
             research_source=research,
+            speech_perception=EchoSpeechPerception(),
         )
 
     def think(
