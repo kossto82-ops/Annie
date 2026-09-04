@@ -35,21 +35,42 @@
   header .pill { font-size: 11px; color: var(--dim); border: 1px solid var(--edge);
     padding: 3px 10px; border-radius: 999px; letter-spacing: .5px; }
   header .pill b { color: var(--teal); font-weight: 600; }
-  header .toolbtn { font-size: 12px; color: var(--ink); background: var(--panel2);
+  header .navbtn { font-size: 12px; color: var(--ink); background: var(--panel2);
     border: 1px solid var(--edge); padding: 5px 12px; border-radius: 999px; cursor: pointer;
     letter-spacing: .5px; display: flex; align-items: center; gap: 6px; }
-  header .toolbtn:hover { border-color: var(--teal2); color: #fff; }
-  header .toolbtn.on { border-color: var(--teal); color: var(--teal); }
+  header .navbtn:hover { border-color: var(--teal2); color: #fff; }
+  header .navbtn.on { border-color: var(--teal); color: var(--teal); }
 
-  /* Chat is intentionally a touch narrower so the face has room to breathe. */
-  main { display: grid; grid-template-columns: 1.24fr 0.76fr; min-height: 0; }
-  .stage { position: relative; border-right: 1px solid var(--edge);
-    display: grid; grid-template-rows: 1fr auto; min-height: 0; }
-  #face { width: 100%; height: 100%; display: block;
-    background: radial-gradient(circle at 50% 48%, rgba(26,169,201,.08), transparent 58%); }
-  .stage .status { position: absolute; top: 16px; left: 20px; font-size: 12px;
+  /* ---- main layout ------------------------------------------------------- */
+  main { display: grid; grid-template-columns: 1fr; min-height: 0; }
+
+  /* Home dashboard: the sphere stage up top, quick cards beneath. */
+  .home { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+  .stage { position: relative; display: grid; place-items: center; min-height: 0;
+    border-bottom: 1px solid var(--edge); }
+  #sphere { width: 100%; height: 100%; display: block;
+    background: radial-gradient(circle at 50% 50%, rgba(26,169,201,.10), transparent 62%); }
+  .stage .status { position: absolute; bottom: 14px; left: 20px; font-size: 12px;
     letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
   .stage .status b { color: var(--teal); }
+
+  .dash { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 14px 18px;
+    background: var(--panel); }
+  .card { background: linear-gradient(180deg, var(--panel2), var(--panel));
+    border: 1px solid var(--edge); border-radius: 14px; padding: 16px; cursor: pointer;
+    transition: border-color .15s ease, transform .15s ease; min-height: 120px;
+    display: flex; flex-direction: column; justify-content: space-between; }
+  .card:hover { border-color: var(--teal2); transform: translateY(-2px); }
+  .card .k { font-size: 11px; color: var(--dim); letter-spacing: 1.5px; text-transform: uppercase; }
+  .card .v { font-size: 26px; font-weight: 600; margin: 8px 0 2px; }
+  .card .v small { font-size: 13px; color: var(--dim); font-weight: 400; }
+  .card .hint { font-size: 11px; color: var(--dim); }
+  .card .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .card .dot.good { background: var(--good); box-shadow: 0 0 8px var(--good); }
+  .card .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .card[data-panel] { position: relative; }
+  .card[data-panel]::after { content: "›"; position: absolute; right: 14px; top: 50%;
+    transform: translateY(-50%); color: var(--dim); font-size: 18px; }
 
   .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
     background: var(--edge); border-top: 1px solid var(--edge); }
@@ -61,37 +82,11 @@
   .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal2), var(--teal)); width: 0; transition: width .4s ease; }
   .conserving .v { color: var(--warn); }
 
-  .right { display: grid; grid-template-rows: 1fr auto auto; min-height: 0; }
-  .chat { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
-  .msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; }
-  .msg.you { align-self: flex-end; background: linear-gradient(180deg, #16233d, #121c30);
-    border: 1px solid var(--edge); }
-  .msg.jarvis { align-self: flex-start; background: #0a1322; border: 1px solid #16243f;
-    border-left: 3px solid var(--teal2); }
-  .msg .who { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); margin-bottom: 3px; }
-  .msg .conf { font-size: 11px; color: var(--teal); margin-top: 5px; }
-
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--edge); }
-  .actions button { background: var(--panel2); color: var(--ink); border: 1px solid var(--edge);
-    padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; letter-spacing: .3px; }
-  .actions button:hover { border-color: var(--teal2); color: #fff; }
-
-  form.composer { display: flex; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--edge); background: var(--panel); }
-  form.composer input { flex: 1; background: #070c16; border: 1px solid var(--edge); color: var(--ink);
-    padding: 11px 14px; border-radius: 10px; font-size: 14px; outline: none; }
-  form.composer input:focus { border-color: var(--teal2); }
-  .iconbtn { width: 44px; border: 1px solid var(--edge); background: var(--panel2); border-radius: 10px;
-    cursor: pointer; color: var(--ink); font-size: 16px; }
-  .iconbtn.on { border-color: var(--teal); color: var(--teal); box-shadow: 0 0 10px rgba(56,230,208,.25) inset; }
-  .iconbtn:disabled { opacity: .35; cursor: not-allowed; }
-  .send { background: linear-gradient(180deg, var(--teal), var(--teal2)); color: #04121a;
-    border: none; font-weight: 700; padding: 0 18px; border-radius: 10px; cursor: pointer; letter-spacing: .5px; }
-
-  /* Tools & configuration — a separate slide-in window so the face stays unobscured */
+  /* Side panels: one slide-in rail opened by dashboard cards / header buttons. */
   .scrim { position: fixed; inset: 0; background: rgba(2,4,9,.55); opacity: 0; visibility: hidden;
     transition: opacity .25s ease, visibility .25s ease; z-index: 40; }
   .scrim.open { opacity: 1; visibility: visible; }
-  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 360px; max-width: 90vw;
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 400px; max-width: 92vw;
     background: linear-gradient(180deg, var(--panel2), var(--panel)); border-left: 1px solid var(--edge);
     box-shadow: -18px 0 40px rgba(0,0,0,.45); transform: translateX(100%);
     transition: transform .25s ease; z-index: 50; display: grid; grid-template-rows: auto 1fr; }
@@ -104,13 +99,18 @@
     width: 30px; height: 30px; border-radius: 8px; font-size: 15px; }
   .drawer-close:hover { color: #fff; border-color: var(--teal2); }
   .drawer-body { overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
-  .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; }
-  .card h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); }
+  .card2 { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; }
+  .card2 h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); }
   .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 6px 0; font-size: 12px; }
   .row .lbl { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .cbar { grid-column: 1 / -1; height: 4px; border-radius: 3px; background: #0a1120; overflow: hidden; }
   .row .cbar > i { display: block; height: 100%; background: var(--teal); width: 0; }
   .muted { color: var(--dim); font-size: 12px; font-style: italic; }
+  .statuschip { font-size: 10px; padding: 2px 8px; border-radius: 999px; letter-spacing: .5px;
+    text-transform: uppercase; border: 1px solid var(--edge); color: var(--dim); }
+  .statuschip.acquired { color: var(--good); border-color: var(--good); }
+  .statuschip.proposed { color: var(--warn); border-color: var(--warn); }
+  .statuschip.ready { color: var(--teal); border-color: var(--teal); }
   .tune label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); margin: 8px 0; }
   .tune input[type=range] { flex: 1; accent-color: var(--teal); }
   .tune .val { color: var(--teal); min-width: 34px; text-align: right; }
@@ -125,6 +125,36 @@
   .switch { width: 100%; margin: 4px 0 6px; background: var(--panel2); color: var(--ink);
     border: 1px solid var(--edge); padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; }
   .switch:hover { border-color: var(--teal2); color: #fff; }
+  .hint { font-size: 11px; color: var(--dim); margin: 2px 0 4px; }
+
+  /* Chat view: shown from the dashboard "Conversar" card. */
+  .chatview { display: none; grid-template-rows: 1fr auto auto; min-height: 0; min-width: 0; }
+  .chatview.open { display: grid; }
+  .chat { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; }
+  .msg.you { align-self: flex-end; background: linear-gradient(180deg, #16233d, #121c30);
+    border: 1px solid var(--edge); }
+  .msg.jarvis { align-self: flex-start; background: #0a1322; border: 1px solid #16243f;
+    border-left: 3px solid var(--teal2); }
+  .msg .who { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); margin-bottom: 3px; }
+  .msg .conf { font-size: 11px; color: var(--teal); margin-top: 5px; }
+  .backbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--edge);
+    background: var(--panel); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--edge); }
+  .actions button { background: var(--panel2); color: var(--ink); border: 1px solid var(--edge);
+    padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; letter-spacing: .3px; }
+  .actions button:hover { border-color: var(--teal2); color: #fff; }
+  form.composer { display: flex; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--edge); background: var(--panel); }
+  form.composer input { flex: 1; background: #070c16; border: 1px solid var(--edge); color: var(--ink);
+    padding: 11px 14px; border-radius: 10px; font-size: 14px; outline: none; }
+  form.composer input:focus { border-color: var(--teal2); }
+  .iconbtn { width: 44px; border: 1px solid var(--edge); background: var(--panel2); border-radius: 10px;
+    cursor: pointer; color: var(--ink); font-size: 16px; }
+  .iconbtn.on { border-color: var(--teal); color: var(--teal); box-shadow: 0 0 10px rgba(56,230,208,.25) inset; }
+  .iconbtn:disabled { opacity: .35; cursor: not-allowed; }
+  .send { background: linear-gradient(180deg, var(--teal), var(--teal2)); color: #04121a;
+    border: none; font-weight: 700; padding: 0 18px; border-radius: 10px; cursor: pointer; letter-spacing: .5px; }
+
   /* Reasoning panel — the mind, not just the mouth */
   .reasoning { border-top: 1px solid var(--edge); background: var(--panel); padding: 12px 16px;
     max-height: 34vh; overflow-y: auto; }
@@ -146,24 +176,22 @@
   .stagechip { font-size: 11px; border: 1px solid var(--edge); border-radius: 8px; padding: 4px 10px; color: var(--dim); }
   .stagechip.on { color: var(--ink); border-color: var(--teal2); }
   .stagechip.on b { color: var(--teal); font-weight: 600; }
+
   @media (max-width: 900px) {
-    main { grid-template-columns: 1fr; grid-template-rows: minmax(210px, 34vh) minmax(0, 1fr); min-width: 0; }
-    .stage { display: block; min-width: 0; min-height: 210px; border-right: 0; border-bottom: 1px solid var(--edge); }
-    .stage .status { top: 12px; left: 16px; }
-    .stage .reasoning, .stage .metrics { display: none; }
-    .right { min-height: 0; }
+    main { min-width: 0; }
+    .dash { grid-template-columns: repeat(2, 1fr); }
+    .stage { min-height: 240px; }
   }
   @media (max-width: 560px) {
     header { gap: 8px; padding: 10px 14px; display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto; }
-    header .sub, header .spacer, header .pill { display: none; }
+    header .sub, header .spacer { display: none; }
+    header .pill.episodes { display: none; }
     header h1 { font-size: 14px; }
-    header .toolbtn { width: 36px; height: 30px; padding: 0; justify-content: center;
-      overflow: hidden; color: transparent; gap: 0; font-size: 0; }
-    header .toolbtn::before { content: "⚙"; color: var(--ink); font-size: 15px; }
-    main { grid-template-rows: minmax(190px, 30vh) minmax(0, 1fr); }
-    .stage { min-height: 190px; }
-    .right, .chat, form.composer { min-width: 0; }
+    header .navbtn { width: 36px; height: 30px; padding: 0; justify-content: center; }
+    .dash { padding: 12px; gap: 10px; }
+    .card { min-height: 100px; padding: 12px; }
+    .chat, form.composer { min-width: 0; }
     .chat { padding: 14px; }
     .msg { max-width: 100%; overflow-wrap: anywhere; }
     .actions { overflow-x: auto; flex-wrap: nowrap; }
@@ -183,18 +211,44 @@
     <h1>Jarvis</h1><span class="sub">command center</span>
     <span class="spacer"></span>
     <span class="pill">perceiver <b id="perceiver">—</b></span>
-    <span class="pill">episodes <b id="epi">0</b></span>
-    <button type="button" class="toolbtn" id="tools" title="Tools & configuration"
-      aria-controls="drawer" aria-expanded="false">&#9881; Tools</button>
+    <span class="pill episodes">episodes <b id="epi">0</b></span>
+    <button type="button" class="navbtn" id="btnCap" title="Capabilities"
+      data-panel="cap" aria-controls="drawer" aria-expanded="false">&#128737; Capacidades</button>
+    <button type="button" class="navbtn" id="btnTool" title="Tools"
+      data-panel="tool" aria-controls="drawer" aria-expanded="false">&#128736; Herramientas</button>
+    <button type="button" class="navbtn" id="btnSet" title="Settings"
+      data-panel="set" aria-controls="drawer" aria-expanded="false">&#9881; Ajustes</button>
   </header>
 
   <main>
-    <section class="stage">
-      <canvas id="face"></canvas>
-      <div class="status">state · <b id="mood">idle</b></div>
+    <!-- Home dashboard -->
+    <section class="home" id="home">
+      <div class="stage">
+        <canvas id="sphere"></canvas>
+        <div class="status">state · <b id="mood">idle</b></div>
+      </div>
 
-      <div class="reasoning" id="reasoning">
-        <div class="muted">Jarvis's reasoning appears here — ask it something, or press Reflect.</div>
+      <div class="dash">
+        <div class="card" data-panel="chat">
+          <div class="k">Conversar</div>
+          <div class="v">&#128172;</div>
+          <div class="hint">Hable con Jarvis</div>
+        </div>
+        <div class="card" data-panel="cap">
+          <div class="k">Capacidades</div>
+          <div class="v"><span class="dot" id="capDot"></span><span id="capCount">0</span><small> &nbsp;listas</small></div>
+          <div class="hint">Qué puede hacer</div>
+        </div>
+        <div class="card" data-panel="tool">
+          <div class="k">Herramientas</div>
+          <div class="v"><span class="dot" id="toolDot"></span><span id="toolCount">0</span><small> &nbsp;activas</small></div>
+          <div class="hint">A través de qué actúa</div>
+        </div>
+        <div class="card" data-panel="set">
+          <div class="k">Ajustes</div>
+          <div class="v"><span class="dot" id="setDot"></span></div>
+          <div class="hint">Perceiver, energía, perfil</div>
+        </div>
       </div>
 
       <div class="metrics" id="metrics">
@@ -206,7 +260,12 @@
       </div>
     </section>
 
-    <section class="right">
+    <!-- Chat view -->
+    <section class="chatview" id="chatview">
+      <div class="backbar">
+        <button type="button" class="navbtn" id="backHome">&#8592; Inicio</button>
+        <span class="hint" style="font-style:normal">Conversación con Jarvis</span>
+      </div>
       <div class="chat" id="chat"></div>
       <div class="actions">
         <button data-cmd="reflect">Reflect</button>
@@ -224,43 +283,87 @@
   </main>
 
   <div class="scrim" id="scrim"></div>
-  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Tools and configuration">
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Side panel">
     <div class="drawer-head">
-      <h2>Tools &amp; configuration</h2>
+      <h2 id="drawerTitle">Panel</h2>
       <span class="spacer"></span>
       <button type="button" class="drawer-close" id="drawerclose" title="Close">&#10005;</button>
     </div>
     <div class="drawer-body">
-      <div class="card">
-        <h3>Self-tendencies</h3>
-        <div id="self"><div class="muted">nothing noticed yet</div></div>
+      <!-- Capabilities panel -->
+      <div id="panel-cap" class="pane">
+        <div class="card2">
+          <h3>Capacidades — qué puedo crecer a hacer</h3>
+          <div class="hint">Adquiridas con aval (Odysseus). Listas = adquiridas y respaldadas por un proveedor vivo.</div>
+          <div id="capbody"><div class="muted">cargando…</div></div>
+        </div>
+        <div class="card2">
+          <h3>Necesidades detectadas</h3>
+          <div id="needsbody"><div class="muted">ninguna por ahora</div></div>
+        </div>
       </div>
-      <div class="card">
-        <h3>Companion</h3>
-        <div id="companion"><div class="muted">unknown so far</div></div>
+
+      <!-- Tools panel -->
+      <div id="panel-tool" class="pane">
+        <div class="card2">
+          <h3>Herramientas — a través de qué actúo</h3>
+          <div class="hint">Registradas con su nivel de permiso. Las externas requieren aprobación explícita.</div>
+          <div id="toolbody"><div class="muted">cargando…</div></div>
+        </div>
       </div>
-      <div class="card tune">
-        <h3>Tune — how hard I think</h3>
-        <label><input type="checkbox" id="unbounded" checked /> think freely (no budget)</label>
-        <label>budget <input type="range" id="budget" min="3" max="60" step="1" value="15" disabled />
-          <span class="val" id="budgetval">∞</span></label>
-      </div>
-      <div class="card tune">
-        <h3>Perceiver — who reads the world</h3>
-        <label>provider <select id="provider"></select></label>
-        <label>model <input type="text" id="model" placeholder="e.g. llama-3.3-70b" /></label>
-        <label>API key <input type="password" id="apikey" autocomplete="off"
-          placeholder="paste to save — never shown" /></label>
-        <button type="button" id="applyperceiver" class="switch">Switch perceiver</button>
-        <div class="muted">The key is saved to the server's <b>.env</b> (git-ignored) and never shown
-          back. Leave it blank to keep the one already configured.</div>
-      </div>
-      <div class="card tune">
-        <h3>Teach Jarvis about you</h3>
-        <textarea id="profile" rows="5" placeholder="Paste a short profile or notes about yourself — Jarvis reads it into what it remembers about you. Needs an LLM perceiver."></textarea>
-        <button type="button" id="learnbtn" class="switch">Learn about me</button>
-        <div class="muted">Each section becomes a revisable belief in the Companion model — you can
-          correct it later just by telling Jarvis.</div>
+
+      <!-- Settings panel -->
+      <div id="panel-set" class="pane">
+        <div class="card2">
+          <h3>Self-tendencies</h3>
+          <div id="self"><div class="muted">nothing noticed yet</div></div>
+        </div>
+        <div class="card2">
+          <h3>Companion</h3>
+          <div id="companion"><div class="muted">unknown so far</div></div>
+        </div>
+        <div class="card2 tune">
+          <h3>Tune — how hard I think</h3>
+          <label><input type="checkbox" id="unbounded" checked /> think freely (no budget)</label>
+          <label>budget <input type="range" id="budget" min="3" max="60" step="1" value="15" disabled />
+            <span class="val" id="budgetval">∞</span></label>
+        </div>
+        <div class="card2 tune">
+          <h3>Perceiver — who reads the world</h3>
+          <label>provider <select id="provider"></select></label>
+          <label>model <input type="text" id="model" placeholder="e.g. llama-3.3-70b" /></label>
+          <label>API key <input type="password" id="apikey" autocomplete="off"
+            placeholder="paste to save — never shown" /></label>
+          <button type="button" id="applyperceiver" class="switch">Switch perceiver</button>
+          <div class="muted">The key is saved to the server's <b>.env</b> (git-ignored) and never shown
+            back. Leave it blank to keep the one already configured.</div>
+        </div>
+        <div class="card2 tune">
+          <h3>Teach Jarvis about you</h3>
+          <textarea id="profile" rows="5" placeholder="Paste a short profile or notes about yourself — Jarvis reads it into what it remembers about you. Needs an LLM perceiver."></textarea>
+          <button type="button" id="learnbtn" class="switch">Learn about me</button>
+          <div class="muted">Each section becomes a revisable belief in the Companion model — you can
+            correct it later just by telling Jarvis.</div>
+        </div>
+        <div class="card2 tune">
+          <h3>Calendar</h3>
+          <button type="button" id="calList" class="switch">List events</button>
+          <label>title <input type="text" id="calTitle" placeholder="e.g. standup" /></label>
+          <label>start <input type="text" id="calStart" placeholder="2026-09-01T10:00:00Z" /></label>
+          <label>end <input type="text" id="calEnd" placeholder="2026-09-01T11:00:00Z" /></label>
+          <button type="button" id="calCreate" class="switch">Create event</button>
+          <div class="muted" id="calOut"></div>
+        </div>
+        <div class="card2 tune">
+          <h3>Tasks</h3>
+          <button type="button" id="taskList" class="switch">List tasks</button>
+          <button type="button" id="taskDue" class="switch">Due tasks</button>
+          <label>name <input type="text" id="taskName" placeholder="e.g. daily backup" /></label>
+          <label>command <input type="text" id="taskCommand" placeholder="e.g. scripts/report.py" /></label>
+          <label>cron <input type="text" id="taskCron" placeholder="e.g. 0 9 * * * (optional)" /></label>
+          <button type="button" id="taskCreate" class="switch">Create task</button>
+          <div class="muted" id="taskOut"></div>
+        </div>
       </div>
     </div>
   </aside>
@@ -278,6 +381,61 @@ async function api(cmd, payload) {
   return res.json();
 }
 
+/* ---- navigation: home / chat / side panels ------------------------------ */
+function showHome() {
+  $("home").style.display = "";
+  $("chatview").classList.remove("open");
+  $("chatview").style.display = "none";
+  $("home").style.display = "grid";
+}
+function showChat() {
+  $("home").style.display = "none";
+  $("chatview").style.display = "grid";
+  $("chatview").classList.add("open");
+  const c = $("chat"); c.scrollTop = c.scrollHeight;
+}
+
+let activePanel = null;
+const PANEL_TITLES = { cap: "Capacidades", tool: "Herramientas", set: "Ajustes" };
+function openPanel(name) {
+  activePanel = name;
+  $("drawerTitle").textContent = PANEL_TITLES[name] || "Panel";
+  document.querySelectorAll(".pane").forEach((p) => p.style.display = "none");
+  $("panel-" + name).style.display = "";
+  drawer(true);
+  if (lastState) {
+    if (name === "cap") { renderCapabilityPanels(lastState); renderNeeds(lastState); }
+    if (name === "tool") renderTools(lastState);
+  }
+}
+function closePanel() {
+  activePanel = null;
+  drawer(false);
+}
+function drawer(open) {
+  $("drawer").classList.toggle("open", open);
+  $("scrim").classList.toggle("open", open);
+  $("drawer").setAttribute("aria-hidden", open ? "false" : "true");
+  ["btnCap", "btnTool", "btnSet"].forEach((id) => {
+    $("btnCap").classList.toggle("on", open && activePanel === "cap");
+    $("btnTool").classList.toggle("on", open && activePanel === "tool");
+    $("btnSet").classList.toggle("on", open && activePanel === "set");
+  });
+}
+document.querySelectorAll("[data-panel]").forEach((el) =>
+  el.addEventListener("click", () => {
+    const name = el.dataset.panel;
+    if (name === "chat") showChat();
+    else openPanel(name);
+  }));
+$("backHome").addEventListener("click", showHome);
+$("btnCap").addEventListener("click", () => openPanel("cap"));
+$("btnTool").addEventListener("click", () => openPanel("tool"));
+$("btnSet").addEventListener("click", () => openPanel("set"));
+$("drawerclose").addEventListener("click", closePanel);
+$("scrim").addEventListener("click", closePanel);
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closePanel(); });
+
 /* ---- chat + state ------------------------------------------------------- */
 let voiceOn = true, thinking = false, speaking = false;
 
@@ -289,7 +447,7 @@ function bubble(who, text, conf) {
   el.firstChild.textContent = label;
   const textNode = document.createTextNode(text || "");
   el.appendChild(textNode);
-  el._textNode = textNode;   // so a streamed reply can append into it
+  el._textNode = textNode;
   if (typeof conf === "number") {
     const c = document.createElement("div");
     c.className = "conf";
@@ -315,17 +473,12 @@ function speak(text) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.0; u.pitch = 0.95;
-    // If real speech plays, each word boundary adds a pulse — the mouth syncs to the
-    // actual audio. But the visible reaction does NOT depend on this firing (many
-    // browsers/contexts deliver no audio); `articulate` guarantees movement.
     u.onboundary = () => pulseWord();
     window.speechSynthesis.speak(u);
   } catch (e) { /* speech is a bonus, never a requirement */ }
 }
 
-// Make the face visibly "talk" for the length of a reply, with or without audio.
-// This is what you SEE when Jarvis answers; speech synthesis, when available, layers
-// real word-sync on top. Driven by a timer so a silent browser still shows a reaction.
+// Make the sphere visibly "pulse" for the length of a reply, with or without audio.
 let articTimer = 0, articStop = 0;
 function articulate(text) {
   const words = (text || "").trim().split(/\s+/).filter(Boolean).length || 1;
@@ -342,8 +495,10 @@ function articulate(text) {
 
 function setMood(m) { $("mood").textContent = m; }
 
+let lastState = null;
 function renderState(s) {
   if (!s) return;
+  lastState = s;
   $("epi").textContent = s.episodes;
   $("goals").textContent = s.goals.length;
   const e = s.energy || {};
@@ -360,14 +515,89 @@ function renderState(s) {
     $("rembar").style.width = Math.round(100 * rem / max) + "%";
     wrap.classList.toggle("conserving", !!e.conserving);
   }
+  renderCapabilityCards(s);
   renderList("self", s.self);
   renderList("companion", s.companion);
   renderPerceiver(s.perceiver);
+  if (activePanel === "cap") renderCapabilityPanels(s);
+  renderTools(s);
+}
+
+/* ---- capability / tool cards + panels ----------------------------------- */
+let lastCapAcquired = 0, lastTools = null;
+function renderCapabilityCards(s) {
+  const caps = s.capabilities || [];
+  const ready = s.ready || [];
+  const acquired = caps.filter((c) => c.status === "ACQUIRED").length;
+  lastCapAcquired = acquired;
+  $("capCount").textContent = ready.length;
+  const dot = $("capDot");
+  dot.className = "dot " + (ready.length ? "good" : "warn");
+}
+function renderTools(s) {
+  const specs = s.tools || [];
+  lastTools = specs;
+  $("toolCount").textContent = specs.length;
+  const dot = $("toolDot");
+  dot.className = "dot " + (specs.length ? "good" : "warn");
+  const box = $("toolbody");
+  if (activePanel !== "tool") return;
+  if (!specs.length) {
+    box.innerHTML = '<div class="muted">No hay herramientas registradas aún.</div>';
+  } else {
+    box.innerHTML = "";
+    specs.forEach((t) => {
+      const row = document.createElement("div"); row.className = "row";
+      const lbl = document.createElement("div"); lbl.className = "lbl";
+      lbl.textContent = (t.name || "?") + " — " + (t.description || "");
+      row.appendChild(lbl);
+      const status = document.createElement("span");
+      if (t.requires_approval) {
+        status.className = "statuschip proposed"; status.textContent = "requiere aprobación";
+      } else {
+        status.className = "statuschip ready"; status.textContent = "activa";
+      }
+      row.appendChild(status);
+      box.appendChild(row);
+    });
+  }
+}
+function renderCapabilityPanels(s) {
+  const caps = s.capabilities || [];
+  const ready = new Set(s.ready || []);
+  const box = $("capbody");
+  if (!caps.length) { box.innerHTML = '<div class="muted">Aún no hay capacidades propuestas o adquiridas. Propón una — Jarvis la explorará (`capability scout`).</div>'; return; }
+  box.innerHTML = "";
+  caps.forEach((c) => {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = c.name;
+    row.appendChild(lbl);
+    const status = document.createElement("span");
+    const readyNow = ready.has(c.name);
+    status.className = "statuschip " + (readyNow ? "ready" : (c.status === "ACQUIRED" ? "acquired" : "proposed"));
+    status.textContent = readyNow ? "lista" : (c.status === "ACQUIRED" ? "adquirida" : "propuesta");
+    row.appendChild(status);
+    box.appendChild(row);
+  });
+}
+function renderNeeds(s) {
+  const needs = s.needs || [];
+  const box = $("needsbody");
+  if (!needs.length) { box.innerHTML = '<div class="muted">ninguna por ahora</div>'; return; }
+  box.innerHTML = "";
+  needs.forEach((n) => {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = n.statement;
+    const val = document.createElement("div"); val.textContent = n.confidence.toFixed(2);
+    val.style.color = "var(--teal)";
+    row.appendChild(lbl); row.appendChild(val);
+    box.appendChild(row);
+  });
 }
 
 /* ---- which perceiver is live, and switching it -------------------------- */
 let perceiverLoaded = false;
-let savedModels = {};   // provider -> remembered model, for auto-fill on switch
+let savedModels = {};
 function renderPerceiver(p) {
   if (!p) return;
   const label = p.kind === "keyword" ? "keyword" : (p.model || p.provider || p.kind);
@@ -382,10 +612,6 @@ function renderPerceiver(p) {
     });
     perceiverLoaded = true;
   }
-  // Reflect the live perceiver — but NEVER while the user is editing the switcher, or
-  // the dropdown snaps back to the live provider while the model field keeps the value
-  // being typed, and a Switch then sends a mismatched (provider, model) pair. Keeping
-  // the two in lockstep is the whole point: provider and its model must always agree.
   const editing = [sel, $("model"), $("apikey")].indexOf(document.activeElement) !== -1;
   if (p.provider && !editing) {
     sel.value = p.provider;
@@ -394,7 +620,6 @@ function renderPerceiver(p) {
   }
 }
 
-// Picking a provider auto-fills its remembered model, so you never retype it.
 function onProviderChange() {
   const provider = $("provider").value;
   const remembered = savedModels[provider];
@@ -404,11 +629,11 @@ function onProviderChange() {
 async function applyPerceiver() {
   const provider = $("provider").value;
   const model = $("model").value.trim();
-  const apikey = $("apikey").value;   // sent write-only; cleared right after
+  const apikey = $("apikey").value;
   const payload = { provider, model };
   if (apikey) payload.api_key = apikey;
   const data = await api("perceiver", payload);
-  $("apikey").value = "";             // never leave the secret on the page
+  $("apikey").value = "";
   bubble("jarvis", data.error ? "Couldn't switch perceiver: " + data.error : data.reply);
   renderState(data.state);
 }
@@ -517,13 +742,18 @@ function renderCycle(cycle) {
   if (cycle && cycle.learned) { const m = document.createElement("div"); m.className = "muted"; m.textContent = "Learned: " + cycle.learned; box.appendChild(m); }
 }
 
+/* A reasoning strip lives on the chat view, under the transcript. */
+const reasoningEl = document.createElement("div");
+reasoningEl.className = "reasoning"; reasoningEl.id = "reasoning";
+reasoningEl.innerHTML = '<div class="muted">Jarvis's reasoning appears here — ask it something, or press Reflect.</div>';
+$("chatview").insertBefore(reasoningEl, $("chatview").querySelector(".actions"));
+
 async function converse(text) {
   bubble("you", text);
   thinking = true; setMood("thinking");
   try {
     await converseStreaming(text);
   } catch (e) {
-    // Streaming unavailable — fall back to a single round-trip.
     const data = await api("say", { text });
     bubble("jarvis", data.reply, data.confidence);
     renderState(data.state);
@@ -551,12 +781,12 @@ async function converseStreaming(text) {
       renderReasoning(m.provenance, m.trace);
       speakFlag = !!m.speak;
       thinking = false; setMood("idle");
-      el = bubble("jarvis", "");   // empty bubble to stream into
+      el = bubble("jarvis", "");
     } else if (evt.event === "chunk") {
       if (!el) el = bubble("jarvis", "");
       full += evt.data.text; appendToBubble(el, evt.data.text);
     } else if (evt.event === "done") {
-      if (evt.data && evt.data.reply) {         // non-streamed / fallback reply
+      if (evt.data && evt.data.reply) {
         if (!el) el = bubble("jarvis", "");
         if (!full) { full = evt.data.reply; appendToBubble(el, full); }
         if (evt.data.provenance !== undefined) renderReasoning(evt.data.provenance, evt.data.trace);
@@ -586,11 +816,10 @@ async function command(cmd) {
   bubble("jarvis", reply);
   renderState(data.state);
   if (cmd === "reflect") renderCycle(data.cycle);
-  articulate(reply);                         // the face reacts to every command too
+  articulate(reply);
   if (data.speak) speak(data.reply);
 }
 
-// A small hook so the reasoning panel can be exercised and observed directly.
 window.__reason = { renderReasoning, renderCycle };
 
 /* ---- wire the controls -------------------------------------------------- */
@@ -609,7 +838,6 @@ $("voice").addEventListener("click", () => {
   if (!voiceOn && "speechSynthesis" in window) window.speechSynthesis.cancel();
 });
 
-/* energy budget tuning — a real runtime parameter change */
 let lastBudget = null;
 const unbounded = $("unbounded"), budget = $("budget"), budgetval = $("budgetval");
 function applyBudget() {
@@ -626,11 +854,9 @@ unbounded.addEventListener("change", applyBudget);
 budget.addEventListener("input", () => { budgetval.textContent = budget.value; });
 budget.addEventListener("change", applyBudget);
 
-/* perceiver switch — runtime provider/perceiver change (secret stays server-side) */
 $("applyperceiver").addEventListener("click", applyPerceiver);
 $("provider").addEventListener("change", onProviderChange);
 
-/* teach Jarvis about you — fold a pasted profile into the companion model */
 async function learnAboutMe() {
   const text = $("profile").value.trim();
   if (!text) return;
@@ -646,35 +872,49 @@ async function learnAboutMe() {
 }
 $("learnbtn").addEventListener("click", learnAboutMe);
 
-/* tools & configuration drawer — a separate window so the face stays unobscured */
-function setDrawer(open) {
-  $("drawer").classList.toggle("open", open);
-  $("scrim").classList.toggle("open", open);
-  $("drawer").setAttribute("aria-hidden", open ? "false" : "true");
-  $("tools").setAttribute("aria-expanded", open ? "true" : "false");
-  $("tools").classList.toggle("on", open);
+async function runToolPanel(cmd, payload, outId) {
+  const out = $(outId);
+  const data = await api(cmd, payload);
+  const text = data.error ? "Couldn't " + cmd + ": " + data.error : (data.reply || "(done)");
+  out.textContent = text;
+  bubble("jarvis", text);
+  renderState(data.state);
 }
-$("tools").addEventListener("click", () => setDrawer(!$("drawer").classList.contains("open")));
-$("drawerclose").addEventListener("click", () => setDrawer(false));
-$("scrim").addEventListener("click", () => setDrawer(false));
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") setDrawer(false); });
+$("calList").addEventListener("click", () => runToolPanel("calendar", { action: "list" }, "calOut"));
+$("calCreate").addEventListener("click", () => {
+  runToolPanel("calendar", {
+    action: "create",
+    title: $("calTitle").value.trim(),
+    start: $("calStart").value.trim(),
+    end: $("calEnd").value.trim(),
+  }, "calOut");
+});
+$("taskList").addEventListener("click", () => runToolPanel("tasks", { action: "list" }, "taskOut"));
+$("taskDue").addEventListener("click", () => runToolPanel("tasks", { action: "due" }, "taskOut"));
+$("taskCreate").addEventListener("click", () => {
+  runToolPanel("tasks", {
+    action: "create",
+    name: $("taskName").value.trim(),
+    command: $("taskCommand").value.trim(),
+    cron: $("taskCron").value.trim(),
+  }, "taskOut");
+});
 
 /* ---- voice input (Web Speech API) — push to talk ------------------------ */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 if (SR) {
   const rec = new SR();
-  rec.lang = navigator.language || "en-US";   // follow the browser's language
+  rec.lang = navigator.language || "en-US";
   rec.interimResults = false; rec.maxAlternatives = 1;
   let held = false;
   const mic = $("mic");
   mic.title = "Hold to talk";
   rec.onresult = (e) => {
     const said = e.results[0][0].transcript;
-    if (said && said.trim()) converse(said.trim());
+    if (said && said.trim()) { showChat(); converse(said.trim()); }
   };
   rec.onend = () => { held = false; mic.classList.remove("on"); };
   rec.onerror = () => { held = false; mic.classList.remove("on"); };
-  // Press-and-hold: start on press, stop (and send) on release.
   const startHold = (ev) => {
     ev.preventDefault();
     if (held) return;
@@ -692,8 +932,8 @@ if (SR) {
   $("mic").disabled = true; $("mic").title = "Voice input not available in this browser";
 }
 
-/* ---- the point-cloud face ---------------------------------------------- */
-const canvas = $("face"), ctx = canvas.getContext("2d");
+/* ---- the reactive point-cloud sphere ------------------------------------ */
+const canvas = $("sphere"), ctx = canvas.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
   const r = canvas.getBoundingClientRect();
@@ -705,248 +945,47 @@ function resize() {
 window.addEventListener("resize", resize);
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-const EYE_Y = 0.24;
-
-function gauss(v, c, w) { const d = (v - c) / w; return Math.exp(-d * d); }
-function gauss2(x, y, cx, cy, wx, wy) {
-  const dx = (x - cx) / wx, dy = (y - cy) / wy;
-  return Math.exp(-(dx * dx + dy * dy));
-}
-
-/** Base ellipsoid head shape. */
-function baseHeadZ(x, y) {
-  const rx = 0.78, ry = 1.08, rz = 0.75;
-  const nx = x / rx, ny = y / ry;
-  const r2 = nx * nx + ny * ny;
-  if (r2 > 1) return 0;
-  return rz * Math.sqrt(Math.max(0.01, 1 - r2));
-}
-
-/** Gaussian-sculpted depth for anatomical face features. */
-function frontZ(x, y, lift) {
-  let z = baseHeadZ(x, y);
-  const eyeY = 0.18, eyeX = 0.23, eyeW = 0.13, eyeH = 0.055;
-  const mouthY = -0.34, mouthW = 0.19;
-  const noseY = -0.06;
-
-  // Eye sockets — depress
-  z -= gauss2(x, y, -eyeX, eyeY, eyeW, eyeH) * 0.22;
-  z -= gauss2(x, y, eyeX, eyeY, eyeW, eyeH) * 0.22;
-
-  // Upper eyelid ridge — protrude
-  z += gauss2(x, y, -eyeX, eyeY + 0.04, eyeW * 0.8, 0.025) * 0.06;
-  z += gauss2(x, y, eyeX, eyeY + 0.04, eyeW * 0.8, 0.025) * 0.06;
-
-  // Brow ridge — protrude
-  z += gauss2(x, y, -eyeX, eyeY + 0.18, eyeW * 1.4, 0.06) * 0.10;
-  z += gauss2(x, y, eyeX, eyeY + 0.18, eyeW * 1.4, 0.06) * 0.10;
-
-  // Nose bridge — protrude
-  z += gauss(x, 0, 0.045) * gauss(y, 0.06, 0.18) * 0.18;
-  // Nose body — protrude
-  z += gauss(x, 0, 0.07) * gauss(y, noseY, 0.16) * 0.28;
-  // Nose tip — protrude
-  z += gauss2(x, y, 0, -0.18, 0.07, 0.055) * 0.18;
-  // Nose wings
-  z += gauss2(x, y, -0.08, -0.19, 0.05, 0.035) * 0.08;
-  z += gauss2(x, y, 0.08, -0.19, 0.05, 0.035) * 0.08;
-
-  // Cheekbones — protrude
-  z += gauss2(x, y, -0.34, -0.04, 0.14, 0.14) * 0.14;
-  z += gauss2(x, y, 0.34, -0.04, 0.14, 0.14) * 0.14;
-
-  // Upper lip — protrude
-  z += gauss(x, 0, mouthW) * gauss(y, mouthY + 0.025, 0.035) * 0.09;
-  // Mouth line — depress
-  z -= gauss(x, 0, mouthW * 0.85) * gauss(y, mouthY - 0.005, 0.012) * 0.04;
-  // Lower lip — protrude
-  z += gauss(x, 0, mouthW * 0.9) * gauss(y, mouthY - 0.05, 0.04) * 0.08;
-
-  // Chin — protrude
-  z += gauss2(x, y, 0, -0.64, 0.12, 0.10) * 0.16;
-  // Under-chin — depress
-  z -= gauss(x, 0, 0.16) * gauss(y, -0.78, 0.06) * 0.06;
-
-  // Jaw angle
-  z += gauss2(x, y, -0.44, -0.32, 0.10, 0.06) * 0.04;
-  z += gauss2(x, y, 0.44, -0.32, 0.10, 0.06) * 0.04;
-
-  // Nasolabial fold — subtle depress
-  z -= gauss2(x, y, -0.14, -0.16, 0.04, 0.12) * 0.03;
-  z -= gauss2(x, y, 0.14, -0.16, 0.04, 0.12) * 0.03;
-
-  return Math.max(0.01, z) + (lift || 0);
-}
-
-function addPoint(points, x, y, kind, detail) {
-  points.push({
-    x, y, z: frontZ(x, y, detail && detail.lift), kind,
-    seed: Math.random() * 6.28,
-    ...(detail || {}),
-  });
-}
-
-function addOrganicPoint(points, centerX, centerY, spreadX, spreadY, kind, detail) {
-  const jitterX = (Math.random() - 0.5) * spreadX;
-  const jitterY = (Math.random() - 0.5) * spreadY;
-  const lift = (detail && detail.lift) || 0;
-  addPoint(points, centerX + jitterX, centerY + jitterY, kind,
-    { ...(detail || {}), lift: lift + (Math.random() - 0.5) * 0.012 });
-}
-
-/** Adds a volumetric facial region whose density carries anatomy without hard outlines. */
-function addRegion(points, centerX, centerY, radiusX, radiusY, count, kind, lift, detail) {
-  for (let i = 0; i < count; i++) {
-    const radius = Math.sqrt((i + 0.45) / count);
-    const theta = i * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.16;
-    const taper = 0.86 + Math.random() * 0.18;
-    addPoint(points,
-      centerX + Math.cos(theta) * radiusX * radius * taper,
-      centerY + Math.sin(theta) * radiusY * radius * taper,
-      kind,
-      { ...(detail || {}), lift: lift + (1 - radius) * 0.016 });
-  }
-}
-
-/** Builds a layered eye socket, lids, sclera, iris, and pupil from separate particle depths. */
-function addEye(points, centerX, kind, asymmetry) {
-  const eyeY = EYE_Y;
-  addRegion(points, centerX, eyeY, 0.16, 0.09, 70, "socket", 0.012,
-    { eyeY });
-
-  const contourCount = 60;
-  for (let i = 0; i < contourCount; i++) {
-    const u = -1 + (2 * i) / (contourCount - 1);
-    const almond = Math.sqrt(Math.max(0, 1 - u * u));
-    const eyeX = centerX + u * 0.13;
-    const skew = asymmetry * u * 0.009;
-    if (Math.random() > 0.08) {
-      addOrganicPoint(points, eyeX, eyeY + almond * 0.048 + skew,
-        0.008, 0.008, kind, { eyeY, lift: 0.03 });
-    }
-    if (Math.random() > 0.1) {
-      addOrganicPoint(points, eyeX, eyeY - almond * 0.036 + skew,
-        0.008, 0.007, kind, { eyeY, lift: 0.028 });
-    }
-  }
-
-  addRegion(points, centerX, eyeY + asymmetry * 0.004, 0.115, 0.034, 54,
-    "sclera", 0.034, { eyeY });
-  for (let i = 0; i < 44; i++) {
-    const radius = 0.039 * Math.sqrt((i + 0.4) / 44);
-    const theta = i * GOLDEN_ANGLE;
-    addPoint(points, centerX + Math.cos(theta) * radius,
-      eyeY + Math.sin(theta) * radius * 0.88, "iris",
-      { eyeY, lift: 0.048 });
-  }
-  for (let i = 0; i < 16; i++) {
-    const radius = 0.016 * Math.sqrt((i + 0.4) / 16);
-    const theta = i * GOLDEN_ANGLE;
-    addPoint(points, centerX + Math.cos(theta) * radius,
-      eyeY + Math.sin(theta) * radius, "pupil",
-      { eyeY, lift: 0.062 });
-  }
-
-  for (let i = 0; i < 44; i++) {
-    const u = -1 + (2 * i) / 43;
-    const arch = 0.43 + (1 - u * u) * 0.032 + asymmetry * u * 0.01;
-    addOrganicPoint(points, centerX + u * 0.15, arch,
-      0.012, 0.012, "brow", { lift: 0.028 });
-  }
-}
-
-/** Defines bridge planes, tip, wings, and nostril shadows without tracing a nose contour. */
-function addNose(points) {
-  for (let i = 0; i < 90; i++) {
-    const progress = i / 89;
-    const side = i % 2 === 0 ? -1 : 1;
-    const halfWidth = 0.022 + progress * 0.03;
-    addOrganicPoint(points, side * halfWidth, 0.22 - progress * 0.33,
-      0.02, 0.025, "nosePlane", { lift: 0.02 + progress * 0.024 });
-  }
-  addRegion(points, 0, -0.16, 0.085, 0.05, 74, "noseTip", 0.052);
-  addRegion(points, -0.08, -0.185, 0.05, 0.032, 28, "noseWing", 0.03);
-  addRegion(points, 0.08, -0.185, 0.05, 0.032, 28, "noseWing", 0.03);
-  addRegion(points, -0.05, -0.2, 0.024, 0.013, 14, "nostril", 0.038);
-  addRegion(points, 0.05, -0.2, 0.024, 0.013, 14, "nostril", 0.038);
-  // Philtrum — subtle vertical groove under the nose
-  addRegion(points, 0, -0.28, 0.012, 0.06, 16, "philtrum", 0.024);
-}
-
-/** Adds cheekbones, temples, muzzle, jaw and chin as overlapping planes of light. */
-function addFacialPlanes(points) {
-  addRegion(points, 0, 0.61, 0.48, 0.22, 160, "forehead", 0.01);
-  addRegion(points, -0.34, 0.04, 0.24, 0.22, 120, "cheek", 0.03);
-  addRegion(points, 0.34, 0.04, 0.24, 0.22, 120, "cheek", 0.03);
-  addRegion(points, -0.5, 0.24, 0.13, 0.2, 48, "temple", -0.002);
-  addRegion(points, 0.5, 0.24, 0.13, 0.2, 48, "temple", -0.002);
-  addRegion(points, 0, -0.3, 0.3, 0.13, 96, "muzzle", 0.022);
-  addRegion(points, -0.36, -0.45, 0.19, 0.22, 80, "jaw", 0.012);
-  addRegion(points, 0.36, -0.45, 0.19, 0.22, 80, "jaw", 0.012);
-  addRegion(points, 0, -0.68, 0.22, 0.13, 92, "chin", 0.04);
-}
-
-/** Builds a subtle human mouth with a cupid's bow, corners, lower lip and oral shadow. */
-function addMouth(points) {
-  const lipCount = 100;
-  for (let i = 0; i < lipCount; i++) {
-    const u = -1 + (2 * i) / (lipCount - 1);
-    const influence = 1 - u * u;
-    const bow = Math.exp(-Math.pow(u / 0.24, 2));
-    const upperY = -0.34 + influence * 0.016 - bow * 0.019;
-    const lowerY = -0.348 - influence * 0.041;
-    if (Math.random() > 0.09) {
-      addOrganicPoint(points, u * 0.27, upperY, 0.01, 0.009, "mouth",
-        { lift: 0.042, mouthDirection: 0.23, mouthInfluence: influence });
-    }
-    if (Math.random() > 0.08) {
-      addOrganicPoint(points, u * 0.27, lowerY, 0.01, 0.009, "mouth",
-        { lift: 0.044, mouthDirection: -1, mouthInfluence: influence });
-    }
-  }
-  addRegion(points, 0, -0.35, 0.24, 0.02, 56, "oralShadow", 0.036);
-  addRegion(points, -0.28, -0.348, 0.038, 0.03, 16, "mouthCorner", 0.03);
-  addRegion(points, 0.28, -0.348, 0.038, 0.03, 16, "mouthCorner", 0.03);
-  addRegion(points, 0, -0.48, 0.21, 0.07, 52, "lowerLipPlane", 0.02);
-}
-
-/** Builds a non-uniform human facial surface whose perimeter dissolves into darkness. */
-function buildPoints() {
-  const points = [];
-  const surfaceCount = 900;
-  for (let i = 0; i < surfaceCount; i++) {
-    const radius = Math.sqrt((i + 0.35) / surfaceCount);
-    const theta = i * GOLDEN_ANGLE;
-    const vertical = Math.sin(theta) * radius;
-    const jawTaper = vertical < -0.12 ? 1 - Math.min(0.28, (-vertical - 0.12) * 0.32) : 1;
-    const foreheadTaper = vertical > 0.55 ? 1 - (vertical - 0.55) * 0.12 : 1;
-    const x = Math.cos(theta) * radius * 0.72 * jawTaper * foreheadTaper;
-    const y = vertical * 1.03 + 0.04;
-    const edge = Math.min(1, radius);
-    const z = frontZ(x, y, 0) - edge * edge * 0.05;
-    points.push({
-      x, y, z, kind: "skin", seed: Math.random() * 6.28,
-      edge, drift: 0.003 + edge * 0.006,
-    });
-  }
-
-  addFacialPlanes(points);
-  addEye(points, -0.235, "eyeL", -0.35);
-  addEye(points, 0.235, "eyeR", 0.35);
-  addNose(points);
-  addMouth(points);
-  return points;
-}
-const POINTS = buildPoints();
-const FEATURES = POINTS.filter((point) => !["skin", "forehead", "cheek", "muzzle", "jaw", "chin", "temple", "lowerLipPlane", "philtrum"].includes(point.kind));
+const RADIUS = 0.52;                 // sphere radius in normalized units
 
 /**
- * Speech articulation is bumped by spoken-word boundaries and decays between words.
- * A timer fallback keeps the visible response honest when a browser emits no boundaries.
+ * Build a point-cloud sphere: an even distribution of particles across the surface,
+ * plus a faint core so the orb reads as a volume rather than an empty shell.
  */
+function buildSphere() {
+  const N = 1500;
+  const points = [];
+  for (let i = 0; i < N; i++) {
+    const r = RADIUS * Math.sqrt((i + 0.5) / N);   // surface-heavy shell
+    const phi = i * GOLDEN_ANGLE;
+    const y = 1 - 2 * ((i + 0.5) / N);             // uniform in y -> even on sphere
+    const xzr = Math.sqrt(Math.max(0, 1 - y * y));
+    const x = xzr * Math.cos(phi);
+    const z = xzr * Math.sin(phi);
+    const edge = Math.min(1, xzr);
+    points.push({
+      x: x * r, y: y * r, z: z * r, kind: "shell",
+      seed: Math.random() * 6.28, edge,
+      drift: 0.0025 + edge * 0.005,
+    });
+  }
+  // A soft inner core so breathing and pulsing feel volumetric.
+  for (let i = 0; i < 220; i++) {
+    const rr = GROW_CORE * (0.25 + 0.75 * Math.sqrt((i + 0.5) / 220));
+    const phi = i * GOLDEN_ANGLE;
+    const y = 1 - 2 * ((i + 0.5) / 220);
+    const xzr = Math.sqrt(Math.max(0, 1 - y * y));
+    points.push({
+      x: xzr * Math.cos(phi) * rr, y: y * rr, z: xzr * Math.sin(phi) * rr,
+      kind: "core", seed: Math.random() * 6.28,
+    });
+  }
+  return points;
+}
+let GROW_CORE = RADIUS * 0.55;
+const POINTS = buildSphere();
+
 let mouthEnv = 0, articulation = 0, pulsed = false;
-let blink = 0, blinkStarted = -10, nextBlink = 2.5 + Math.random() * 1.5;
-let smile = 0, smileTarget = 0, nextSmile = 5 + Math.random() * 6;
+let blink = 0;
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 function setSpeaking(on) {
   speaking = !!on;
@@ -957,7 +996,7 @@ function pulseWord(strength) {
   pulsed = true;
 }
 
-// A small hook so the mouth-sync mechanism can be exercised and observed directly.
+// The observable hook (kept name `__face` for compatibility with browser checks).
 window.__face = {
   pulseWord: (s) => pulseWord(s),
   setSpeaking: (b) => setSpeaking(b),
@@ -967,149 +1006,75 @@ window.__face = {
   get pulsed() { return pulsed; },
   get blink() { return blink; },
   get thinking() { return thinking; },
-  snapshotFeatures: () => FEATURES.map((point) => ({
-    kind: point.kind,
-    x: point.x,
-    y: point.y + (point.kind === "mouth"
-      ? mouthEnv * 0.14 * point.mouthDirection * point.mouthInfluence
-      : 0),
-    z: point.z,
+  snapshotFeatures: () => POINTS.map((point) => ({
+    kind: point.kind, x: point.x, y: point.y, z: point.z,
+    growth: mouthEnv,
   })),
 };
 
 function frame(now) {
   const t = now * 0.001;
   const isReduced = reduceMotion.matches;
-  const breathe = isReduced ? 1 : 1 + 0.014 * Math.sin(t * 1.35) + 0.006 * Math.sin(t * 2.7 + 1);
-  const headTurn = isReduced ? 0 : 0.05 * Math.sin(t * 0.36) + 0.02 * Math.sin(t * 0.11) +
-    (thinking ? 0.018 * Math.sin(t * 1.1) : 0);
+  // Breathing: gentle radial expansion/contraction.
+  const breathe = isReduced ? 1 : 1 + 0.02 * Math.sin(t * 1.2) + 0.008 * Math.sin(t * 2.6 + 1);
+  // Slow orbital rotation around the vertical axis, quickened a touch when thinking.
+  const spin = isReduced ? 0 : 0.10 * Math.sin(t * 0.30) + 0.03 * Math.sin(t * 0.9) +
+    (thinking ? 0.10 * Math.sin(t * 1.1) : 0);
 
-  let mouthTarget = 0;
+  // Speech: the sphere swells and brightens in step with the spoken words.
+  let growthTarget = 0;
   if (speaking) {
     if (pulsed) {
-      const flutter = 0.5 + 0.5 * Math.abs(Math.sin(t * 32));
-      mouthTarget = Math.min(1, articulation * flutter);
+      const flutter = 0.5 + 0.5 * Math.abs(Math.sin(t * 30));
+      growthTarget = Math.min(1, articulation * flutter);
     } else {
-      mouthTarget = 0.28 + 0.32 * Math.abs(Math.sin(t * 13));
+      growthTarget = 0.25 + 0.30 * Math.abs(Math.sin(t * 12));
     }
   }
-  mouthEnv += (mouthTarget - mouthEnv) * (isReduced ? 0.6 : 0.34);
+  mouthEnv += (growthTarget - mouthEnv) * (isReduced ? 0.6 : 0.32);
   articulation *= 0.9;
 
-  if (!isReduced && t >= nextBlink) {
-    blinkStarted = t;
-    nextBlink = t + 3.0 + Math.random() * 2.2;
-  }
-  const blinkAge = t - blinkStarted;
-  // Triangle-wave blink: fast close over 0.09s, fast open over 0.09s (more natural).
-  blink = !isReduced && blinkAge < 0.18
-    ? (blinkAge < 0.09 ? blinkAge / 0.09 : 1 - (blinkAge - 0.09) / 0.09)
-    : 0;
-
-  // Idle smile — subtle micro-expression, changes every few seconds.
-  if (t >= nextSmile) { smileTarget = Math.random() < 0.6 ? (0.2 + Math.random() * 0.5) : 0; nextSmile = t + 6 + Math.random() * 7; }
-  smile += (smileTarget - smile) * (isReduced ? 0 : 0.02);
-
   const hue = thinking ? 265 : 174;
-  const shimmer = thinking ? 0.5 : 0;
-  const scale = Math.min(W * 0.41 / 0.8, H * 0.43 / 1.12);
-  const cx = W / 2, cy = H / 2, FOV = 2.8;
-  const cosA = Math.cos(headTurn), sinA = Math.sin(headTurn);
-  const gazeX = isReduced ? 0 : 0.011 * Math.sin(t * 0.62) +
-    (thinking ? 0.009 * Math.sin(t * 1.7) : 0) + 0.004 * Math.sin(t * 0.23 + 2);
-  const gazeY = isReduced ? 0 : 0.007 * Math.sin(t * 0.47 + 1.1) +
-    (thinking ? 0.006 * Math.sin(t * 1.3 + 0.5) : 0);
+  const shimmer = thinking ? 0.6 : 0;
+  const scale = Math.min(W * (isReduced ? 0.30 : 0.34), H * 0.5);
+  const cx = W / 2, cy = H / 2, FOV = 2.6;
+  const growth = 1 + mouthEnv * 0.12;   // sphere swells while speaking
 
   ctx.clearRect(0, 0, W, H);
   ctx.globalCompositeOperation = "lighter";
   for (let i = 0; i < POINTS.length; i++) {
     const p = POINTS[i];
-    let px = p.x, py = p.y, pz = p.z;
-    if (p.kind === "mouth") {
-      py += mouthEnv * 0.14 * p.mouthDirection * p.mouthInfluence;
-    } else if (p.kind === "oralShadow") {
-      py -= mouthEnv * 0.045;
-      pz += mouthEnv * 0.02;
-    } else if (p.kind === "mouthCorner") {
-      py -= mouthEnv * 0.016;
-    }
-    // Smile micro-expression: corners lift + raise cheeks slightly.
-    if (smile > 0) {
-      if (p.kind === "mouthCorner") { py -= smile * 0.012; px += (p.x > 0 ? 1 : -1) * smile * 0.008; }
-      else if (p.kind === "cheek") { py -= smile * 0.01; }
-      else if (p.kind === "mouth") { py -= smile * (1 - Math.abs(p.x) / 0.3) * 0.008; }
-    }
-    if (p.eyeY !== undefined) {
-      py = p.eyeY + (py - p.eyeY) * (1 - blink * 0.92);
-    }
-    if (p.kind === "iris" || p.kind === "pupil") {
-      px += gazeX;
-      py += gazeY;
-    }
-    if (p.drift && !isReduced) {
-      px += Math.sin(t * 0.42 + p.seed) * p.drift;
-      py += Math.cos(t * 0.37 + p.seed) * p.drift * 0.7;
-    }
-    const ndi = Math.min(1, Math.sqrt(px * px + py * py) / 1.1);
-    px *= breathe; py *= breathe; pz *= breathe;
-    const rx = px * cosA + pz * sinA;
-    const rz = -px * sinA + pz * cosA;
-    const persp = FOV / (FOV - rz);
+    // Rotate around Y (orbital spin) then project with perspective.
+    const cy1 = p.y * breathe * growth;
+    const sx0 = p.x * breathe * growth, sz0 = p.z * breathe * growth;
+    const rx = sx0 * Math.cos(spin) + sz0 * Math.sin(spin);
+    const rz = -sx0 * Math.sin(spin) + sz0 * Math.cos(spin);
+    const persp = FOV / (FOV - rz * RADIUS * 2);
     const sx = cx + rx * scale * persp;
-    const sy = cy - py * scale * persp;
-    // Depth-based lighting: closer (higher z) is brighter.
-    let alpha = 0.12 + 0.78 * ((rz + 1) / 2);
-    let light = 58, size = 1.2;
+    const sy = cy - cy1 * scale * persp;
+
+    // Depth-based lighting: nearer (larger rz) is brighter and warmer.
+    const depth = (rz + RADIUS) / (2 * RADIUS);
     const flicker = 0.55 + 0.45 * Math.abs(Math.sin(t * 2 + p.seed));
-
-    if (p.kind === "skin") {
-      const edgeFade = Math.pow(1 - p.edge, 0.55);
-      light = 54 + edgeFade * 7;
-      alpha *= edgeFade * flicker * (0.7 + shimmer * 0.3);
-      size = 0.78 + edgeFade * 0.34;
-    } else if (["forehead", "cheek", "muzzle", "jaw", "chin", "temple", "lowerLipPlane"].includes(p.kind)) {
-      const planeLight = p.kind === "cheek" || p.kind === "chin" ? 68 : 63;
-      light = planeLight;
-      alpha = 0.1 + flicker * (p.kind === "cheek" ? 0.28 : 0.2);
-      size = p.kind === "cheek" ? 1.02 : 0.92;
-    } else if (p.kind === "socket") {
-      light = 59; alpha = 0.08 + flicker * 0.15; size = 0.88;
-    } else if (p.kind === "nosePlane") {
-      light = 68; alpha = 0.12 + flicker * 0.24; size = 0.9;
-    } else if (p.kind === "noseTip" || p.kind === "noseWing") {
-      light = p.kind === "noseTip" ? 72 : 64;
-      alpha = 0.16 + flicker * 0.25; size = 0.94;
-    } else if (p.kind === "nostril" || p.kind === "oralShadow") {
-      light = 43; alpha = 0.2 + mouthEnv * 0.35 + flicker * 0.08;
-      size = 0.88 + mouthEnv * 0.2;
-    } else if (p.kind === "philtrum") {
-      light = 50; alpha = 0.1 + flicker * 0.12; size = 0.6;
-    } else if (p.kind === "brow") {
-      light = 70; alpha = 0.2 + flicker * 0.29; size = 0.94;
-    } else if (p.kind === "mouth") {
-      light = 66 + mouthEnv * 15;
-      alpha = 0.2 + mouthEnv * 0.43 + flicker * (0.19 + mouthEnv * 0.08);
-      size = 0.92 + mouthEnv * 0.25;
-    } else if (p.kind === "mouthCorner") {
-      light = 58; alpha = 0.14 + mouthEnv * 0.36 + flicker * 0.12; size = 0.9;
-    } else if (p.kind === "pupil") {
-      light = 88; alpha = 0.5 + flicker * 0.28; size = 1.08;
-    } else if (p.kind === "sclera") {
-      light = 77; alpha = 0.22 + flicker * 0.25; size = 0.92;
+    let alpha, light, size;
+    if (p.kind === "shell") {
+      const edgeFade = Math.pow(1 - p.edge, 0.6);
+      alpha = (0.10 + 0.42 * depth) * flicker * (0.55 + shimmer * 0.45);
+      light = 58 + depth * 22;
+      size = 0.8 + edgeFade * 0.5;
     } else {
-      light = p.kind === "iris" ? 82 : 73;
-      alpha = p.kind === "iris" ? 0.35 + flicker * 0.31 : 0.25 + flicker * 0.28;
-      size = p.kind === "iris" ? 1.03 : 0.92;
+      // core
+      alpha = (0.05 + 0.20 * depth) * flicker * (0.5 + shimmer * 0.5);
+      light = 46 + depth * 16;
+      size = 1.6;
+    }
+    // Rim glow on the silhouette.
+    if (!isReduced && p.edge !== undefined && p.edge > 0.72) {
+      const rim = (p.edge - 0.72) / 0.28;
+      alpha += rim * rim * 0.20 * flicker;
+      light += rim * 8;
     }
 
-    // Rim lighting — particles at the silhouette edge gain a subtle cool glow.
-    if (!isReduced && ndi > 0.72) {
-      const rim = (ndi - 0.72) / 0.28;
-      alpha += rim * rim * 0.16 * flicker;
-      light += rim * 6;
-    }
-
-    // Soft particle: bright core + soft glow (no hard dots).
     ctx.beginPath();
     const rad = size * persp;
     const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(rad, 0.5) * 2.2);
@@ -1131,12 +1096,10 @@ async function boot() {
   resize();
   requestAnimationFrame(frame);
   const d = await api("state", {});
-  renderState(d.state);   // sets the live perceiver readout + populates the switcher
-  // A warm opening, grounded in what Jarvis remembers (falls back gracefully).
+  renderState(d.state);
   try {
     const g = await api("greeting", {});
     bubble("jarvis", g.reply || "Hi — I'm Jarvis.");
-    articulate(g.reply || "");
   } catch (e) {
     bubble("jarvis", "Hi — I'm Jarvis.");
   }
