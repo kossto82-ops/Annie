@@ -42,17 +42,22 @@
   header .navbtn.on { border-color: var(--teal); color: var(--teal); }
 
   /* ---- main layout ------------------------------------------------------- */
-  main { display: grid; grid-template-columns: 1fr; min-height: 0; }
-
-  /* Home dashboard: the sphere stage up top, quick cards beneath. */
-  .home { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+  /* The sphere stays visible on the left while you chat on the right. */
+  main { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    min-height: 0; }
   .stage { position: relative; display: grid; place-items: center; min-height: 0;
-    border-bottom: 1px solid var(--edge); }
+    border-right: 1px solid var(--edge); }
   #sphere { width: 100%; height: 100%; display: block;
     background: radial-gradient(circle at 50% 50%, rgba(26,169,201,.10), transparent 62%); }
   .stage .status { position: absolute; bottom: 14px; left: 20px; font-size: 12px;
     letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
   .stage .status b { color: var(--teal); }
+
+  /* Right column: the dashboard or the chat, toggled, never hiding the sphere. */
+  .side { display: grid; grid-template-rows: 1fr; min-height: 0; min-width: 0;
+    border-left: 1px solid var(--edge); }
+  .home { display: grid; grid-template-rows: auto auto; min-height: 0; overflow-y: auto; }
+  .home.hidden, .chatview.hidden { display: none; }
 
   .dash { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 14px 18px;
     background: var(--panel); }
@@ -127,9 +132,8 @@
   .switch:hover { border-color: var(--teal2); color: #fff; }
   .hint { font-size: 11px; color: var(--dim); margin: 2px 0 4px; }
 
-  /* Chat view: shown from the dashboard "Conversar" card. */
-  .chatview { display: none; grid-template-rows: 1fr auto auto; min-height: 0; min-width: 0; }
-  .chatview.open { display: grid; }
+  /* Chat view: fills the right column next to the sphere. */
+  .chatview { display: grid; grid-template-rows: auto 1fr auto auto; min-height: 0; min-width: 0; }
   .chat { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
   .msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; }
   .msg.you { align-self: flex-end; background: linear-gradient(180deg, #16233d, #121c30);
@@ -178,9 +182,10 @@
   .stagechip.on b { color: var(--teal); font-weight: 600; }
 
   @media (max-width: 900px) {
-    main { min-width: 0; }
+    main { grid-template-columns: 1fr; grid-template-rows: minmax(200px, 32vh) minmax(0, 1fr); }
+    .stage { border-right: 0; border-bottom: 1px solid var(--edge); }
+    .side { border-left: 0; }
     .dash { grid-template-columns: repeat(2, 1fr); }
-    .stage { min-height: 240px; }
   }
   @media (max-width: 560px) {
     header { gap: 8px; padding: 10px 14px; display: grid;
@@ -221,64 +226,67 @@
   </header>
 
   <main>
-    <!-- Home dashboard -->
-    <section class="home" id="home">
-      <div class="stage">
-        <canvas id="sphere"></canvas>
-        <div class="status">state · <b id="mood">idle</b></div>
-      </div>
-
-      <div class="dash">
-        <div class="card" data-panel="chat">
-          <div class="k">Conversar</div>
-          <div class="v">&#128172;</div>
-          <div class="hint">Hable con Jarvis</div>
-        </div>
-        <div class="card" data-panel="cap">
-          <div class="k">Capacidades</div>
-          <div class="v"><span class="dot" id="capDot"></span><span id="capCount">0</span><small> &nbsp;listas</small></div>
-          <div class="hint">Qué puede hacer</div>
-        </div>
-        <div class="card" data-panel="tool">
-          <div class="k">Herramientas</div>
-          <div class="v"><span class="dot" id="toolDot"></span><span id="toolCount">0</span><small> &nbsp;activas</small></div>
-          <div class="hint">A través de qué actúa</div>
-        </div>
-        <div class="card" data-panel="set">
-          <div class="k">Ajustes</div>
-          <div class="v"><span class="dot" id="setDot"></span></div>
-          <div class="hint">Perceiver, energía, perfil</div>
-        </div>
-      </div>
-
-      <div class="metrics" id="metrics">
-        <div class="metric"><div class="k">Energy spent</div><div class="v" id="spent">0</div></div>
-        <div class="metric" id="remwrap"><div class="k">Energy left</div>
-          <div class="v" id="remaining">∞</div>
-          <div class="bar"><i id="rembar"></i></div></div>
-        <div class="metric"><div class="k">Recurring goals</div><div class="v" id="goals">0</div></div>
-      </div>
+    <!-- Persistent sphere stage: stays visible while chatting -->
+    <section class="stage">
+      <canvas id="sphere"></canvas>
+      <div class="status">state · <b id="mood">idle</b></div>
     </section>
 
-    <!-- Chat view -->
-    <section class="chatview" id="chatview">
-      <div class="backbar">
-        <button type="button" class="navbtn" id="backHome">&#8592; Inicio</button>
-        <span class="hint" style="font-style:normal">Conversación con Jarvis</span>
+    <!-- Right column: dashboard OR chat, toggled; the sphere never hides -->
+    <section class="side">
+      <div class="home" id="home">
+        <div class="dash">
+          <div class="card" data-panel="chat">
+            <div class="k">Conversar</div>
+            <div class="v">&#128172;</div>
+            <div class="hint">Hable con Jarvis</div>
+          </div>
+          <div class="card" data-panel="cap">
+            <div class="k">Capacidades</div>
+            <div class="v"><span class="dot" id="capDot"></span><span id="capCount">0</span><small> &nbsp;listas</small></div>
+            <div class="hint">Qué puede hacer</div>
+          </div>
+          <div class="card" data-panel="tool">
+            <div class="k">Herramientas</div>
+            <div class="v"><span class="dot" id="toolDot"></span><span id="toolCount">0</span><small> &nbsp;activas</small></div>
+            <div class="hint">A través de qué actúa</div>
+          </div>
+          <div class="card" data-panel="set">
+            <div class="k">Ajustes</div>
+            <div class="v"><span class="dot" id="setDot"></span></div>
+            <div class="hint">Perceiver, energía, perfil</div>
+          </div>
+        </div>
+
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="k">Energy spent</div><div class="v" id="spent">0</div></div>
+          <div class="metric" id="remwrap"><div class="k">Energy left</div>
+            <div class="v" id="remaining">∞</div>
+            <div class="bar"><i id="rembar"></i></div></div>
+          <div class="metric"><div class="k">Recurring goals</div><div class="v" id="goals">0</div></div>
+        </div>
       </div>
-      <div class="chat" id="chat"></div>
-      <div class="actions">
-        <button data-cmd="reflect">Reflect</button>
-        <button data-cmd="introspect">Introspect</button>
-        <button data-cmd="wonder">Wonder</button>
-        <button data-cmd="rest">Rest</button>
+
+      <!-- Chat view: fills the right column next to the sphere -->
+      <div class="chatview hidden" id="chatview">
+        <div class="backbar">
+          <button type="button" class="navbtn" id="backHome">&#8592; Inicio</button>
+          <span class="hint" style="font-style:normal">Conversación con Jarvis</span>
+        </div>
+        <div class="chat" id="chat"></div>
+        <div class="actions">
+          <button data-cmd="reflect">Reflect</button>
+          <button data-cmd="introspect">Introspect</button>
+          <button data-cmd="wonder">Wonder</button>
+          <button data-cmd="rest">Rest</button>
+        </div>
+        <form class="composer" id="composer">
+          <button type="button" class="iconbtn" id="mic" title="Speak">&#127908;</button>
+          <input id="text" placeholder="Say something to Jarvis…" autocomplete="off" />
+          <button type="button" class="iconbtn on" id="voice" title="Voice on/off">&#128266;</button>
+          <button class="send" type="submit">Send</button>
+        </form>
       </div>
-      <form class="composer" id="composer">
-        <button type="button" class="iconbtn" id="mic" title="Speak">&#127908;</button>
-        <input id="text" placeholder="Say something to Jarvis…" autocomplete="off" />
-        <button type="button" class="iconbtn on" id="voice" title="Voice on/off">&#128266;</button>
-        <button class="send" type="submit">Send</button>
-      </form>
     </section>
   </main>
 
@@ -383,15 +391,12 @@ async function api(cmd, payload) {
 
 /* ---- navigation: home / chat / side panels ------------------------------ */
 function showHome() {
-  $("home").style.display = "";
-  $("chatview").classList.remove("open");
-  $("chatview").style.display = "none";
-  $("home").style.display = "grid";
+  $("chatview").classList.add("hidden");
+  $("home").classList.remove("hidden");
 }
 function showChat() {
-  $("home").style.display = "none";
-  $("chatview").style.display = "grid";
-  $("chatview").classList.add("open");
+  $("home").classList.add("hidden");
+  $("chatview").classList.remove("hidden");
   const c = $("chat"); c.scrollTop = c.scrollHeight;
 }
 
@@ -528,7 +533,7 @@ let lastCapAcquired = 0, lastTools = null;
 function renderCapabilityCards(s) {
   const caps = s.capabilities || [];
   const ready = s.ready || [];
-  const acquired = caps.filter((c) => c.status === "ACQUIRED").length;
+  const acquired = caps.filter((c) => c.status === "acquired").length;
   lastCapAcquired = acquired;
   $("capCount").textContent = ready.length;
   const dot = $("capDot");
@@ -543,7 +548,7 @@ function renderTools(s) {
   const box = $("toolbody");
   if (activePanel !== "tool") return;
   if (!specs.length) {
-    box.innerHTML = '<div class="muted">No hay herramientas registradas aún.</div>';
+    box.innerHTML = '<div class="muted">No hay herramientas registradas todavía. Configura un agente de borde (JARVIS_AGENT_ROOT) o integra un canal para exponerlas aquí.</div>';
   } else {
     box.innerHTML = "";
     specs.forEach((t) => {
@@ -562,20 +567,30 @@ function renderTools(s) {
     });
   }
 }
+const STATUS_TEXT = {
+  ready: "lista", acquired: "adquirida", proposed: "propuesta",
+  rejected: "rechazada", available: "disponible",
+};
 function renderCapabilityPanels(s) {
   const caps = s.capabilities || [];
-  const ready = new Set(s.ready || []);
   const box = $("capbody");
-  if (!caps.length) { box.innerHTML = '<div class="muted">Aún no hay capacidades propuestas o adquiridas. Propón una — Jarvis la explorará (`capability scout`).</div>'; return; }
+  if (!caps.length) { box.innerHTML = '<div class="muted">Aún no hay capacidades. Propón una — Jarvis la explorará (`capability scout`).</div>'; return; }
   box.innerHTML = "";
   caps.forEach((c) => {
     const row = document.createElement("div"); row.className = "row";
-    const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = c.name;
-    row.appendChild(lbl);
+    const col = document.createElement("div"); col.className = "lbl"; col.textContent = c.name;
+    if (c.description) {
+      const d = document.createElement("div");
+      d.style.cssText = "font-size:11px;color:var(--dim);margin-top:3px";
+      d.textContent = c.description;
+      col.appendChild(d);
+    }
+    row.appendChild(col);
     const status = document.createElement("span");
-    const readyNow = ready.has(c.name);
-    status.className = "statuschip " + (readyNow ? "ready" : (c.status === "ACQUIRED" ? "acquired" : "proposed"));
-    status.textContent = readyNow ? "lista" : (c.status === "ACQUIRED" ? "adquirida" : "propuesta");
+    if (c.status === "ready") status.className = "statuschip ready";
+    else if (c.status === "acquired") status.className = "statuschip acquired";
+    else status.className = "statuschip proposed";
+    status.textContent = STATUS_TEXT[c.status] || c.status;
     row.appendChild(status);
     box.appendChild(row);
   });
