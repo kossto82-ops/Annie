@@ -745,7 +745,7 @@ function renderCycle(cycle) {
 /* A reasoning strip lives on the chat view, under the transcript. */
 const reasoningEl = document.createElement("div");
 reasoningEl.className = "reasoning"; reasoningEl.id = "reasoning";
-reasoningEl.innerHTML = '<div class="muted">Jarvis's reasoning appears here — ask it something, or press Reflect.</div>';
+reasoningEl.innerHTML = '<div class="muted">Jarvis\u2019s reasoning appears here — ask it something, or press Reflect.</div>';
 $("chatview").insertBefore(reasoningEl, $("chatview").querySelector(".actions"));
 
 async function converse(text) {

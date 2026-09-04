@@ -96,3 +96,42 @@ def test_calendar_and_tasks_panels_are_wired() -> None:
         "runToolPanel",
     ):
         assert marker in html, f"calendar/tasks panels lost their {marker!r} wiring"
+
+
+def test_the_inline_script_has_no_broken_single_quoted_strings() -> None:
+    """Tripwire against a JS syntax error that silently kills the whole page.
+
+    A raw apostrophe inside a single-quoted JavaScript string (e.g. the reasoning
+    placeholder "Jarvis's") breaks the literal and stops the entire console script
+    from running. Escape those (\\u2019 or double quotes). This walks each line's
+    single-quoted segments and rejects any that contain a raw apostrophe.
+    """
+    html = _CONSOLE.read_text(encoding="utf-8")
+    match = __import__("re").search(r"<script>(.*?)</script>", html, __import__("re").S)
+    script = match.group(1) if match else ""
+    for lineno, line in enumerate(script.splitlines(), 1):
+        # Only inspect lines that contain a single-quoted literal.
+        stripped = line.strip()
+        if stripped.startswith("//") or stripped.startswith("*"):
+            continue
+        # A single-quoted string starts at the first ' and ends at the next unmasked '.
+        i = 0
+        while i < len(line):
+            if line[i] == "'":
+                end = i + 1
+                while end < len(line):
+                    if line[end] == "\\":
+                        end += 2
+                        continue
+                    if line[end] == "'":
+                        break
+                    end += 1
+                inner = line[i + 1:end]
+                assert "'" not in inner, (
+                    f"console.html line {lineno} has an unescaped apostrophe in a "
+                    "single-quoted string — this breaks the whole page: "
+                    f"{stripped!r}"
+                )
+                i = end + 1
+            else:
+                i += 1
