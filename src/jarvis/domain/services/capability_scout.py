@@ -120,6 +120,26 @@ _TEMPLATES: tuple[_Template, ...] = (
 )
 
 
+def catalog() -> tuple[Capability, ...]:
+    """The known catalog of what Jarvis could grow to do (Odysseus, Vision §34).
+
+    Deterministic and ordered: every capability in the toolkit, with its purpose
+    and requirement, even when none has been proposed or acquired yet. A surface
+    uses this to show the full landscape -- not just what is held -- and pair real
+    state (proposed/acquired) with what remains available to grow.
+    """
+    return tuple(
+        Capability(
+            name=t.name,
+            description=t.description,
+            requirement=t.requirement,
+            provenance="the built-in capability catalog",
+            status=CapabilityStatus.PROPOSED,  # catalog entries are candidates, not held
+        )
+        for t in _TEMPLATES
+    )
+
+
 def scout(need: CapabilityNeed) -> tuple[Capability, ...]:
     """Return candidate capabilities for ``need``, ordered by cue match.
 

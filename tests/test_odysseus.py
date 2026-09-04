@@ -16,7 +16,7 @@ from jarvis import Jarvis
 from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.services.capability_scout import scout
+from jarvis.domain.services.capability_scout import catalog, scout
 from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -49,6 +49,20 @@ def _jarvis_with_confident_web_need() -> Jarvis:
 
 
 class TestScout:
+    def test_catalog_lists_every_known_capability_with_purpose_and_requirement(self) -> None:
+        entries = catalog()
+        assert entries, "the catalog must never be empty"
+        names = {c.name for c in entries}
+        for expected in (
+            "search the web", "read external documents", "deep research",
+            "recall by meaning", "reason with a language model", "perceive speech",
+            "send and read email", "manage notes", "manage calendar",
+            "manage tasks", "delegate to an agent", "compare language models",
+        ):
+            assert expected in names, f"catalog missing {expected!r}"
+        for entry in entries:
+            assert entry.description and entry.requirement, f"{entry.name!r} lacks purpose/requirement"
+
     def test_a_web_need_proposes_the_web_capability(self) -> None:
         need = CapabilityNeed(
             statement="I want to search the web for current news",

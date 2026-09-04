@@ -98,6 +98,45 @@ def test_calendar_and_tasks_panels_are_wired() -> None:
         assert marker in html, f"calendar/tasks panels lost their {marker!r} wiring"
 
 
+def test_the_sphere_stays_visible_while_chatting() -> None:
+    """Tripwire: chatting must never hide the sphere/dashboard behind a swap.
+
+    The sphere lives on a persistent stage beside the right column; home and chat
+    toggle a ``hidden`` class inside that column instead of hiding the whole page.
+    """
+    html = _CONSOLE.read_text(encoding="utf-8")
+    # The sphere canvas is a sibling of the side column, outside .home/.chatview.
+    assert "<canvas id=\"sphere\">" in html
+    stage = html.index("<section class=\"stage\">")
+    canvas = html.index("<canvas id=\"sphere\">")
+    side = html.index("<section class=\"side\">")
+    assert stage < canvas < side, "the sphere stage must be a persistent sibling of the side column"
+    # Home and chat switch by toggling .hidden, never by hiding the whole page.
+    for marker in ('$("chatview").classList.add("hidden")', '$("home").classList.remove("hidden")'):
+        assert marker in html, f"chat/home switching lost its {marker!r} toggle"
+    assert "class=\"chatview hidden\"" in html, "chat must start hidden next to the sphere"
+
+
+def test_the_snapshot_surfaces_the_full_capability_catalog() -> None:
+    """Tripwire: the surface reports the full landscape, never a blank panel.
+
+    Even a fresh Jarvis exposes the whole catalog of what it could grow to do,
+    annotated with status (default 'available') so the Capacidades panel is never
+    empty. Ready/held statuses come from live state, not hardcoded here.
+    """
+    from jarvis.jarvis import Jarvis
+    from jarvis.interface.command_center import snapshot
+
+    caps = snapshot(Jarvis())["capabilities"]
+    assert len(caps) >= 12, "the catalog must expose every known capability"
+    names = {c["name"] for c in caps}
+    for expected in ("search the web", "manage calendar", "perceive speech", "manage tasks"):
+        assert expected in names, f"catalog missing {expected!r}"
+    for c in caps:
+        assert c["description"] and c["requirement"], f"catalog entry {c['name']!r} lacks purpose/requirement"
+        assert c["status"] in {"ready", "acquired", "proposed", "rejected", "available"}, c["status"]
+
+
 def test_the_inline_script_has_no_broken_single_quoted_strings() -> None:
     """Tripwire against a JS syntax error that silently kills the whole page.
 

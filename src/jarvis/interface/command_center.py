@@ -35,6 +35,7 @@ from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.services.model_compare import ModelRun
+from jarvis.domain.services.capability_scout import catalog
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -124,9 +125,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
             {"description": a.description, "confidence": a.confidence, "stance": a.stance.name}
             for a in summary.learned_actions
         ],
-        "capabilities": [
-            {"name": name, "status": status} for name, status in summary.capabilities
-        ],
+        "capabilities": _capability_catalog(jarvis, summary),
         "needs": [
             {"statement": s, "confidence": c} for s, c in summary.capability_needs
         ],
@@ -140,6 +139,39 @@ def snapshot(jarvis: Jarvis) -> Reply:
             for spec in jarvis.tool_channels()
         ],
     }
+
+
+def _capability_catalog(jarvis: Jarvis, summary: object) -> list[Reply]:
+    """The full capability landscape: catalog entries merged with real state.
+
+    Odysseus reports *held* capabilities (proposed/acquired) and what is ready; this
+    also surfaces the wider catalog of what Jarvis could grow to do, so the surface
+    is never blank. Each entry is annotated with a status the UI reads directly:
+    ``ready`` (acquired + live provider), ``acquired`` (held but not live now),
+    ``proposed``/``rejected``, or ``available`` (catalog-only, not yet grown).
+    """
+    ready_names = set(jarvis.usable_capabilities())
+    held = {
+        name: status for name, status in getattr(summary, "capabilities", ())
+    }
+    ready: list[Reply] = []
+    for cap in catalog():
+        name = cap.name
+        if name in ready_names:
+            status = "ready"
+        elif name in held:
+            status = held[name].lower()
+        else:
+            status = "available"
+        ready.append(
+            {
+                "name": name,
+                "description": cap.description,
+                "requirement": cap.requirement,
+                "status": status,
+            }
+        )
+    return ready
 
 
 def _evidence_json(evidence: Evidence) -> Reply:
