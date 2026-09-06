@@ -89,7 +89,7 @@ class TestTheDeliberateConsult:
         assert belief.evidence[0].source is EvidenceSource.EXTERNAL_SOURCE
         # One external piece grounds the belief only thinly: positive but tentative.
         assert 0.0 < belief.confidence.value < 0.5
-        assert "Tentative" in episode.result or "insufficient" in (episode.result or "")
+        assert "Tentative" in (episode.result or "") or "insufficient" in (episode.result or "")
 
     def test_a_none_consult_is_an_honest_empty_consult(self) -> None:
         source = _Source(None)

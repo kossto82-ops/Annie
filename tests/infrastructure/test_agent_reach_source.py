@@ -124,7 +124,7 @@ class TestFactory:
     ) -> None:
         monkeypatch.setattr(
             "jarvis.infrastructure.agent_reach_source.importlib.util.find_spec",
-            lambda _name: None,
+            lambda _name: None,  # type: ignore[arg-type]
         )
         assert build_agent_reach_source() is None
 

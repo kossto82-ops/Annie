@@ -8,7 +8,7 @@ documents and describes what it found; it never decides anything (D6).
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 import pytest
 
@@ -28,7 +28,9 @@ _RESULTS = {
 }
 
 
-def _json_transport(payload: object) -> object:
+def _json_transport(
+    payload: object,
+) -> Callable[[str, Mapping[str, str], bytes, float], bytes]:
     encoded = json.dumps(payload).encode("utf-8")
 
     def transport(

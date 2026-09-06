@@ -8,6 +8,8 @@ fabricated claim. Both are opt-in and offline-testable.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from jarvis import Jarvis
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.services.knowledge_source import KnowledgeSource
@@ -42,7 +44,7 @@ class _Compare:
         self.asked: list[str] = []
 
     def compare(
-        self, prompt: str, *, models: list[str] | None = None
+        self, prompt: str, *, models: Sequence[str] | None = None
     ) -> tuple[ModelRun, ...]:
         self.asked.append(prompt)
         if self.fail:

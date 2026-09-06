@@ -61,7 +61,8 @@ class TestScout:
         ):
             assert expected in names, f"catalog missing {expected!r}"
         for entry in entries:
-            assert entry.description and entry.requirement, f"{entry.name!r} lacks purpose/requirement"
+            has_purpose = entry.description and entry.requirement
+            assert has_purpose, f"{entry.name!r} lacks purpose/requirement"
 
     def test_a_web_need_proposes_the_web_capability(self) -> None:
         need = CapabilityNeed(

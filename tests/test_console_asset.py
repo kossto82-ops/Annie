@@ -9,6 +9,7 @@ sphere hook — the analogue of the public-surface guard for the one browser ass
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from jarvis.interface import command_center
 
@@ -124,17 +125,21 @@ def test_the_snapshot_surfaces_the_full_capability_catalog() -> None:
     annotated with status (default 'available') so the Capacidades panel is never
     empty. Ready/held statuses come from live state, not hardcoded here.
     """
-    from jarvis.jarvis import Jarvis
     from jarvis.interface.command_center import snapshot
+    from jarvis.jarvis import Jarvis
 
-    caps = snapshot(Jarvis())["capabilities"]
+    caps = cast(list[dict[str, str]], snapshot(Jarvis())["capabilities"])
     assert len(caps) >= 12, "the catalog must expose every known capability"
     names = {c["name"] for c in caps}
     for expected in ("search the web", "manage calendar", "perceive speech", "manage tasks"):
         assert expected in names, f"catalog missing {expected!r}"
     for c in caps:
-        assert c["description"] and c["requirement"], f"catalog entry {c['name']!r} lacks purpose/requirement"
-        assert c["status"] in {"ready", "acquired", "proposed", "rejected", "available"}, c["status"]
+        has_purpose = c["description"] and c["requirement"]
+        assert has_purpose, f"catalog entry {c['name']!r} lacks purpose/requirement"
+        status_ok = c["status"] in {
+            "ready", "acquired", "proposed", "rejected", "available",
+        }
+        assert status_ok, c["status"]
 
 
 def test_the_inline_script_has_no_broken_single_quoted_strings() -> None:

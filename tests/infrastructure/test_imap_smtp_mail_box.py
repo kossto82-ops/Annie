@@ -42,17 +42,20 @@ class _FakeIMAP:
     def login(self, email: str, password: str) -> None:
         pass
 
-    def select(self, folder: str) -> tuple[str, list]:
+    def select(self, folder: str) -> tuple[str, list[str]]:
         self.folder = folder
         return ("OK", [folder])
 
     def search(self, charset: str | None, criteria: str) -> tuple[str, list[bytes]]:
         return ("OK", [b"1 2 3"])
 
-    def fetch(self, number: bytes, parts: str) -> tuple[str, list]:
+    def fetch(
+        self, number: str | bytes, parts: str
+    ) -> tuple[str, list[tuple[bytes | str, bytes]]]:
+        label = number.decode() if isinstance(number, bytes) else number
         if "BODY.PEEK[]" in parts:
             return ("OK", [(number, _full_email())])
-        if number in ("1", "2", "3"):
+        if label in ("1", "2", "3"):
             return ("OK", [(number, _header_only())])
         return ("OK", [])
 
@@ -105,7 +108,7 @@ class TestListRead:
         assert imap.logged_out
 
     def test_read_message_returns_body_and_content_type_parse(self) -> None:
-        mailbox, imap, _ = _build()
+        mailbox, _, _ = _build()
         msg = mailbox.read_message("2")
         assert msg.subject == "Full message"
         assert "The body text." in msg.body
@@ -116,16 +119,18 @@ class TestListRead:
         mailbox, _, _ = _build()
 
         class Empty:
-            def login(self, e, p):
+            def login(self, e: str, p: str) -> None:
                 pass
 
-            def select(self, folder):
+            def select(self, folder: str) -> tuple[str, list[str]]:
                 return ("OK", [folder])
 
-            def fetch(self, number, parts):
+            def fetch(
+                self, number: str, parts: str
+            ) -> tuple[str, list[tuple[bytes, bytes]]]:
                 return ("BAD", [])
 
-            def logout(self):
+            def logout(self) -> None:
                 pass
 
         mailbox._imap_connect = lambda: Empty()  # type: ignore[assignment]
@@ -158,5 +163,5 @@ class TestBuild:
             }
         )
         assert source is not None
-        assert source._imap_host == "imap.example.com"
-        assert source._smtp_host == "imap.example.com"  # defaults to imap host
+        assert source._imap_host == "imap.example.com"  # type: ignore[reportPrivateUsage]
+        assert source._smtp_host == "imap.example.com"  # type: ignore[reportPrivateUsage]

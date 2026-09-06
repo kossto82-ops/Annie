@@ -35,7 +35,10 @@ class KnowledgeSource(Protocol):
     the core still derives the belief's confidence from it (D6).
     """
 
-    kind: str
+    @property
+    def kind(self) -> str:
+        """A short human label for the edge (e.g. ``"deep research"``)."""
+        ...
 
     def gather(self, question: str) -> Evidence | None:
         """Return one piece of candidate evidence about ``question``, or None.

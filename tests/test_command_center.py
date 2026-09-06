@@ -8,7 +8,7 @@ it is exercised directly here. The socket in `server.py` only moves these bytes.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -577,7 +577,9 @@ class TestResearch:
 class _FakeModelComparator:
     """A comparator holding two stub models, one of which can fail."""
 
-    def compare(self, prompt: str, *, models=None):  # type: ignore[no-untyped-def]
+    def compare(
+        self, prompt: str, *, models: Sequence[str] | None = None
+    ) -> tuple[ModelRun, ...]:
         if "fail" in prompt:
             raise RuntimeError("model unreachable")
         runs = [

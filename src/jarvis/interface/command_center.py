@@ -34,8 +34,8 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.services.capability_scout import catalog
+from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
