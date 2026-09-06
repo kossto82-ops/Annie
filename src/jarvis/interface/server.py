@@ -11,6 +11,7 @@ persistent memory under a home directory so the companion remembers across resta
 from __future__ import annotations
 
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -24,7 +25,9 @@ from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.services.model_compare import ModelComparator
 from jarvis.infrastructure.agent_reach_source import build_web_source, llm_search_from_model
 from jarvis.infrastructure.calendar_store import build_calendar_store
+from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.env_settings import settings_from_env
+from jarvis.infrastructure.filesystem_tool import FileSystemTool
 from jarvis.infrastructure.google_calendar import build_google_calendar_store
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
@@ -115,10 +118,10 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     switched at runtime from the command center.
 
     The edge capabilities (web, deep research, model comparison, email, delegation,
-    notes) are wired from the environment when configured and stay ``None`` otherwise,
-    so the same Jarvis works fully offline. ``can_do`` reflects which are live. Every
-    capability with a live provider at build time is provisioned as acquired, so the
-    assistant starts out owning what it was configured with (D37).
+    notes, documents) are wired from the environment when configured and stay ``None``
+    otherwise, so the same Jarvis works fully offline. ``can_do`` reflects which are
+    live. Every capability with a live provider at build time is provisioned as
+    acquired, so the assistant starts out owning what it was configured with (D37).
     """
     settings = settings_from_env()
     perception: PerceptionSource = perceiver_from_settings(settings)
@@ -126,6 +129,9 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     reasoner = reasoner_from_settings(settings)
     external_source, research_source, model_compare, mail_source, task_agent, notes_store = (
         _build_edge(settings)
+    )
+    documents_store = build_document_store(
+        Path(home) / "docs" if home is not None else None
     )
     if home is None:
         jarvis = Jarvis(
@@ -139,6 +145,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             mail_source=mail_source,
             task_agent=task_agent,
             notes_store=notes_store,
+            documents_store=documents_store,
         )
     else:
         base = Path(home)
@@ -164,6 +171,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             mail_source=mail_source,
             task_agent=task_agent,
             notes_store=notes_store,
+            documents_store=documents_store,
         )
     jarvis.set_voice(renderer_from_settings(settings))  # reply in the user's language
     # The ear (the input mirror of the mouth): the command center's browser does
@@ -192,6 +200,18 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     local_tasks = build_task_scheduler()
     if local_tasks is not None:
         jarvis.set_task_scheduler(local_tasks)
+    # Project folders the companion shared: ``JARVIS_PROJECT_ROOTS`` is a semicolon-
+    # separated list of windows-roots. Each becomes a bounded FileSystemTool (one per
+    # folder, named ``project:<foldername>``) that can read/write/list text files inside
+    # its root only, and flips the "edit project files" capability live. Everything runs
+    # through the normal tool policy (WRITE is allowed under the tool-approval tiering;
+    # nothing stronger than external action is being granted).
+    project_roots = [r for r in os.environ.get("JARVIS_PROJECT_ROOTS", "").split(";") if r.strip()]
+    for root in project_roots:
+        root_path = Path(root).expanduser()
+        jarvis.register_tool(FileSystemTool(root_path, name=f"project:{root_path.name}"))
+    if project_roots:
+        jarvis.set_project_files(True)
     # Provision every capability whose provider is wired and available at boot, so a
     # freshly configured assistant starts out owning what it was set up with and the
     # command center keeps showing it as ready (D37). The stores persist those

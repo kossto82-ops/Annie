@@ -75,6 +75,18 @@ class TestSnapshot:
         assert isinstance(state["ready"], list)
         assert "search the web" in state["ready"]
 
+    def test_documents_are_listed_offline_as_empty(self) -> None:
+        state = snapshot(Jarvis())
+        assert state["documents"] == []
+
+    def test_documents_are_listed_when_a_store_is_wired(self) -> None:
+        store = _FakeDocumentStore()
+        store.write_document("plan.md", b"# plan")
+        state = snapshot(
+            Jarvis(documents_store=store)  # type: ignore[arg-type]
+        )
+        assert state["documents"] == ["plan.md"]
+
 
 class TestSay:
     def test_it_replies_without_grounding_ordinary_conversation(self) -> None:
@@ -981,6 +993,42 @@ def _tasks_able_jarvis() -> Jarvis:
     return jarvis
 
 
+class _FakeDocumentStore:
+    """An in-memory documents store, for tests that never touch the disk."""
+
+    def __init__(self) -> None:
+        self._docs: dict[str, bytes] = {}
+
+    def list_documents(self) -> tuple[str, ...]:
+        return tuple(sorted(self._docs))
+
+    def read_document(self, name: str) -> bytes:
+        if name not in self._docs:
+            raise KeyError(name)
+        return self._docs[name]
+
+    def write_document(self, name: str, content: bytes) -> None:
+        self._docs[name] = content
+
+    def remove_document(self, name: str) -> None:
+        self._docs.pop(name, None)
+
+
+def _documents_able_jarvis() -> Jarvis:
+    """A Jarvis that has a wired documents store and has earned the capability."""
+    jarvis = Jarvis(documents_store=_FakeDocumentStore())  # type: ignore[arg-type]
+    jarvis.remember_capability(
+        Capability(
+            name="work with files",
+            description="accept and keep files, and read their contents",
+            requirement="a bounded documents store",
+            provenance="test harness",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )
+    return jarvis
+
+
 def _event_start(offset_hours: int = 1) -> datetime:
     return datetime(2026, 9, 1, 10, 0, tzinfo=UTC) + timedelta(hours=offset_hours)
 
@@ -1203,6 +1251,120 @@ class TestTasksCommand:
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         jarvis = _tasks_able_jarvis()
         result = handle(jarvis, "tasks", {"action": "get", "id": "missing"})
+        assert isinstance(result["reply"], str)
+        assert "couldn't" in result["reply"]
+
+
+class TestDocumentsCommand:
+    def test_list_returns_kept_documents(self) -> None:
+        jarvis = _documents_able_jarvis()
+        handle(jarvis, "documents", {
+            "action": "save", "name": "plan.md", "content": "# plan",
+        })
+        handle(jarvis, "documents", {
+            "action": "save", "name": "notes.txt", "content": "hello",
+        })
+        result = handle(jarvis, "documents", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "plan.md" in result["reply"]
+        assert "notes.txt" in result["reply"]
+        assert result["count"] == 2
+        state = cast("dict[str, object]", result["state"])
+        assert state["documents"] == ["notes.txt", "plan.md"]
+
+    def test_list_without_a_store_is_a_clear_message(self) -> None:
+        result = handle(Jarvis(), "documents", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "documents capability" in result["reply"]
+
+    def test_list_wired_but_not_earned_is_honest(self) -> None:
+        jarvis = Jarvis(documents_store=_FakeDocumentStore())  # type: ignore[arg-type]
+        result = handle(jarvis, "documents", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "capability" in result["reply"]
+
+    def test_save_keeps_utf8_text(self) -> None:
+        jarvis = _documents_able_jarvis()
+        result = handle(jarvis, "documents", {
+            "action": "save", "name": "hola.txt", "content": "hola\nmundo",
+        })
+        assert isinstance(result["reply"], str)
+        assert "hola.txt" in result["reply"]
+        assert jarvis.read_document("hola.txt") == b"hola\nmundo"
+
+    def test_save_binary_keeps_exact_bytes_via_base64(self) -> None:
+        jarvis = _documents_able_jarvis()
+        handle(jarvis, "documents", {
+            "action": "save", "name": "blob.bin",
+            "content": "AAH/", "encoding": "b64",
+        })
+        assert jarvis.read_document("blob.bin") == b"\x00\x01\xff"
+
+    def test_save_invalid_base64_is_a_clear_message(self) -> None:
+        result = handle(_documents_able_jarvis(), "documents", {
+            "action": "save", "name": "bad.bin",
+            "content": "!!!", "encoding": "b64",
+        })
+        assert isinstance(result["reply"], str)
+        assert "base64" in result["reply"]
+
+    def test_save_normalises_a_browser_path_to_its_basename(self) -> None:
+        jarvis = _documents_able_jarvis()
+        result = handle(jarvis, "documents", {
+            "action": "save", "name": "C:\\Users\\me\\..\\plan.md", "content": "x",
+        })
+        assert isinstance(result["reply"], str)
+        assert jarvis.read_document("plan.md") == b"x"
+
+    def test_save_requires_name_and_content(self) -> None:
+        jarvis = _documents_able_jarvis()
+        no_name = handle(jarvis, "documents", {"action": "save", "content": "x"})
+        no_name_reply = cast(str, no_name["reply"])
+        assert "name" in no_name_reply.lower()
+        no_content = handle(jarvis, "documents", {"action": "save", "name": "a.txt"})
+        no_content_reply = cast(str, no_content["reply"])
+        assert "content" in no_content_reply.lower()
+
+    def test_read_returns_text_content(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("readme.md", "# Lean\n\nnotes")
+        result = handle(jarvis, "documents", {"action": "read", "name": "readme.md"})
+        assert isinstance(result["reply"], str)
+        assert "Lean" in result["reply"]
+
+    def test_read_truncates_very_long_text_for_the_surface(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("long.txt", "x" * 9000)
+        result = handle(jarvis, "documents", {"action": "read", "name": "long.txt"})
+        assert isinstance(result["reply"], str)
+        assert "chars total" in result["reply"]
+        assert len(result["reply"]) < 4000
+
+    def test_read_reports_a_binary_document_as_base64(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("blob.bin", b"\x00\x01\xff")
+        result = handle(jarvis, "documents", {"action": "read", "name": "blob.bin"})
+        assert isinstance(result["reply"], str)
+        assert "binary" in result["reply"]
+        assert result["encoding"] == "b64"
+        assert result["content"] == "AAH/"
+
+    def test_remove_deletes_a_document(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("old.txt", b"bye")
+        result = handle(jarvis, "documents", {"action": "remove", "name": "old.txt"})
+        assert isinstance(result["reply"], str)
+        assert "Removed" in result["reply"]
+        assert jarvis.list_documents() == ()
+
+    def test_missing_action_is_guided(self) -> None:
+        result = handle(_documents_able_jarvis(), "documents", {})
+        assert isinstance(result["reply"], str)
+        assert "documents" in result["reply"]
+
+    def test_failure_returns_a_message_not_a_crash(self) -> None:
+        jarvis = _documents_able_jarvis()
+        result = handle(jarvis, "documents", {"action": "read", "name": "missing"})
         assert isinstance(result["reply"], str)
         assert "couldn't" in result["reply"]
 

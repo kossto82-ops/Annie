@@ -96,6 +96,24 @@ _TEMPLATES: tuple[_Template, ...] = (
         cues=frozenset({"note", "notes", "todo", "reminder", "nota", "apunte", "tarea"}),
     ),
     _Template(
+        name="work with files",
+        description="accept and keep files you give me, and read their contents back",
+        requirement="a bounded documents store",
+        cues=frozenset(
+            {"file", "files", "document", "upload", "attach", "attachment",
+             "archivo", "adjunto", "documento", "fichero"}
+        ),
+    ),
+    _Template(
+        name="edit project files",
+        description="read and edit the files inside the project folders you shared",
+        requirement="a shared project folder backed by a filesystem tool",
+        cues=frozenset(
+            {"project", "folder", "repo", "code", "source", "carpeta", "proyecto",
+             "directorio"}
+        ),
+    ),
+    _Template(
         name="manage calendar",
         description="see and schedule calendar events",
         requirement="a CalDAV (or local) calendar",

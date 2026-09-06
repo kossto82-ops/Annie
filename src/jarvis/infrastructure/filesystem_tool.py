@@ -1,10 +1,11 @@
 """FileSystemTool: read/write access to local files (Vision §34, 06_TOOLS_AGENCY).
 
-The filesystem client at the edge of Jarvis: it lets Jarvis read and write files the
-way the Internet capability lets it fetch documents -- a *retrieval/act* tool, never
-a decision-maker. The actual disk access is an injectable ``io`` callable so offline
-tests run deterministically without touching disk (D8). ``root`` bounds where the
-tool may operate, so a destructive (WRITE) act can never escape its sandbox.
+The filesystem client at the edge of Jarvis: it lets Jarvis read, write and list
+files the way the Internet capability lets it fetch documents -- a *retrieval/act*
+tool, never a decision-maker. The actual disk access is an injectable ``io``
+callable so offline tests run deterministically without touching disk (D8). ``root``
+bounds where the tool may operate, so a destructive (WRITE) act can never escape its
+sandbox.
 """
 
 from __future__ import annotations
@@ -18,34 +19,40 @@ from jarvis.domain.value_objects.tool_spec import ToolSpec
 
 
 class FileSystemTool:
-    """Reads and writes text files under a bounded ``root`` directory."""
-
-    spec = ToolSpec(
-        name="filesystem",
-        description="read and write local text files under a bounded directory",
-        args={
-            "operation": "read or write",
-            "path": "path relative to the tool root",
-            "content": "content to write (write only)",
-        },
-        permission=PermissionLevel.WRITE,
-    )
+    """Reads, writes and lists text files under a bounded ``root`` directory."""
 
     def __init__(
         self,
         root: str | Path,
+        *,
+        name: str = "filesystem",
         io: Callable[[str, str, str, str], str] | None = None,
     ) -> None:
         """Bind the tool to a sandbox ``root`` with an injectable ``io`` driver.
 
-        ``io(operation, path, content, "")`` returns the file text for ``read`` or
-        the empty string for a successful ``write``. Defaults to real disk access
-        through :func:`pathlib`; injecting a fake keeps tests offline (D8).
+        ``io(operation, path, content, "")`` returns the file text for ``read``,
+        the empty string for a successful ``write``, and a newline-joined listing
+        of relative paths (directories marked with a trailing ``/``) for ``list``.
+        ``name`` gives the tool a unique registry id (e.g. ``project:myapp``) when
+        several roots are wired. Defaults to real disk access through
+        :func:`pathlib`; injecting a fake keeps tests offline (D8).
         """
+        self.spec = ToolSpec(
+            name=name,
+            description="read, write and list local text files under a bounded directory",
+            args={
+                "operation": "read, write or list",
+                "path": "path relative to the tool root",
+                "content": "content to write (write only)",
+            },
+            permission=PermissionLevel.WRITE,
+        )
         self._root = Path(root).resolve()
         self._io = io or self._default_io
 
     def _default_io(self, operation: str, path: str, content: str, _: str) -> str:
+        if operation == "list":
+            return self._list_tree()
         resolved = (self._root / path).resolve()
         if not resolved.is_relative_to(self._root):
             raise ValueError("path escapes the tool sandbox")
@@ -55,19 +62,29 @@ class FileSystemTool:
         resolved.write_text(content, encoding="utf-8")
         return ""
 
+    def _list_tree(self) -> str:
+        """Relative paths under ``root``, sorted, directories marked with a '/'."""
+        lines: list[str] = []
+        for child in sorted(self._root.rglob("*"), key=lambda p: p.as_posix()):
+            lines.append(
+                child.relative_to(self._root).as_posix()
+                + ("/" if child.is_dir() else "")
+            )
+        return "\n".join(lines)
+
     def run(self, arguments: dict[str, str]) -> ToolCallResult:
         operation = arguments.get("operation", "read")
         path = arguments.get("path", "")
-        if operation not in ("read", "write"):
+        if operation not in ("read", "write", "list"):
             # A typo ("Read", "append") must never silently become a write.
             return ToolCallResult(
                 ok=False,
                 error=(
-                    "filesystem requires operation 'read' or 'write', "
+                    "filesystem requires operation 'read', 'write' or 'list', "
                     f"got {operation!r}"
                 ),
             )
-        if not path:
+        if operation != "list" and not path:
             return ToolCallResult(ok=False, error="filesystem requires a path")
         try:
             value = self._io(operation, path, arguments.get("content", ""), "")

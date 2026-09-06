@@ -33,6 +33,7 @@ from jarvis.domain.repositories.capability_repository import CapabilityRepositor
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
 from jarvis.domain.retrieval.calendar_store import CalendarStore
+from jarvis.domain.retrieval.document_store import DocumentStore
 from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
 from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
@@ -102,11 +103,13 @@ from jarvis.infrastructure.agent_reach_source import (
 )
 from jarvis.infrastructure.capability_registry import (
     CapabilityRegistry,
+    ProjectFilesCapability,
     ReasonerCapability,
     SemanticRecallCapability,
     SpeechPerceptionCapability,
     build_default_registry,
 )
+from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
@@ -199,6 +202,7 @@ class Jarvis:
         speech_perception: SpeechPerceptionSource | None = None,
         capability_providers: CapabilityRegistry | None = None,
         tool_policy: ToolPolicy | None = None,
+        documents_store: DocumentStore | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -270,6 +274,12 @@ class Jarvis:
         # stays in the core (D6), and mutating them is a reversible action gated
         # in the caller.
         self._notes_store: NotesStore | None = notes_store
+        # Documents (project files): a bounded store that lists/reads/writes and
+        # removes the files the companion shares, kept by name. None by default ->
+        # offline. It only keeps and returns bytes with provenance; reasoning over
+        # documents stays in the core (D6), and mutating them is a reversible
+        # action gated in the caller.
+        self._documents_store: DocumentStore | None = documents_store
         # Calendar (Odysseus #6): a local calendar that lists/searches/creates/updates
         # and deletes events on request. None by default -> offline. It only keeps
         # and returns plain calendar-event content with provenance; reasoning over
@@ -286,6 +296,9 @@ class Jarvis:
         # by a real provider. When no registry is given, the wired edge sources back
         # the capability names by default; None with no source -> offline.
         self._external_providers_auto = capability_providers is None
+        # The "edit project files" seam: always exists so `set_project_files` can flip
+        # it, and is only *registered* (and thus live) when the auto registry is used.
+        self._project_files_capability = ProjectFilesCapability()
         if capability_providers is not None:
             self._capability_providers: CapabilityRegistry | None = capability_providers
             self._reasoner_capability = None
@@ -309,6 +322,7 @@ class Jarvis:
                 notes_store,
                 calendar_store,
                 task_scheduler,
+                documents_store,
             )
         self._speech_perception: SpeechPerceptionSource | None = speech_perception
         if speech_perception is not None and self._speech_capability is not None:
@@ -588,6 +602,7 @@ class Jarvis:
             self._notes_store,
             self._calendar_store,
             self._task_scheduler,
+            self._documents_store,
         )
 
     def _build_auto_registry(
@@ -600,6 +615,7 @@ class Jarvis:
         notes: NotesStore | None = None,
         calendar: CalendarStore | None = None,
         tasks: TaskScheduler | None = None,
+        documents: DocumentStore | None = None,
     ) -> CapabilityRegistry:
         """The default edge registry: the wired sources + Jarvis's reasoner seams.
 
@@ -607,8 +623,9 @@ class Jarvis:
         is actually wired: the ExternalSource (web), the research source (deep
         research), the model comparator (blind comparison), the mailbox (email),
         the task agent (delegation), the notes store (manage notes), the calendar
-        store (manage calendar), the task scheduler (manage tasks), the reasoner,
-        meaning-recall, and speech-input.
+        store (manage calendar), the task scheduler (manage tasks), the documents
+        store (work with files), a live project pane (edit project files), the
+        reasoner, meaning-recall, and speech-input.
         """
         return build_default_registry(
             source,
@@ -622,6 +639,8 @@ class Jarvis:
             calendar_store=calendar,
             task_scheduler=tasks,
             speech=self._speech_capability,
+            documents_store=documents,
+            project_files=self._project_files_capability,
         )
 
     def read_external(self, url: str) -> RetrievedDocument:
@@ -845,6 +864,67 @@ class Jarvis:
         if self._notes_store is None:
             raise RuntimeError("no notes capability configured; set_notes_store")
         return self._notes_store.search_notes(query, limit=limit)
+
+    # -- Documents (work with files) -----------------------------------------
+
+    @property
+    def documents_store(self) -> DocumentStore | None:
+        """The documents capability, or ``None`` when offline (project files).
+
+        Read-only so a surface can report whether Jarvis can accept the files the
+        companion shares. A bounded store only keeps and returns bytes by name; it
+        never reasons (D6).
+        """
+        return self._documents_store
+
+    def set_documents_store(self, store: DocumentStore | None) -> None:
+        """Wire (or clear) the documents capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline to files. Storing or
+        reading a document is a reversible, local side-effect, so wiring refreshes
+        ``can_do`` without asking first.
+        """
+        self._documents_store = store
+        if self._external_providers_auto:
+            self._refresh_providers()
+
+    def list_documents(self) -> tuple[str, ...]:
+        """The names of every document Jarvis holds, or raise when offline."""
+        if self._documents_store is None:
+            raise RuntimeError("no documents capability configured; set_documents_store")
+        return self._documents_store.list_documents()
+
+    def read_document(self, name: str) -> bytes:
+        """The raw bytes of the document ``name``, or raise when offline."""
+        if self._documents_store is None:
+            raise RuntimeError("no documents capability configured; set_documents_store")
+        return self._documents_store.read_document(name)
+
+    def write_document(self, name: str, content: bytes | str) -> None:
+        """Store (or replace) the document ``name`` through the documents capability.
+
+        ``content`` may be text (encoded utf-8) or raw bytes -- any file type is
+        kept intact. A reversible, local side-effect gated in the caller.
+        """
+        if self._documents_store is None:
+            raise RuntimeError("no documents capability configured; set_documents_store")
+        payload = content if isinstance(content, bytes) else content.encode("utf-8")
+        self._documents_store.write_document(name, payload)
+
+    def remove_document(self, name: str) -> None:
+        """Delete the document ``name`` through the documents capability."""
+        if self._documents_store is None:
+            raise RuntimeError("no documents capability configured; set_documents_store")
+        self._documents_store.remove_document(name)
+
+    def set_project_files(self, available: bool) -> None:
+        """Flip whether project folders are wired for file editing right now.
+
+        The composition root registers one bounded :class:`FileSystemTool` per
+        shared project folder and marks the seam live, so ``can_do("edit project
+        files")`` reflects reality (D37).
+        """
+        self._project_files_capability.set_live(available)
 
     # -- Calendar (Odysseus #6) -----------------------------------------------
 
@@ -1465,9 +1545,9 @@ class Jarvis:
 
         Wires every store -- beliefs, episodes, companion model, action learning,
         reversibility, goal reachability, sub-goal links, capability acquisitions
-        (Odysseus), recognised capability needs and reflective-cycle
-        refutations -- plus the decision-provenance trace to files under
-        ``directory``, so a single call gives full continuity across restarts
+        (Odysseus), recognised capability needs, reflective-cycle refutations and
+        the companion's documents -- plus the decision-provenance trace to files
+        under ``directory``, so a single call gives full continuity across restarts
         (Vision §3, §21, §26). It composes the JSON stores and the JSONL trace log.
         """
         base = Path(directory)
@@ -1501,6 +1581,7 @@ class Jarvis:
             external_source=source,
             research_source=research,
             speech_perception=EchoSpeechPerception(),
+            documents_store=build_document_store(base / "docs"),
         )
 
     def think(

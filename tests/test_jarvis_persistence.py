@@ -178,3 +178,24 @@ class TestPersistentFactory:
         # The live ear keeps an acquired capability usable after the "restart".
         assert second.can_do("perceive speech")
         assert "perceive speech" in second.usable_capabilities()
+
+    def test_command_center_keeps_documents_under_home(self, tmp_path: Path) -> None:
+        # The documents store the composition root wires lives under home/docs, so
+        # shared files survive restarts -- and the capability provisions at boot.
+        from jarvis.interface.server import create_jarvis
+
+        first = create_jarvis(home=tmp_path)
+        assert first.documents_store is not None
+        assert first.can_do("work with files")
+        first.write_document("plan.md", "# follow the plan")
+
+        second = create_jarvis(home=tmp_path)
+        assert second.list_documents() == ("plan.md",)
+        assert second.read_document("plan.md") == b"# follow the plan"
+
+    def test_command_center_without_home_keeps_documents_offline(self) -> None:
+        from jarvis.interface.server import create_jarvis
+
+        jarvis = create_jarvis(home=None)
+        assert jarvis.documents_store is None
+        assert not jarvis.can_do("work with files")

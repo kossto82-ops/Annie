@@ -72,8 +72,26 @@ class TestFileSystemTool:
         tool = FileSystemTool(root="C:\\work", io=io)
         result = tool.run({"operation": "Read", "path": "a.txt", "content": "boom"})
         assert result.ok is False
-        assert "'read' or 'write'" in result.error
+        assert "read', 'write' or 'list'" in result.error
         assert wrote == [], "a typo must never silently become a write"
+
+    def test_lists_tree_through_the_injected_io(self) -> None:
+        calls: list[tuple[str, str]] = []
+
+        def io(operation: str, path: str, content: str, _: str) -> str:
+            calls.append((operation, path))
+            return "src/one.py\nutils/\nutils/two.py"
+
+        tool = FileSystemTool(root="C:\\work", io=io)
+        result = tool.run({"operation": "list"})
+        assert result.ok is True
+        assert result.value == "src/one.py\nutils/\nutils/two.py"
+        assert calls == [("list", "")]
+
+    def test_a_named_tool_carries_its_registry_id(self) -> None:
+        tool = FileSystemTool(root="C:\\work", name="project:myapp", io=self._null_io)
+        assert tool.spec.name == "project:myapp"
+        assert tool.spec.permission is PermissionLevel.WRITE
 
     @staticmethod
     def _null_io(operation: str, path: str, content: str, _: str) -> str:
@@ -110,3 +128,13 @@ class TestFileSystemTool:
         result = tool.run({"operation": "read", "path": "hello.txt"})
         assert result.ok is True
         assert result.value == "hi"
+
+    def test_lists_a_real_tree_with_the_default_io(self, tmp_path: Path) -> None:
+        root = tmp_path / "root"
+        (root / "src").mkdir(parents=True)
+        (root / "src" / "one.py").write_text("x", encoding="utf-8")
+        (root / "notes.md").write_text("hi", encoding="utf-8")
+        tool = FileSystemTool(root=root)
+        result = tool.run({"operation": "list"})
+        assert result.ok is True
+        assert result.value == "notes.md\nsrc/\nsrc/one.py"

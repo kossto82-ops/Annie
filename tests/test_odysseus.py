@@ -10,6 +10,8 @@ evaluator derives a stance (suggest / ask first / withhold) from that evidence.
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from jarvis import Jarvis
@@ -17,11 +19,13 @@ from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.services.capability_scout import catalog, scout
+from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.capability_registry import (
     ExternalSourceCapability,
+    ProjectFilesCapability,
     StaticCapabilityRegistry,
     build_default_registry,
 )
@@ -583,3 +587,78 @@ class TestProvisionLiveCapabilities:
         jarvis = Jarvis(capability_providers=registry)
         assert jarvis.provision_live_capabilities() == ()
         assert jarvis.capabilities() == ()
+
+
+class _FakeDocumentsStore:
+    """An in-memory documents store, for tests that never touch the disk."""
+
+    def __init__(self) -> None:
+        self.docs: dict[str, bytes] = {}
+
+    def list_documents(self) -> tuple[str, ...]:
+        return tuple(sorted(self.docs))
+
+    def read_document(self, name: str) -> bytes:
+        if name not in self.docs:
+            raise KeyError(name)
+        return self.docs[name]
+
+    def write_document(self, name: str, content: bytes) -> None:
+        self.docs[name] = content
+
+    def remove_document(self, name: str) -> None:
+        self.docs.pop(name, None)
+
+
+class TestFileEdgeCapabilities:
+    def test_a_wired_documents_store_provisions_work_with_files(self) -> None:
+        jarvis = Jarvis(documents_store=_FakeDocumentsStore())  # type: ignore[arg-type]
+        provisioned = jarvis.provision_live_capabilities()
+        assert tuple(c.name for c in provisioned) == ("work with files",)
+        assert jarvis.can_do("work with files")
+        assert "work with files" in jarvis.usable_capabilities()
+
+    def test_project_files_start_closed_in_the_default_registry(self) -> None:
+        registry = build_default_registry(
+            None, project_files=ProjectFilesCapability(),
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        _hold_project_files(jarvis)
+        assert not jarvis.can_do("edit project files")
+        provider = cast("ProjectFilesCapability", registry.provider_for("edit project files"))
+        provider.set_live(True)
+        assert jarvis.can_do("edit project files")
+
+    def test_set_project_files_flips_the_runtime_seam(self) -> None:
+        jarvis = Jarvis(documents_store=_FakeDocumentsStore())  # type: ignore[arg-type]
+        _hold_project_files(jarvis)
+        assert not jarvis.can_do("edit project files")
+        jarvis.set_project_files(True)
+        assert jarvis.can_do("edit project files")
+        assert "edit project files" in jarvis.usable_capabilities()
+        jarvis.set_project_files(False)
+        assert not jarvis.can_do("edit project files")
+
+    def test_the_documents_capability_is_backed_by_the_documents_store(self) -> None:
+        from jarvis.infrastructure.capability_registry import DocumentsCapability
+
+        store = _FakeDocumentsStore()
+        assert DocumentsCapability(store).is_available() is True
+
+    def test_the_catalog_knows_the_file_and_project_capabilities(self) -> None:
+        names = {c.name for c in catalog()}
+        assert "work with files" in names
+        assert "edit project files" in names
+
+
+def _hold_project_files(jarvis: Jarvis) -> None:
+    """Hold 'edit project files' as acquired without the scout's fuzzy matching."""
+    jarvis.remember_capability(
+        Capability(
+            name="edit project files",
+            description="read and edit the files inside the shared project folders",
+            requirement="a shared project folder backed by a filesystem tool",
+            provenance="test harness",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )

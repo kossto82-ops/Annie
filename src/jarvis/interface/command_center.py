@@ -15,6 +15,7 @@ The socket lives in :mod:`jarvis.interface.server` and only carries these bytes.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -138,7 +139,21 @@ def snapshot(jarvis: Jarvis) -> Reply:
             }
             for spec in jarvis.tool_channels()
         ],
+        "documents": _document_names(jarvis),
     }
+
+
+def _document_names(jarvis: Jarvis, limit: int = 200) -> list[str]:
+    """The names of every document Jarvis keeps, or ``[]`` when offline.
+
+    The surface renders the list so the companion can see, open, and re-read the
+    files shared so far. A wired store lists them; offline means no file edge, so
+    the empty list is honest (D8).
+    """
+    store = jarvis.documents_store
+    if store is None:
+        return []
+    return list(store.list_documents())[:limit]
 
 
 def _capability_catalog(jarvis: Jarvis, summary: object) -> list[Reply]:
@@ -1629,6 +1644,123 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
     return {"reply": "Unknown tasks action.", "speak": False}
 
 
+def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Manage the files the companion shares (work-with-files capability).
+
+    Actions: ``list``, ``read``, ``save``, ``remove``. ``save`` takes ``name`` and
+    ``content`` with ``encoding`` ``"text"`` (default) or ``"b64"`` (binary kept
+    intact). ``read`` returns the content as text (truncated for the surface) or
+    base64.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {
+            "reply": "Use documents with action 'list', 'read', 'save', or 'remove'.",
+            "speak": False,
+        }
+    if jarvis.documents_store is None:
+        return {
+            "reply": "No documents capability is wired up right now.",
+            "speak": False,
+        }
+    if not jarvis.can_do("work with files"):
+        return _capability_not_ready(jarvis, "work with files")
+    try:
+        if action == "list":
+            names = jarvis.list_documents()
+            if not names:
+                return {"reply": "No documents yet — share a file.", "speak": False}
+            lines = "".join(f"  - {name}\n" for name in names)
+            return {
+                "reply": f"Documents I'm keeping ({len(names)}):\n\n{lines}",
+                "speak": False,
+                "count": len(names),
+            }
+        if action == "read":
+            name = _document_name(payload.get("name"))
+            if not name:
+                return {"reply": "Provide a document name to read.", "speak": False}
+            raw = jarvis.read_document(name)
+            return _document_read_reply(name, raw)
+        if action == "save":
+            name = _document_name(payload.get("name"))
+            if not name:
+                return {"reply": "Provide a document name.", "speak": False}
+            content = payload.get("content")
+            if content is None:
+                return {"reply": "Provide the document content.", "speak": False}
+            encoding = str(payload.get("encoding", "text")).strip().lower()
+            if encoding == "b64":
+                try:
+                    raw = base64.b64decode(str(content), validate=True)
+                except (ValueError, TypeError):
+                    return {"reply": "content was not valid base64.", "speak": False}
+            else:
+                raw = str(content).encode("utf-8")
+            jarvis.write_document(name, raw)
+            nbytes = len(raw)
+            note = " " if _looks_text(raw) else " (binary)"
+            return {
+                "reply": f"Kept {name} ({nbytes} bytes{note}).",
+                "speak": False,
+                "name": name,
+            }
+        if action == "remove":
+            name = _document_name(payload.get("name"))
+            if not name:
+                return {"reply": "Provide a document name to remove.", "speak": False}
+            jarvis.remove_document(name)
+            return {"reply": f"Removed {name}.", "speak": False}
+    except Exception as error:  # noqa: BLE001 - the store boundary
+        return {"reply": f"I couldn't do that ({type(error).__name__}).", "speak": False}
+    return {"reply": "Unknown documents action.", "speak": False}
+
+
+def _document_name(raw: object) -> str:
+    """A flat, safe document name from arbitrary input (its basename only).
+
+    The store already enforces flat names; this normalises the inevitable
+    browser upload paths (``C:/Users/me/file.txt``, ``../file.txt``) so the
+    sandbox boundary is never near a traversal.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    return Path(text.replace("\\", "/")).name
+
+
+def _looks_text(content: bytes) -> bool:
+    """Best-effort guess of whether ``content`` is text (utf-8-decodable)."""
+    try:
+        content.decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+def _document_read_reply(name: str, raw: bytes) -> Reply:
+    """Render a document read: text when readably textual, base64 when binary.
+
+    Long text is truncated for the surface (the reasoner reads in slices); the full
+    byte length is always reported so the companion knows what was skipped.
+    """
+    if _looks_text(raw):
+        text = raw.decode("utf-8", errors="replace")
+        shown = text[:3000]
+        if len(text) > len(shown):
+            shown = f"{shown}\n\n... ({len(text)} chars total; say 'documents read " \
+                    f"{name}' at the seam for the full stream)"
+        return {"reply": f"{name}:\n\n{shown}", "speak": False, "name": name}
+    return {
+        "reply": f"{name} is binary ({len(raw)} bytes) — I keep it intact but can't "
+        "read its contents yet. Say 'read <name>' at the seam for raw bytes.",
+        "speak": False,
+        "name": name,
+        "encoding": "b64",
+        "content": base64.b64encode(raw).decode("ascii"),
+    }
+
+
 def _ready_marker(jarvis: Jarvis, capability: str) -> str:
     """A concise "(ready)" taste when an acquired capability is live-backed."""
     return " (ready)" if jarvis.can_do(capability) else ""
@@ -1654,6 +1786,7 @@ _COMMANDS: dict[str, Command] = {
     "calendar": _calendar,
     "google_calendar": _google_calendar,
     "tasks": _tasks,
+    "documents": _documents,
 }
 
 

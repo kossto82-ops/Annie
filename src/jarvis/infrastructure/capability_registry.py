@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from jarvis.domain.retrieval.calendar_store import CalendarStore
+from jarvis.domain.retrieval.document_store import DocumentStore
 from jarvis.domain.retrieval.external_source import ExternalSource
 from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.notes_store import NotesStore
@@ -62,6 +63,8 @@ def build_default_registry(
     calendar_store: CalendarStore | None = None,
     task_scheduler: TaskScheduler | None = None,
     speech: CapabilityProvider | None = None,
+    documents_store: DocumentStore | None = None,
+    project_files: CapabilityProvider | None = None,
 ) -> CapabilityRegistry:
     """The built-in edge: the ExternalSource backs the Internet capabilities.
 
@@ -74,7 +77,9 @@ def build_default_registry(
     wired, so ``can_do`` is uniform across every edge (Odysseus, §28). A wired
     mailbox backs the email capability, a wired task agent backs delegation
     (D1-revised: material edge action), a wired calendar store backs the
-    calendar capability, and a wired task scheduler backs the task capability.
+    calendar capability, a wired task scheduler backs the task capability, a
+    wired documents store backs "work with files" and a live project pane backs
+    "edit project files" (project folders the companion shared).
     """
     by_name: dict[str, CapabilityProvider] = {}
     if external_source is not None:
@@ -104,6 +109,10 @@ def build_default_registry(
         by_name["manage tasks"] = TaskSchedulerCapability(task_scheduler)
     if speech is not None:
         by_name["perceive speech"] = speech
+    if documents_store is not None:
+        by_name["work with files"] = DocumentsCapability(documents_store)
+    if project_files is not None:
+        by_name["edit project files"] = project_files
     return StaticCapabilityRegistry(_by_name=by_name)
 
 
@@ -351,3 +360,52 @@ class TaskSchedulerCapability:
 
     def is_available(self) -> bool:
         return True
+
+
+class DocumentsCapability:
+    """The 'work with files' capability backed by the documents store edge.
+
+    A wired documents store is itself the file capability, so it backs that
+    capability name directly. It is available whenever it is wired; whether Jarvis
+    *chooses* to store or read a document stays a deliberate request from the
+    surface. Reads are text (binary files are kept but honestly reported as
+    unreadable yet).
+    """
+
+    def __init__(
+        self, store: DocumentStore, capability: str = "work with files"
+    ) -> None:
+        self._store = store
+        self._capability = capability
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return True
+
+
+class ProjectFilesCapability:
+    """'edit project files' backed by the shared project folders (mutable seam).
+
+    Reports whether Jarvis currently has project access: it starts closed and is
+    flipped live when the composition root registers at least one bounded
+    FileSystemTool over a folder the companion shared (``JARVIS_PROJECT_ROOTS``).
+    Mutable so the runtime seam (``set_project_files``) can flip availability.
+    """
+
+    def __init__(self, capability: str = "edit project files") -> None:
+        self._capability = capability
+        self._live = False
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:
+        return self._live
+
+    def set_live(self, live: bool) -> None:
+        """Mark whether project folders are wired right now."""
+        self._live = live
