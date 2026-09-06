@@ -248,6 +248,7 @@ class ExecutiveController:
         evidence: Iterable[Evidence] = (),
         *,
         conserve: bool = False,
+        conversation: tuple[Turn, ...] = (),
     ) -> CognitiveEpisode:
         """Drive ``episode`` to COMPLETED, grounding its decision in evidence.
 
@@ -260,6 +261,10 @@ class ExecutiveController:
         carries no new evidence is answered briefly instead of running the full
         lifecycle -- but only then, since dropping to BRIEF while new evidence is
         present would discard that evidence. It economises, it never loses input.
+
+        ``conversation`` carries the recent turns of THIS conversation (Vision §3)
+        into any reasoning the episode needs, so a provisional answer resolves
+        pronouns and follow-ups against what was just said.
         """
         pieces = list(evidence)
         self._flush(episode)  # dispatch EpisodeStarted recorded at construction
@@ -276,7 +281,7 @@ class ExecutiveController:
                 episode.observe(piece)
             self._recall_into(episode)
             self._consult_into(episode, belief)
-            self._reason_into(episode, belief)
+            self._reason_into(episode, belief, conversation)
         self._beliefs.save(belief)
         self._flush(episode)  # dispatch evidence/belief events
 
@@ -450,7 +455,12 @@ class ExecutiveController:
             )
             episode.recall(tuple(relevant))
 
-    def _reason_into(self, episode: CognitiveEpisode, belief: Belief) -> None:
+    def _reason_into(
+        self,
+        episode: CognitiveEpisode,
+        belief: Belief,
+        conversation: tuple[Turn, ...] = (),
+    ) -> None:
         """Reason a provisional answer when belief and memory can't give one (§37).
 
         Only when the belief has no *real* support (an inference doesn't count) and no
@@ -458,7 +468,8 @@ class ExecutiveController:
         this before -- so a remembered answer is recalled, never re-asked of the model
         (Vision §37). The reasoned answer is then remembered as the weakest, clearly
         sourced evidence, so it persists and can mature when the companion confirms it
-        -- confidence stays derived and low (Vision §38, D3, D6).
+        -- confidence stays derived and low (Vision §38, D3, D6). Recent dialogue
+        travel with the question so follow-ups resolve against the conversation.
         """
         if self._reasoner is None:
             return
@@ -469,7 +480,7 @@ class ExecutiveController:
             return
         if remembered_inference(belief) is not None:
             return  # already reasoned this — the answer is remembered, don't re-ask
-        inference = self._reasoner.infer(episode.trigger, recalled, ())
+        inference = self._reasoner.infer(episode.trigger, recalled, conversation)
         if inference is None:
             return
         episode.infer(inference)

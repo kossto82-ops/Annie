@@ -75,6 +75,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
+from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.email_message import EmailMessage
 from jarvis.domain.value_objects.energy_costs import EnergyCosts
 from jarvis.domain.value_objects.evidence import Evidence
@@ -109,6 +110,7 @@ from jarvis.infrastructure.capability_registry import (
     SpeechPerceptionCapability,
     build_default_registry,
 )
+from jarvis.infrastructure.document_memory_retriever import DocumentMemoryRetriever
 from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
 from jarvis.infrastructure.env_settings import settings_from_env
@@ -368,9 +370,13 @@ class Jarvis:
         # it remembers instead of a blank "insufficient evidence". Off by default, so
         # the offline core is unchanged (D8); the command center turns it on. A
         # semantic retriever can replace it behind the same Protocol later (D11).
+        # Stored documents ride the same recall when a document store is wired, so the
+        # companion's own files can bear on a query (Vision §3, D6).
         memory_retriever: MemoryRetriever | None = (
-            LexicalMemoryRetriever(
-                self.beliefs, self.episodes, self.companion, self._goals
+            self._with_documents(
+                LexicalMemoryRetriever(
+                    self.beliefs, self.episodes, self.companion, self._goals
+                )
             )
             if enable_recall
             else None
@@ -426,6 +432,14 @@ class Jarvis:
         """Retrieve relevant long-term context without creating an episode or belief."""
         return self._executive.recall(query)
 
+    def _with_documents(self, base: MemoryRetriever) -> MemoryRetriever:
+        """Layer the current document store onto a recall retriever (Vision §3, D6).
+
+        The store is read through a callable, so ``set_documents_store`` at runtime
+        is honoured without rewiring the retriever; an offline Jarvis stays untouched.
+        """
+        return DocumentMemoryRetriever(base, lambda: self._documents_store)
+
     def enable_embedding_recall(self, embedder: TextEmbedder) -> None:
         """Upgrade recall from surface tokens to *meaning* (Vision §3, D11).
 
@@ -438,13 +452,15 @@ class Jarvis:
             self.beliefs, self.episodes, self.companion, self._goals
         )
         self._executive.set_memory_retriever(
-            EmbeddingMemoryRetriever(
-                self.beliefs,
-                self.episodes,
-                self.companion,
-                self._goals,
-                embedder,
-                fallback=lexical,
+            self._with_documents(
+                EmbeddingMemoryRetriever(
+                    self.beliefs,
+                    self.episodes,
+                    self.companion,
+                    self._goals,
+                    embedder,
+                    fallback=lexical,
+                )
             )
         )
         # Meaning-based recall is now live: flip the edge capability to available
@@ -916,6 +932,16 @@ class Jarvis:
         if self._documents_store is None:
             raise RuntimeError("no documents capability configured; set_documents_store")
         self._documents_store.remove_document(name)
+
+    def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
+        """The stored documents bearing on ``query``, best first (or raise when offline).
+
+        Surfaces candidates with a snippet, never a verdict (Vision §3); the
+        companion's own files can answer before Jarvis reaches for explanation.
+        """
+        if self._documents_store is None:
+            raise RuntimeError("no documents capability configured; set_documents_store")
+        return self._documents_store.search_documents(query, limit=limit)
 
     def set_project_files(self, available: bool) -> None:
         """Flip whether project folders are wired for file editing right now.
@@ -1589,24 +1615,32 @@ class Jarvis:
         trigger: str,
         evidence: Iterable[Evidence] = (),
         goal: Goal | None = None,
+        conversation: tuple[Turn, ...] = (),
     ) -> CognitiveEpisode:
         """Run a cognitive episode for ``trigger``, grounded in ``evidence``.
 
         An optional ``goal`` names what the episode is *toward* (Vision §12, §26).
         With no evidence the episode completes with an honest "insufficient
-        evidence" conclusion rather than a fabricated answer (Vision §37).
+        evidence" conclusion rather than a fabricated answer (Vision §37). Recent
+        dialogue travels with the episode (Vision §3) so any reasoning it needs
+        resolves against what was just said.
         """
         episode = CognitiveEpisode(trigger=trigger, goal=goal)
-        return self._run(episode, evidence)
+        return self._run(episode, evidence, conversation=conversation)
 
     def _run(
-        self, episode: CognitiveEpisode, evidence: Iterable[Evidence] = ()
+        self,
+        episode: CognitiveEpisode,
+        evidence: Iterable[Evidence] = (),
+        conversation: tuple[Turn, ...] = (),
     ) -> CognitiveEpisode:
         """Run an episode through the executive and charge its cognitive cost
         (Vision §15). Every episode-running path goes through here so spent energy
         reflects all the thinking Jarvis actually did.
         """
-        result = self._executive.run(episode, evidence, conserve=self._should_conserve())
+        result = self._executive.run(
+            episode, evidence, conserve=self._should_conserve(), conversation=conversation
+        )
         cost = self._energy_costs.for_attention(episode.attention)
         self._energy_spent += cost
         if self._energy_budget is not None:

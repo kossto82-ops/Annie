@@ -175,3 +175,23 @@ class TestConversationFirst:
         assert jarvis.episodes.history() == ()
         assert jarvis.beliefs.all_beliefs() == ()
         assert jarvis.companion.beliefs() == ()
+
+    def test_a_cognitive_episode_reasons_with_the_conversation(self) -> None:  # Test G
+        # A full episode (not the conversational `reason` path) that needs a
+        # provisional answer must also see the recent dialogue, so follow-ups and
+        # pronouns resolve the same way an answer in chat does (Vision §3).
+        reasoner = ContextReasoner(["Quizá el coste actual es el problema."])
+        jarvis = Jarvis(reasoner=reasoner)
+        prior = (Turn(speaker="companion", text="Estoy pensando en cambiar la arquitectura."),)
+        episode = jarvis.think("¿qué conexión hay con el coste?", conversation=prior)
+        assert episode.recalled_memories == ()
+        query, _memory, conversation = reasoner.calls[0]
+        assert query == "¿qué conexión hay con el coste?"
+        assert conversation == prior
+
+    def test_an_episode_without_conversation_reasons_with_none(self) -> None:
+        reasoner = ContextReasoner(["Sin contexto, responderé con lo que sé."])
+        jarvis = Jarvis(reasoner=reasoner)
+        jarvis.think("¿cuál es la mejor opción?")
+        _query, _memory, conversation = reasoner.calls[0]
+        assert conversation == ()

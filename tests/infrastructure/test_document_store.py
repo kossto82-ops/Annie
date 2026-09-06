@@ -83,3 +83,57 @@ class TestBuildDocumentStore:
     def test_none_root_builds_no_store(self) -> None:
         assert build_document_store(None) is None
         assert build_document_store("") is None
+
+
+class TestDocumentSearch:
+    """Searching mirrors lexical recall: candidates with a snippet, never a verdict."""
+
+    def test_text_document_matches_by_content(self) -> None:
+        io = _FakeIO({"api.md": b"Jarvis api over websocket"})
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        hits = store.search_documents("jarvis api")
+        assert [hit.name for hit in hits] == ["api.md"]
+        assert hits[0].relevance == 1.0
+        assert "Jarvis api over websocket" in hits[0].snippet
+
+    def test_binary_document_is_found_by_name_alone(self) -> None:
+        io = _FakeIO({"blob.bin": b"\x00\x01\xff"})
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        hits = store.search_documents("blob")
+        assert len(hits) == 1
+        assert hits[0].name == "blob.bin"
+        assert hits[0].snippet == "blob.bin"  # opaque bytes are never quoted
+        assert store.search_documents("jarvis") == ()
+
+    def test_most_relevant_document_leads(self) -> None:
+        io = _FakeIO(
+            {
+                "old.txt": b"deployment runbook",
+                "new.txt": b"deployment runbook for the api service",
+            }
+        )
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        hits = store.search_documents("deployment runbook")
+        assert [hit.name for hit in hits] == ["new.txt", "old.txt"]
+
+    def test_snippet_is_bounded_around_the_match(self) -> None:
+        body = "lorem ipsum dolor sit amet " * 10
+        io = _FakeIO({"notes.txt": body.encode("utf-8")})
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        hits = store.search_documents("dolor")
+        assert len(hits) == 1
+        assert "dolor" in hits[0].snippet
+        assert len(hits[0].snippet) < 300
+
+    def test_limit_and_no_match_are_honest(self) -> None:
+        io = _FakeIO(
+            {
+                "a.txt": b"alpha beta gamma",
+                "b.txt": b"alpha delta epsilon",
+                "c.txt": b"beta zeta eta",
+            }
+        )
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        assert len(store.search_documents("alpha", limit=1)) == 1
+        assert store.search_documents("nonexistent term") == ()
+        assert store.search_documents("   ") == ()  # no scoreable tokens

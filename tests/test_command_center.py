@@ -25,6 +25,7 @@ from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
@@ -1012,6 +1013,14 @@ class _FakeDocumentStore:
 
     def remove_document(self, name: str) -> None:
         self._docs.pop(name, None)
+
+    def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
+        lowered = query.lower()
+        return tuple(
+            DocumentHit(name=name, snippet=name, relevance=1.0)
+            for name in self.list_documents()
+            if lowered in name.lower()
+        )[:limit]
 
 
 def _documents_able_jarvis() -> Jarvis:

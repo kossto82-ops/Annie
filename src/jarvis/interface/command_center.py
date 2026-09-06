@@ -422,7 +422,7 @@ def _remember_reply(jarvis: Jarvis, text: str) -> Reply:
         context="the companion explicitly asked to remember this",
     )
     jarvis.observe_companion(fact, evidence)
-    jarvis.think(fact, (evidence,))
+    jarvis.think(fact, (evidence,), conversation=jarvis.conversation.before_current())
     wording = f"Entendido. Recordaré que {fact}." if uses_spanish(text) else (
         f"Got it — I'll remember that: {fact}."
     )

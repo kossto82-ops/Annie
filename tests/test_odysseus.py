@@ -22,6 +22,7 @@ from jarvis.domain.services.capability_scout import catalog, scout
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.capability_registry import (
     ExternalSourceCapability,
@@ -608,6 +609,14 @@ class _FakeDocumentsStore:
 
     def remove_document(self, name: str) -> None:
         self.docs.pop(name, None)
+
+    def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
+        lowered = query.lower()
+        return tuple(
+            DocumentHit(name=name, snippet=name, relevance=1.0)
+            for name in self.list_documents()
+            if lowered in name.lower()
+        )[:limit]
 
 
 class TestFileEdgeCapabilities:

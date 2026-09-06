@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from jarvis.domain.value_objects.document_hit import DocumentHit
+
 
 class DocumentStore(Protocol):
     """Gives Jarvis read and write access to the files the companion shares."""
@@ -43,4 +45,14 @@ class DocumentStore(Protocol):
 
     def remove_document(self, name: str) -> None:
         """Delete the document ``name``; a no-op when it does not exist."""
+        ...
+
+    def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
+        """The documents whose name or text matches ``query``, most relevant first.
+
+        Surfaces candidates only -- each hit carries a snippet and a match strength,
+        never a verdict (mirrors recall, Vision §3, §32). Binary documents can be
+        found by the tokens in their name; what they *are* stays the surface's honest
+        report. An empty tuple is an honest "no matching documents".
+        """
         ...

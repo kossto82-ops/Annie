@@ -10,11 +10,35 @@ never reasons about them (D6) and never escapes its sandbox (flat names only).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 
+from jarvis.domain.value_objects.document_hit import DocumentHit
+
 DocumentIO = Callable[[str, str, bytes], bytes]
 _SEPARATORS = ("/", "\\")
+
+# Tokens shorter than this carry too little signal to rank on (mirrors the lexical
+# memory retriever's language-agnostic floor).
+_MIN_TOKEN_LEN = 2
+_WORD = re.compile(r"\w+")
+_SNIPPET_EXPAND_RIGHT = 140
+_SNIPPET_LEAD = 60
+_ELLIPSIS = "…"
+
+
+def _tokens(text: str) -> set[str]:
+    """The set of scoreable tokens in ``text`` -- lowercased, short ones dropped."""
+    return {word for word in _WORD.findall(text.lower()) if len(word) >= _MIN_TOKEN_LEN}
+
+
+def _relevance(query_tokens: set[str], surface: str) -> float:
+    """Fraction of the query's tokens the document's surface shares -- 0.0 when disjoint."""
+    if not query_tokens:
+        return 0.0
+    shared = query_tokens & _tokens(surface)
+    return len(shared) / len(query_tokens)
 
 
 class LocalDocumentStore:
@@ -77,6 +101,66 @@ class LocalDocumentStore:
     def remove_document(self, name: str) -> None:
         self._require_name(name)
         self._io("delete", name, b"")
+
+    def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
+        """Documents whose name or readable text matches ``query``, best first.
+
+        Ranking and snippets mirror lexical recall (Vision §3): relevance is the
+        fraction of the query's tokens the document shares (name plus text when the
+        file decodes as utf-8 text); a binary file is still findable by its name, and
+        its snippet is the name alone. Candidates only -- the core never reaches for
+        raw bytes here (D6).
+        """
+        query_tokens = _tokens(query)
+        if not query_tokens:
+            return ()
+        hits: list[DocumentHit] = []
+        for name in self.list_documents():
+            surface = name
+            text = self._decoded_text(name)
+            if text is not None:
+                surface = f"{name} {text}"
+            relevance = _relevance(query_tokens, surface)
+            if relevance <= 0.0:
+                continue
+            snippet = self._snippet(name, text, query_tokens)
+            hits.append(
+                DocumentHit(name=name, snippet=snippet, relevance=relevance)
+            )
+        hits.sort(key=lambda hit: (-hit.relevance, hit.name))
+        return tuple(hits[: max(0, limit)])
+
+    # -- search helpers -------------------------------------------------------
+
+    def _decoded_text(self, name: str) -> str | None:
+        """The document's utf-8 text, or ``None`` when it is not readable text.
+
+        Bytes that fail to decode are honest binaries -- searchable by name, but not
+        quoted as if their content were legible (D37).
+        """
+        try:
+            return self._io("read", name, b"").decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+    def _snippet(
+        self, name: str, text: str | None, query_tokens: set[str]
+    ) -> str:
+        """A bounded excerpt around the first match, or the name alone if binary."""
+        if text is None:
+            return name
+        matches = [
+            word for word in _WORD.findall(text) if word.lower() in query_tokens
+        ]
+        position = text.lower().find(matches[0].lower()) if matches else -1
+        if position < 0:
+            return name
+        start = max(0, position - _SNIPPET_LEAD)
+        end = min(len(text), position + _SNIPPET_EXPAND_RIGHT)
+        snippet = " ".join(text[start:end].split())
+        prefix = _ELLIPSIS if start > 0 else ""
+        suffix = _ELLIPSIS if end < len(text) else ""
+        return f"{prefix}{snippet}{suffix}"
 
     # -- sandbox --------------------------------------------------------------
 

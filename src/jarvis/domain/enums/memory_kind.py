@@ -22,3 +22,4 @@ class MemoryKind(Enum):
     EPISODE = "episode"  # a completed cognitive episode (episodic memory)
     COMPANION_TRAIT = "companion_trait"  # something believed about the companion
     GOAL = "goal"  # a goal's learned reachability
+    DOCUMENT = "document"  # a stored document shared by the companion
