@@ -28,61 +28,95 @@ The response is only one possible output of cognition.
 
 ### Domain
 
-- `CognitiveEpisode` — aggregate root and unit of cognition.
-- `Belief` — evidence-grounded entity.
-- `Hypothesis` / `HypothesisSet` — competing explanations.
+- `CognitiveEpisode` — aggregate root and unit of cognition; carries recalled memories (from the memory
+  seam), an optional inference (from the reasoning seam), consulted edges (from the knowledge-source
+  seam), and goal.
+- `Belief` — evidence-grounded entity. `Hypothesis` / `HypothesisSet` — competing explanations.
 - `CompanionModel` — model of the companion.
-- Value objects cover evidence, confidence, temporal stability, goals, actions, deliberation, reflection, energy, connections, state summaries, etc.
-- Domain events represent episode, evidence, belief, contradiction, and hypothesis changes.
+- `IntentClassifier` (`domain/conversation/intent.py`) — deterministic bilingual classify of a user
+  turn (GREETING / SMALLTALK / FEEDBACK / INSTRUCTION / REMEMBER / STATEMENT); short-term
+  `ConversationContext` holds recent turns, separate from long-term memory.
+- Value objects cover evidence, confidence, temporal stability, goals, actions, deliberation,
+  reflection, energy, connections, state summaries, recalled memories, inferences, capabilities,
+  notes, email messages, calendar events, scheduled tasks, tool specs/calls/results, retrieved
+  documents, research reports, model runs, etc.
+- Domain events represent episode, evidence, belief, contradiction, hypothesis, action and tool changes.
 
 ### Cognitive services
 
-Important services include:
-
-- evidence weighting
-- reflection
-- connection/association
-- curiosity
-- hypothesis generation
-- action recommendation
-- goal reflection
-- self-observation
+- evidence weighting (source policy + optional decay composition, Increment 113)
+- reflection (genuine review stage, Increment 112), connection/association
+- curiosity, hypothesis generation, action recommendation (graded stance)
+- goal reflection (recurring goals / reflection effort), self-observation (3 tendencies)
+- capability scout / evaluator / gap-observation (Odysseus, D37)
+- knowledge source (deliberate edge consultation, D38), model compare
 
 ### Executive/core
 
-`ExecutiveController` orchestrates the lifecycle of an episode. It should remain thin.
+`ExecutiveController` orchestrates the lifecycle of an episode. It stays thin; before deciding it may
+**recall** (memory seam), **consult** a knowledge edge, and **reason** (reasoner seam) — each a
+candidate-evidence source, never a decision-maker (D35/D36/D38).
 
-`Jarvis` is the public composition/API surface.
-
-`NervousSystem` provides synchronous event signalling.
+`Jarvis` is the public composition/API surface (~110 methods). `NervousSystem` provides synchronous
+event signalling. `EpisodeTrace` groups cognitive events by episode; persistent Jarvis keeps the trace
+on disk (JSONL, Increment 112).
 
 ### Memory
 
-Repositories are defined in the domain and implemented by infrastructure.
+Repositories are defined in the domain and implemented by infrastructure. In-memory and JSON-backed
+stores exist, plus a JSONL episode trace; `Jarvis.persistent(directory)` wires durable JSON persistence
+for all stores (incl. capabilities, refutations, trace).
 
-Both in-memory and JSON-backed stores exist. `Jarvis.persistent(directory)` wires durable JSON persistence.
+**Recall seam** (`MemoryRetriever` + `RecalledMemory`): a deterministic lexical adapter (offline default)
+and an embedding-backed semantic retriever (recall by meaning, Increment 108). Recall supplies *stance*,
+never belief-confidence (memory is not truth, Vision §22).
 
-There is no real database yet.
+**Reasoning seam** (`Reasoner` + `Inference`): `LlmReasoner` proposes a provisional answer; folded in as
+the weakest `EvidenceSource.INFERENCE` (0.2) so an unconfirmed answer is held faintly and matures only
+via `confirm()` (learning loop, Increment 110).
+
+**Forgetting** (`DecayingWeightingPolicy`, opt-in): evidence contribution fades with a half-life clock —
+nothing forgets unless a decaying policy is explicitly wired in (Increment 113).
 
 ### Perception / LLM
 
-`PerceptionSource` is the abstraction from observation to evidence.
+- `PerceptionSource` (text → evidence), `CompanionPerceptionSource` (utterance → traits about the
+  companion), `SpeechPerceptionSource` (speech → evidence).
+- `LanguageModel` is provider-agnostic; `LlmPerception` uses it to extract candidate evidence, not to
+  decide beliefs. `OpenAiCompatibleModel` + the provider registry support many remote and local
+  endpoints (OpenAI, Groq, Grok, DeepSeek, Kimi, Mistral, Perplexity, OpenRouter, Together, NVIDIA NIM,
+  local Ollama/LM Studio, `openai-compatible` by `base_url`).
+- `env_settings` resolves providers/keys from `JARVIS_LLM_*` (keys per provider `JARVIS_LLM_KEY_<PROVIDER>`,
+  models per provider `JARVIS_LLM_MODEL_<PROVIDER>`); the command center can persist them to `.env`
+  (write-only secret discipline). Embeddings use `JARVIS_EMBED_*` (independent of the chat provider).
+- A live API call is opt-in; secrets belong in environment/configuration, never source control. The
+  reasoner and response renderer build from the same provider registry.
 
-Current implementations include a deterministic keyword perceiver and an LLM-backed seam.
+### Capabilities (Odysseus + edges)
 
-`LanguageModel` is provider-agnostic. `LlmPerception` uses it to extract candidate evidence, not to decide beliefs.
+`Capability` is bookkeeping; the live side is a `CapabilityProvider` at the edge (D7/D37).
+`Jarvis.can_do(name)` is true only when a capability is *acquired* and live-backed. Recognised needs are
+ordinary beliefs whose confidence is derived from evidence; autonomy is earned (deliberate acquire/reject).
+Gap detection (`capability_gap_observation`) can self-initiate needs from recurring failure subjects and
+auto-scout in the reflective cycle.
 
-`OpenAiCompatibleModel` and the provider registry support multiple remote and local endpoints, including Ollama/LM Studio style endpoints.
-
-A live API call must remain opt-in. Secrets belong in environment/configuration, never source control.
+Edge seams (domain protocol → infrastructure adapter, injectable io/net, offline default):
+web internet (`ExternalSource`/Agent-Reach), deep research (`ResearchSource`/SearXNG), blind model
+comparison (`ModelComparator`), tool registry + policy (`ToolRegistry`), notes (`NotesStore`), mail
+(`MailBox`/real IMAP-SMTP), calendar (`CalendarStore`/local + Google), tasks (`TaskScheduler`),
+agent delegation (`TaskAgent`), speech perception (`SpeechPerceptionSource`). Material actions can be
+delegated to an edge agent behind these seams, never cognition (revised D1).
 
 ### Command Center
 
-The command center is a local browser UI served by the stdlib HTTP server.
+Local browser UI served by the stdlib HTTP server. The browser handles voice input/output, the visual
+face/sphere, and the capability/tool panels. Python remains the cognitive core.
 
-The browser handles voice input/output and the visual face. Python remains the cognitive core.
-
-`handle`, `route`, and `snapshot` are intended to be pure/socket-free and tested independently from the server.
+`handle`, `route`, and `snapshot` are pure/socket-free and tested independently from the server. Surface
+commands: `say` (with streaming + reasoning panel), `explain`, `reflect`, `wonder`, `introspect`,
+`perceiver` (switch provider/model/key), `capability` (notice/list/acquire/reject), `tool` (list/run),
+`external` (read/search web), `research`, `compare`, plus the notes/mail/calendar/tasks delegation.
+`_say` routes on intent first (Increment 114): conversation turns never touch perception/memory/beliefs.
 
 ## Reflective cycle
 
@@ -90,67 +124,34 @@ The implemented autonomous reflective cycle is:
 
 `Remember → Connect → Reflect → Hypothesise → Challenge → Learn → Act`
 
-The cycle is evidence-grounded, revisable, auditable, and implemented inside the core rather than as an external agent wrapper.
-
-Curiosity can trigger the cycle.
-
-## Odysseus (capability acquisition)
-
-Odysseus lets Jarvis recognise and grow new capabilities (Vision §34). A recognised gap
-becomes a *need belief* ("I need the ability to …") whose confidence is derived from evidence
-(never asserted, §8); `capability_scout` matches it against a deterministic catalog to
-propose `Capability` candidates. The evaluator then derives a stance -- suggest / ask first /
-withhold (Vision §28) -- and curiosity closes the loop: a confident, unmet need raises a
-`CuriosityImpulse` that `pursue` turns into an acquisition. Acquisition is *real*, not
-decorative: a `Capability` is bookkeeping, and its live side is a `CapabilityProvider` at the
-edge (D7) -- `Jarvis.can_do(name)` is true only when the capability is acquired *and* backed
-by a ready provider; the Internet command requires the earned capability, and `persistent()`
-backs the web capabilities with agent-reach. The same edge covers the runtime seams:
-`ReasonerCapability` ("reason with a language model") and `SemanticRecallCapability`
-("recall by meaning") are mutable providers Jarvis flips when the live reasoner / embedding
-recall is active — a silent (offline) reasoner and lexical-only recall do not count, so only
-genuinely live capabilities report `can_do`. It only *proposes*/suggests;
-acquiring/rejecting is a deliberate, separate step (autonomy is earned, Vision §28), and the
-capability itself stays an injectable provider at the edge (D7). `CapabilityRepository` +
-need `BeliefRepository` (domain Protocols; in-memory + JSON stores) persist proposals and
-needs; `state_summary` and the Command Center `capability` command surface both, and the
-snapshot reports which acquisitions are live (`ready`).
-
-Growth can also start from Jarvis itself: `observe_capability_gaps` /
-`unanswered_subjects` (`capability_gap_observation.detect`) cluster the episode history by
-shared subject words and report subjects Jarvis concluded about *ungrounded* more than once.
-This is read-only detection (shallow keyword matching, D11). `auto_scout_gaps` turns each
-gap into an evidence-grounded need via `recognise_need` (grounded in the failed episodes,
-so confidence is derived, never asserted) and scouts candidates. It is wired into the
-reflective cycle -- `reflect_cycle` auto-scouts each pass and reports the proposals via
-`ReflectiveCycle.capability_proposals` -- and surfaced through the Command Center
-`capability notice` action. It is idempotent: a gap already recorded is skipped on re-runs
-(Vision §34, self-initiated growth).
+`reflect_cycle()` runs all seven stages end to end and is self-triggered by curiosity (un-mined
+load-bearing patterns). The cycle is evidence-grounded, revisable, auditable, and implemented inside the
+core rather than as an external agent wrapper. The Reflect stage records genuine review notes
+(`EpisodeReflected`), failures leave `EpisodeFailed`, and the trace persists across restarts (P0/P1,
+Increments 111–112).
 
 ## Current state snapshot
 
-- Reflective cycle: implemented.
-- Curiosity/self-triggering: implemented.
-- Episodic, belief, companion, action and goal memory: implemented.
-- Persistence: implemented through JSON stores.
-- Cognitive energy/fatigue budget: implemented at the current basic level.
-- LLM abstraction/registry: implemented.
-- Live provider integration: still opt-in / not the default.
-- Command Center: implemented.
-- Speech mouth synchronisation: implemented.
-- Reasoning/provenance visualisation: a strong next refinement, not a permanent requirement.
-- Odysseus (capability acquisition): core model + scout, evidence-grounded evaluation,
-  curiosity/surface integration, and live edge providers backing acquisitions (D7) implemented.
+- Reflective cycle: complete (all seven stages) and traceable.
+- Conversation intent layer + short-term context: implemented.
+- Recall (lexical + semantic embeddings) and identity-aware answers: implemented.
+- Provisional reasoning + learning loop (confirm) + decay forgetting: implemented.
+- Episodic, belief, companion, action and goal memory: implemented; all persistent (crash-safe JSON).
+- LLM abstraction/registry/live providers + self-diagnosing errors: implemented; live is opt-in.
+- Capabilities: acquisition model + scout + edge providers + 12+ catalog entries (web, research, compare,
+  tools, notes, mail, calendar, tasks, agent, speech seam).
+- Command Center: implemented (voice, sphere/face, streaming, reasoning panel, capability/tool panels).
+- Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
 
-- Persisting event traces.
-- Possible real DB behind repository interfaces.
-- Semantic matching instead of exact-string identity.
-- More sophisticated temporal weighting.
-- Injectable weighting policy at the Jarvis level.
-- Further cognitive-energy modelling.
-- Unification/documentation of conclusion vs deliberation episode shapes.
-- More configurable runtime parameters.
+- Reset the audit gates at HEAD: 5 ruff errors + 44 pyright errors (all in newer tests; see STATUS.md).
+- Reasoner does not yet consume the short-term `ConversationContext` (multi-turn depth).
+- Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
+  but not yet for identity.
+- A real DB behind the repository contracts (D10); per-belief weighting not yet root-injectable;
+  `TemporalStability` for hypotheses; more §15 energy modelling (charge deliberations).
+- Live STT backer for the speech seam; real instruction execution (earned agency).
+- More configurable runtime parameters (live-tunable knobs).
 
 Do not turn every future direction into immediate work. Follow the current user request.

@@ -6,9 +6,9 @@ Living document. Updated at the end of every increment. Single source of truth f
 **North star:** `JARVIS_VISION.md` (repo root) is the objective every increment must move
 toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are going*.
 Every implementation decision must preserve the possibility of reaching that architecture
-(Vision §41). Current code has no contradictions with the vision (verified 2026-08-21).
+(Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-03 (Increment 104)
+Last updated: 2026-09-04 (Increment 134)
 
 ---
 
@@ -19,7 +19,14 @@ Last updated: 2026-09-03 (Increment 104)
 - Identity for this repo (local config only): `ksst <kossto82@gmail.com>`.
 - Convention: **one commit per increment**, message in English, ending with the
   `Co-Authored-By: Claude Opus 4.8` trailer. The foundation (increments 1–5) is a single commit
-  (`484fd49`); increments 6+ are one commit each.
+  (`484fd49`); increments 6–103 are one commit each.
+- **Numbering note (resolved 2026-09-04):** increments 104–110 (git, 2026-08-27/28 — memory
+  recall, reasoning, embeddings, learning loop) were never logged here, and the calendar/tasks
+  work was at first *misnumbered* as "Increment 104". This log now matches git for 104–110 and
+  renumbers the post-110 capability sweep (notes/mail/calendar/tasks/speech/odysseus edges) as
+  **Increments 111–134**, in chronological commit order. From 111 onward the "one labelled
+  increment per commit" rule was relaxed: several related commits form one increment, listed
+  below with their hashes.
 
 ## How to run
 
@@ -58,66 +65,44 @@ ep.working_belief.explain()        # provenance: why it concluded (Vision §8)
 
 ```
 src/jarvis/
-  jarvis.py                              Jarvis.think() entry point
+  jarvis.py                              Jarvis composition root (public API, ~110 methods)
   nervous_system/nervous_system.py       subscribe / publish / dispatch (sync)
   observability/episode_trace.py          EpisodeTrace — cognitive events grouped by episode (Vision §26)
-  executive/executive_controller.py      orchestrates one episode's lifecycle
-  infrastructure/in_memory_belief_store.py    InMemoryBeliefStore (BeliefRepository impl)
-  infrastructure/in_memory_episode_store.py   InMemoryEpisodeStore (EpisodeRepository impl)
-  infrastructure/json_belief_store.py         JsonBeliefStore (file-backed, survives restart)
-  infrastructure/json_episode_store.py        JsonEpisodeStore (file-backed, survives restart)
+  executive/executive_controller.py      orchestrates one episode's lifecycle + recall/reason/consult seams
+  infrastructure/                         stores, perceivers, models, edges, tools, adapters
+  interface/                              command_center.py (pure brain) + server.py + console.html (web UI)
   domain/
-    repositories/belief_repository.py    BeliefRepository (Protocol) — get/save/all_beliefs
-    repositories/episode_repository.py   EpisodeRepository (Protocol) — record/history of episodes
-    services/evidence_weighting.py       EvidenceWeightingPolicy + SourceWeightingPolicy (Vision §11)
-    services/self_observation.py         observe_evidence_habit / overconfidence / prediction_accuracy (§6/§31)
-    services/curiosity.py                wonder — a self-belief → CuriosityImpulse (Vision §16)
-    services/action_advisor.py           recommend — a learned belief → ActionRecommendation (Vision §28)
-    value_objects/curiosity_impulse.py   CuriosityImpulse (a self-triggered investigation, recommended)
-    aggregates/cognitive_episode.py      CognitiveEpisode (aggregate root) + InvalidStateTransition
-    aggregates/hypothesis_set.py         HypothesisSet (competing hypotheses) + UnknownHypothesis
-    aggregates/companion_model.py        CompanionModel — beliefs about the companion (Vision §5)
-    entities/belief.py                   Belief (entity) + derive_confidence + BeliefExplanation
-    entities/hypothesis.py               Hypothesis (entity, evidence-derived confidence)
-    enums/episode_state.py               EpisodeState (6 of 12 conceptual states)
-    enums/episode_kind.py                EpisodeKind (CONCLUSION | DELIBERATION)
-    enums/evidence_source.py             EvidenceSource (Vision §8 origins)
-    enums/trigger_origin.py              TriggerOrigin (COMPANION | CURIOSITY — who started the episode)
-    enums/action_stance.py               ActionStance (SUGGEST | ASK_FIRST | WITHHOLD — Vision §28)
-    enums/attention.py                   Attention (FULL | BRIEF — depth routing, Vision §14)
-    events/domain_event.py               DomainEvent -> CognitiveEvent (immutable)
-    events/episode_events.py             EpisodeStarted, EpisodeCompleted
-    events/evidence_events.py            EvidenceAdded (shared by belief + hypothesis)
-    events/belief_events.py              BeliefStrengthened, BeliefWeakened, ContradictionDetected
-    events/hypothesis_events.py          HypothesisCreated
-    value_objects/unit_interval.py       UnitInterval (shared [0,1] validation base)
-    value_objects/confidence.py          Confidence (UnitInterval subtype)
-    value_objects/evidence.py            Evidence (immutable, weighted, supports/contradicts)
-    value_objects/temporal_stability.py  TemporalStability (UnitInterval subtype; time axis, ≠ confidence)
-    value_objects/episode_record.py      EpisodeRecord (immutable memory of a completed episode)
-    value_objects/evidence_request.py    EvidenceRequest (what an ungrounded episode is missing)
-    value_objects/deliberation.py        Deliberation (outcome of weighing competing explanations)
-    value_objects/action.py              Action (a declared intention + expected outcome, Vision §27)
-    value_objects/goal.py                Goal (what an episode is toward + optional part_of, Vision §12/§26)
-    value_objects/state_summary.py       StateSummary (compact immutable snapshot of all Jarvis holds)
-    value_objects/action_recommendation.py  ActionRecommendation (a graded stance, Vision §28)
-    services/goal_reflection.py          recurring_goals / reflection_effort (patterns over episodic goals)
-    perception/perception_source.py      PerceptionSource (Protocol) — raw observation → Evidence (Vision §32)
-  infrastructure/keyword_perception.py   KeywordPerception — dumb rule-based perceiver (NO LLM; §32/§37)
-  infrastructure/language_model.py       LanguageModel (Protocol) + registry/env_settings + OpenAI-compat adapter (§32)
-  interface/command_center.py            handle/route/snapshot — the command center's pure brain (§30/§40)
-  interface/server.py                    thin stdlib http.server wrapper; interface/console.html — the web UI
-  interface/__main__.py                  `python -m jarvis.interface` launches the command center
-  (persistent() also wires JsonBeliefStore files: companion, actions, reversibility, goals, subgoals)
-examples/                                7 runnable tours (main_loop, goal_arc, goal_parts, perceiving,
-                                         conversation, resolving, reflecting) + command_center launcher
-tests/                                   442 tests mirroring the above (+ public-surface & example guards)
+    aggregates/                            CognitiveEpisode, HypothesisSet, CompanionModel
+    conversation/                          intent (bilingual classify) + short-term ConversationContext
+    entities/                              Belief, Hypothesis
+    enums/                                 episode/evidence/attention/action/capability/permission/memory kinds
+    events/                                domain + episode + evidence + belief + hypothesis + action + tool events
+    perception/                            PerceptionSource, CompanionPerceptionSource, SpeechPerceptionSource
+    reasoning/                             Reasoner Protocol + Inference
+    repositories/                          Belief/Episode/Refutation/Capability repository Protocols
+    retrieval/                             MemoryRetriever, NotesStore, CalendarStore, TaskScheduler,
+                                           MailBox, TaskAgent, ExternalSource, ResearchSource
+    services/                              evidence weighting, self-observation, curiosity, action advisor,
+                                           goal reflection, reflection, hypothesis generation, association,
+                                           capability scout/evaluator/gap-observer, knowledge source, model compare
+    tools/                                 Tool Protocol + ToolRegistry + ToolPolicy
+    value_objects/                          evidence/confidence/goal/action/… + recalled memory, inference,
+                                           capability, note, email, calendar event, scheduled task, tool specs,
+                                           retrieved document, research report, model run
+  (Jarvis.persistent wires JSON stores: beliefs, episodes, companion, actions, reversibility,
+   goals, subgoals, refutations, capabilities, needs + trace.jsonl + capability/edge config)
+examples/                                8 runnable tours (main_loop, goal_arc, goal_parts, perceiving,
+                                         conversation, resolving, reflecting, command_center)
+tests/                                   75 test modules / 1002 tests mirroring the above
+                                         (+ public-surface, console-asset & example guards)
 ```
 
 Conceptual flow implemented:
 `trigger (+ evidence) -> CognitiveEpisode -> ExecutiveController -> forms a working Belief,
 grounds it in evidence -> decision reflects the belief's derived confidence -> completion`,
-with belief + episode events dispatched through the NervousSystem at each step.
+with belief + episode events dispatched through the NervousSystem at each step. The executive
+can now also **recall** (memory seam), **consult** (knowledge-source edge), and **reason**
+(reasoner seam) before deciding — each a candidate-evidence source, never a decision-maker.
 
 ---
 
@@ -1429,30 +1414,263 @@ with belief + episode events dispatched through the NervousSystem at each step.
   Groq free-tier TPM under heavy probing, not a bug — `reasoning_effort=low` also lowers token use.)
 - Gates: ruff clean · pytest 512 passed, 3 skipped (per-provider model tests + recall-on-switch).
 
-### Increment 104 — calendar & tasks capabilities (Odysseus #6/#7) ✅ (2026-09-03)
-- **Calendar capability (Odysseus #6):** `CalendarEvent` value object (id, title, start, end,
-  description, location, all_day, provenance), `CalendarStore` domain Protocol (list/get/create/
-  update/delete/events_in_range), `LocalCalendarStore` infrastructure adapter (file-backed,
-  injectable `io` for offline tests, env-gated via `JARVIS_CALENDAR_ROOT`), `CalendarCapability`
-  provider in the registry, wired into `build_default_registry` and Jarvis (constructor param,
-  `_build_auto_registry`, `_refresh_providers`, property `calendar_store`, setter
-  `set_calendar_store`, delegation methods: `list_calendar_events`, `get_calendar_event`,
-  `create_calendar_event`, `update_calendar_event`, `delete_calendar_event`,
-  `events_in_range`).
-- **Task scheduler capability (Odysseus #7):** `ScheduledTask` value object (id, name, command,
-  cron, description, enabled, next_run, provenance), `TaskScheduler` domain Protocol (list/get/
-  create/update/delete/enable/disable/due_tasks), `LocalTaskScheduler` infrastructure adapter
-  (file-backed, injectable `io`, env-gated via `JARVIS_TASKS_ROOT`), `TaskSchedulerCapability`
-  provider in the registry, wired into Jarvis (same pattern as calendar: constructor param,
-  auto-registry, property, setter, delegation methods: `list_scheduled_tasks`,
-  `get_scheduled_task`, `create_scheduled_task`, `update_scheduled_task`,
-  `delete_scheduled_task`, `enable_scheduled_task`, `disable_scheduled_task`,
-  `due_scheduled_tasks`).
-- Both follow the NotesStore pattern exactly: domain protocol at the edge, immutable value
-  objects with provenance, reversible material actions gated by the caller, `can_do` reflects
-  both acquisition status and provider availability.
-- Gates: ruff clean · pyright strict (0 new errors) · pytest 957 passed, 3 skipped (2 pre-existing
-  failures unrelated to this increment).
+### Increment 104 — long-term memory recall: MemoryRetriever seam + Memory/partial stances ✅ (2026-08-27)
+- **The felt problem:** every question collapsed to "insufficient evidence" because the say path
+  never retrieved relevant memory. New domain retrieval seam: `MemoryRetriever` Protocol +
+  `RecalledMemory` VO + `MemoryKind` enum, with a deterministic offline `LexicalMemoryRetriever`
+  (token overlap over beliefs/episodes/companion/goals). `CognitiveEpisode` carries recalled
+  memories as *recalled context* (never belief-evidence — memory is not truth, Vision §22).
+- The executive takes an optional `memory_retriever`; `_recall_into` applies a relevance floor,
+  dedupes, and filters the current-topic belief. `Jarvis(enable_recall=)` composes a retriever over
+  its own stores (opt-in; offline default unchanged, D8); the command center gains `Memory` /
+  `partial_memory` stances before the ignorance fallback; `server.create_jarvis` turns recall on.
+- Docs: `docs/claude/MEMORY_AND_REASONING_ANALYSIS.md` (diagnosis + evolution design).
+- Gates: ruff clean · pyright strict 0 errors · pytest 539 passed.
+- Commit `68cd901` pushed to `origin/main`.
+
+### Increment 105 — "does it know me?" fixed: identity/companion recall ✅ (2026-08-27)
+- Three real defects found by reproducing the name question end to end (commit `e90a09d`):
+  1. The retriever matched only a belief's *statement*, ignoring the evidence that formed it — a
+     trait worded "is named Raúl" was unreachable from "me llamo Raúl". Now matches statement +
+     evidence contents.
+  2. Past *questions* were recalled as if they were knowledge ("cual es mi nombre?" surfacing a
+     prior "sabes mi nombre?"). Question-shaped memories are now skipped.
+  3. Surface-token recall cannot bridge "quien soy?" → "is named Raúl". A self-referential question
+     now consults the companion model directly (bounded, tunable heuristic; superseded by semantic
+     recall, Increment 108).
+- All identity phrasings now surface the name; a non-self world question does not dump companion
+  traits. Full suite 539 passed; ruff + pyright clean.
+
+### Increment 106 — reasoning: provisional answers for novel questions ✅ (2026-08-27)
+- New domain reasoning seam: `Reasoner` Protocol + `Inference` value object (commit `f890ad9`).
+  Infra: `SilentReasoner` (offline default, no inference) and `LlmReasoner` (opt-in; proposes a
+  provisional answer via the `LanguageModel`; empty/failed → none).
+- `CognitiveEpisode` carries an optional inference as response context (never evidence, never belief
+  confidence). The executive `_reason_into` fires only when the belief is ungrounded AND no strong
+  memory already answers. `Jarvis(reasoner=)` + `set_reasoner`; the command center adds an
+  `inference` stance (clearly framed as provisional) with priority memory > inference >
+  partial-memory > ignorance.
+- Why: lexical recall cannot answer a genuinely novel question. The reasoner lets Jarvis think and
+  answer, honestly labelled as inference, without the LLM becoming the epistemic judge (Vision §37,
+  §38, D6). Offline default unchanged.
+- Gates: ruff clean · pyright strict 0 errors · pytest passed.
+
+### Increment 107 — fix perceiver switcher desync: the model now persists correctly ✅ (2026-08-27)
+- Bug (commit `8bd39eb`): `renderPerceiver` reset the provider dropdown on every state render but
+  left the model field untouched, so after picking a provider the (provider, model) pair desynced
+  and a Switch overwrote the persisted per-provider model. Fix: reflect the live perceiver only when
+  the user is NOT editing the switcher, and keep dropdown + model field in lockstep. Verified live.
+
+### Increment 108 — semantic recall via embeddings: recall by meaning ✅ (2026-08-27)
+- `TextEmbedder` Protocol + `OpenAiCompatibleEmbedder` (POST /v1/embeddings, injectable urllib
+  transport) + `EmbeddingMemoryRetriever` behind the existing `MemoryRetriever` Protocol:
+  embeds query + candidates, ranks by cosine, per-session vector cache, similarity floor, and a
+  lexical fallback when the embedder is unreachable (degrade, don't break) (commit `126f48f`).
+- Shared candidate gathering (`memory_candidates.gather_candidates`) keeps lexical and embedding
+  retrievers in lockstep (evidence-aware, skips questions). `Jarvis.enable_embedding_recall` +
+  `ExecutiveController.set_memory_retriever`; `build_embedder` reads `JARVIS_EMBED_*` (endpoint
+  defaults to a local Ollama), independent of the chat provider.
+- Why: lexical recall cannot bridge "¿quién soy?" → "is named Raúl" (no shared words). Embeddings
+  recall by meaning — the fix for "I told it once and it can't find it". Still a candidate provider
+  behind the same seam; the domain still decides (Vision §3, §38, D11).
+
+### Increment 108b — calibrate the embedding similarity floor for bge-m3 ✅ (2026-08-27)
+- Measured real bge-m3 cosines (identity queries ~0.46–0.67, unrelated ~0.29–0.37) and lowered
+  `_MIN_SIMILARITY` 0.5 → 0.45 (commit `65e7ceb`). Verified live against local Ollama:
+  "identidad del usuario" now recalls the name trait; "cómo cocinar pasta" recalls nothing.
+
+### Increment 109 — self-diagnosing provider errors (status + hint) ✅ (2026-08-27)
+- A provider failure showed only "HTTPError" (commit `1e173f2`). Now surfaces the HTTP status and
+  what it usually means: 401/403 → key not accepted / model not enabled; 404 → wrong model id
+  (NVIDIA ids need the `nvidia/` prefix); others → the status. Turned a real NVIDIA misconfig into
+  an actionable message instead of an opaque one.
+
+### Increment 110 — learning loop: remember reasoned answers, mature on confirmation ✅ (2026-08-28)
+- **The felt problem: "it answers but forgets"** — every novel question was re-reasoned (commit
+  `7961093`). Now: `EvidenceSource.INFERENCE` (weakest weight, 0.2): a reasoned answer is remembered
+  as the weakest, clearly-sourced evidence on the working belief — held faintly ("the model says X,
+  unconfirmed"), confidence still derived.
+- `_reason_into` folds the inference as evidence and does NOT re-ask the model when an answer is
+  already remembered; recall no longer echoes a prior identical-question episode back as "memory".
+- `Jarvis.confirm(trigger, affirm)`: a companion confirmation adds strong `USER_STATEMENT` support
+  (matures the answer to a grounded belief) or correction (weakens it) — derived, never set.
+- Command center: a short "sí/no" confirms/corrects the last answer (confirmation stance);
+  `grounded` now means real (non-inference) evidence. Verified offline end to end: reason →
+  confirm → repeat is recalled as a grounded belief with provenance, without re-asking the model.
+- Gates: ruff clean · pyright strict 0 errors · pytest 574 passed.
+
+### Increment 111 — P0: complete the reflective cycle + crash-safe JSON persistence ✅ (2026-08-28)
+- Audit (`docs/claude/audits/2026-08-28_auditoria_arquitectonica.md`) flagged two P0 issues; fixed
+  (commit `570f24d`).
+- **P0(a)** — `reflect_cycle()` ran only 4 of the 7 vision stages, contradicting its own docstring.
+  It now runs Connect and Act end to end (Act after Learn, so it acts on the just-learned insight).
+  `ReflectiveCycle` gains `connections` + `action` fields and `reached_action`.
+- **P0(b)** — belief/episode/refutation stores rewrote their whole file with a truncating
+  `write_text`, so a crash mid-write could corrupt memory. New `atomic_write_text` helper
+  (temp + `os.replace`) makes every store flush crash-safe.
+- Gates: ruff clean · pyright clean on touched files · pytest 579 passed.
+
+### Increment 112 — P1: genuine Reflect stage + EpisodeFailed + durable EpisodeTrace ✅ (2026-08-28)
+- `_reflect` was a no-op stub; it now reviews the working belief and records an `EpisodeReflected`
+  event noting whether the conclusion is contested, well grounded, or thinly grounded — it notices
+  only, belief and decision unchanged (commit `c7669c0`). `fail()` records `EpisodeFailed(reason)`,
+  so a failed episode leaves a traceable mark.
+- **Durable trace:** `EpisodeTrace` was in-memory only, so decision provenance vanished on process
+  exit. `json_event_serialization` (de)serialises every CognitiveEvent per type (write strict, read
+  tolerant); `JsonEpisodeTrace` is an append-only JSONL log replayed on startup; `EpisodeTraceSink`
+  protocol lets the in-memory and JSON traces be swapped like the repositories; `persistent()`
+  wires it as `base/trace.jsonl` (commit `680e507`).
+- Gates: ruff clean · pyright strict · pytest 603 passed.
+
+### Increment 113 — P2: forgetting — DecayingWeightingPolicy (opt-in, injectable clock) ✅ (2026-08-28)
+- Top missing item from the audit: evidence should not count forever (Vision §10, §22). Implemented
+  as an evidence-weighting policy — the same injectable seam that scales by source — so the
+  epistemic core is untouched (commit `610037c`).
+- `DecayingWeightingPolicy` composes over a base (source) policy and multiplies contribution by a
+  recency factor that halves every half_life. Evidence itself is never mutated; the clock is
+  injected (domain stays deterministic/offline); future-dated evidence is never boosted.
+- `DEFAULT_WEIGHTING` does not decay, so nothing forgets unless a decaying policy is explicitly
+  wired in. Wiring covers the world-belief line (`Jarvis(weighting_policy=…)` →
+  `ExecutiveController` → `form_working_belief` + `Jarvis.persistent(dir, weighting_policy=…)`).
+  Deliberate scope boundary: companion/goal/action/self-observation beliefs still use the default.
+- Gates: ruff clean · pyright strict · pytest 613 passed.
+- (Supporting, 2026-08-28: `fix(types)` cleared 8 pre-existing pyright errors in LLM adapters; the
+  OpenAI-compatible adapter sends `stream:false` explicitly; docs added for OmniRoute infra + the
+  Jarvis capability prompt/roadmap set under `docs/claude/prompts/`.)
+
+### Increment 114 — conversation-first turn: not every message is knowledge ✅ (2026-08-31)
+- **Bug:** Jarvis treated every user message as knowledge — greetings and small talk came back as
+  belief narration, feedback became a belief, an instruction was stored as a trait. Root cause: no
+  intent layer (commits `68d04a9`, `cd647f9`).
+- New `domain/conversation/intent.py`: deterministic, offline, bilingual `classify()` into
+  GREETING / SMALLTALK / FEEDBACK / INSTRUCTION / REMEMBER / STATEMENT. `_say_core` routes on
+  intent: greetings, small talk, feedback and instructions are answered as conversation and never
+  touch perception/memory/beliefs; only an explicit "remember that …" stores memory; a real
+  statement/question keeps the full perceive+recall+reason path but replies like a person — no
+  confidence/evidence/source narrated back (the belief still forms, inspectable via `explain`).
+- A short-term `ConversationContext` on Jarvis records recent turns (separate from long-term
+  memory, for follow-ups/pronouns); `_confirmation` narrowed to a *bare* yes/no so feedback is no
+  longer a "correction". Verified live; `test_intent` + `test_conversation` added.
+- Pending (honest): the LLM reasoner does not yet consume the short-term context; real instruction
+  execution is unimplemented (earned agency) — instructions are acknowledged honestly, not acted on.
+- Gates: ruff clean · pyright strict · pytest 636 passed.
+
+### Increment 115 — the Internet capability: Agent-Reach behind ExternalSource ✅ (2026-09-01)
+- `ExternalSource` capability so Jarvis can read/search the web when it decides external information
+  is needed (commit `0bbb725`). Agent-Reach stays a capability: it only **retrieves** documents with
+  provenance; Jarvis still reasons and never lets it write to memory/beliefs directly.
+- Domain: `RetrievedDocument` VO + `ExternalSource` Protocol/ChannelStatus. Infra:
+  `AgentReachSource` adapter (injectable transport → offline tests); `build_agent_reach_source()`
+  returns None (offline) without the package. `jarvis.py`: `read_external` / `search_external` /
+  `internet_channels` / `set_external_source`, auto-wired in `persistent()`. Command center
+  `external` command. Docs: `INTERNET_AGENT_REACH.md`.
+- Gates: ruff clean · pyright src clean · pytest 664 passed, 3 skipped.
+
+### Increment 116-119 — Odysseus: capability acquisition, evidence-grounded needs, live edges, self-initiated growth ✅ (2026-09-01/02)
+- **116** `capability acquisition — core model + scout` (`06cff25`): the domain `Capability` model,
+  `CapabilityRepository`, and the deterministic `capability_scout` catalog.
+- **117** `evidence-grounded needs and curiosity-driven acquisition` (`9f705fd`): `recognise_need`
+  makes a need an ordinary belief whose confidence is derived from evidence (never asserted, Vision
+  §8); `capability_evaluator` derives the stance (suggest / ask first / withhold, §28); curiosity
+  raises a `CuriosityImpulse` and `pursue` turns it into acquisition — growth is earned, not assumed.
+- **118** `live capability providers at the edge` (`eae5e4d`): a `CapabilityProvider` registry
+  (`StaticCapabilityRegistry`) maps a capability name to the concrete adapter; `Jarvis.can_do(name)`
+  is true only when a capability is acquired *and* live-backed — acquisition is real, not decorative.
+- **119** `self-initiated capability gap discovery` (`b67a016`): `capability_gap_observation.detect`
+  clusters the episode history by shared subject words and reports subjects Jarvis concluded about
+  *ungrounded* more than once; `auto_scout_gaps` turns each gap into an evidence-grounded need and
+  scouts candidates — wired into `reflect_cycle` (auto) and the `capability notice` command.
+- Gates: ruff clean · pyright strict · pytest grew to ~720+.
+
+### Increment 120 — seam support: reasoning and meaning-recall backed by the registry ✅ (2026-09-02)
+- `ReasonerCapability` ("reason with a language model") and `SemanticRecallCapability` ("recall by
+  meaning") are now mutable edge providers Jarvis flips when the live reasoner / embedding recall is
+  active (commit `1d3c4f6`). A silent (offline) reasoner and lexical-only recall do **not** count,
+  so `can_do` stays honest.
+
+### Increment 121-122 — Tool Registry + deep research seam; blind model comparison ✅ (2026-09-02)
+- **121** `tool registry and deep-research seam (Fases 0-1)` (`e48701d`): domain ToolSpec/ToolCall/
+  ToolCallResult, `PermissionLevel`, `ToolPolicy` gating risky calls, `ToolRegistry` with
+  `ToolCallRecorded` events, and sandboxed filesystem/echo tools. `ResearchSource` Protocol +
+  `ResearchReport` VO, and a SearXNG research adapter (injectable transport, AGPL protocol reuse)
+  as a self-contained edge source. Command center gains a `research` command.
+- **122** `blind model comparison capability (Fase 2)` (`dc13042`): `ModelRun` VO + `ModelComparator`
+  Protocol; a `RegistryModelComparator` over the existing provider registry gathers each model's
+  blind reply to one prompt as candidate evidence (it never ranks, verdicts, or synthesises; a
+  failing model raises honestly). Command center `compare` command, offline by default.
+
+### Increment 123 — uniform earned-capability gate + a tool command ✅ (2026-09-02)
+- Fases 0-2 audit follow-up (commits `fd4df6c`, `8b71135`): deep research and compare now register
+  edge providers in the default registry, so `can_do`/`usable_capabilities` apply the same earned
+  gate (acquired + live-backed, Vision §28) as the web capabilities. Scout templates complete the
+  scout→acquire→use flow. Command center distinguishes not-wired from not-earned and gains a `tool`
+  command (list/run) behind the permission gate. Clean-up: research `depth` bounded
+  (`_MAX_DEPTH = 10`), `capability notice` gaps labelled `SYSTEM_OBSERVATION`, `FileSystemTool`
+  validates `operation`.
+
+### Increment 124 — the core decides when to consult Odysseus edges (Fase 3) ✅ (2026-09-02)
+- New `KnowledgeSource` deliberate-consult seam (commit `2ceefa1`): when an episode cannot conclude
+  from what Jarvis knows, remembers, or reasons, the executive may deliberately ask an edge to
+  gather candidate evidence about the trigger. Adapters wrap deep research (`EXTERNAL_SOURCE`, 0.4)
+  and blind model comparison (`INFERENCE`, 0.5). Runs before reasoning with the same guards as the
+  reasoner (no real support, no strong recall, **one** consult per episode); the episode records
+  consulted provenance (`consulted` / `record_consult`).
+- Only gathers, never concludes (D6): confidence stays derived, an empty/failed edge is honest None.
+  Opt-in: an un-wired Jarvis never consults; `persistent()` stays unwired.
+
+### Increment 125-126 — explicit remember + auto-scouting from capability gaps ✅ (2026-09-03)
+- **125** `an explicit remember grounds a full episode` (`fcb01a4`): "remember that …" runs a full
+  episode (world belief + episode + confirmation loop), not just a companion trait.
+- **126** `auto-scouting from capability gaps` (`5cb9a44`): the reflective cycle now auto-scouts
+  capability gaps as part of its own pass; idempotent (a gap already recorded is skipped).
+
+### Increment 127 — expand the capability catalog + revise D1 for edge delegation ✅ (2026-09-03)
+- Catalog templates added for email, notes, calendar, tasks, agent (`13201e4`). **D1 revised:**
+  Jarvis is still not an agent wrapper and cognition stays in the core, but it MAY now delegate
+  **material actions** to an edge agent behind a domain seam — the agent executes concrete tasks and
+  returns outcomes with provenance, never Jarvis's judgement (D6), never writing to beliefs/memory
+  directly; governed by the controlled-autonomy policy + Tool Registry permission levels.
+
+### Increment 128 — mail capability: seam + real IMAP/SMTP adapter ✅ (2026-09-03)
+- `MailBox` Protocol + `EmailMessage` VO + `MailCapability` (`6b21151`), and the real
+  `IMAPSMTPMailBox` adapter (list/read/send, injectable net → offline tests, env-gated)
+  (`edd880d`). `Jarvis` gains the mail surface (`list_emails`, `read_email`, `send_email`).
+
+### Increment 129 — delegate-to-agent capability + in-Jarvis task agent ✅ (2026-09-03)
+- `TaskAgent` Protocol + `TaskResult` VO + `AgentCapability` (`e361c63`), plus an in-Jarvis
+  adapter `ToolRegistryTaskAgent` that exposes Jarvis's own tool registry to the agent seam
+  (`009854d`). `Jarvis.delegate` runs a bounded agent task and returns the outcome with provenance.
+
+### Increment 130 — notes capability ✅ (2026-09-03)
+- `NotesStore` Protocol + `Note` VO + `LocalNotesStore` adapter (list/get/create/update/delete/
+  search, file-backed, injectable io for offline tests, env-gated via `JARVIS_NOTES_ROOT`)
+  (`23e4e21`). `Jarvis` gains the notes surface, wired like the calendar/tasks pattern.
+
+### Increment 131 — calendar capability ✅ (2026-09-04)
+- `CalendarEvent` VO + `CalendarStore` domain Protocol + `LocalCalendarStore` (file-backed,
+  env-gated via `JARVIS_CALENDAR_ROOT`) + a Google Calendar adapter (injectable transport)
+  (`524c584`). `Jarvis` gains the calendar surface (`list/get/create/update/delete/events_in_range`).
+
+### Increment 132 — task scheduler capability ✅ (2026-09-04)
+- `ScheduledTask` VO + `TaskScheduler` domain Protocol (list/get/create/update/delete/enable/
+  disable/due) + `LocalTaskScheduler` adapter (file-backed, env-gated via `JARVIS_TASKS_ROOT`)
+  (`74c1cd1`). `Jarvis` gains the scheduled-tasks surface.
+
+### Increment 133 — speech-perception seam ✅ (2026-09-04)
+- `SpeechPerceptionSource` — the input mirror of the mouth: a speech utterance becomes candidate
+  evidence the same way text does, behind the same `PerceptionSource` contract (`fd74da6`).
+  (In-browser STT stays the command center's mic path; the seam makes it swappable.)
+
+### Increment 134 — command center: dashboard home, sphere, integrated capability surface ✅ (2026-09-04)
+- Dashboard redesign: a point-cloud **sphere** stage, separate capability/tool panels, edge sources
+  wired and integrated (calendar/tasks/speech/capability/tool) (`cc04875`, `b518df5`); the full
+  capability catalog is surfaced in the snapshot annotated with status
+  (ready/acquired/proposed/rejected/available) so the panel is never empty (`cac3c43`); the sphere
+  stays visible while chatting (`c89d725`); an apostrophe in the reasoning placeholder that broke
+  the inline script is escaped (`2ce21d7`); grid overflow fixed (`369a2ca`); professional UX
+  overhaul — layout scale, icons, sphere (`61e4214`).
+- Gates (HEAD): ruff clean · pyright (errors only in newer tests, see debt below) ·
+  pytest 1002 passed, 3 skipped.
 
 ---
 
@@ -1593,6 +1811,32 @@ with belief + episode events dispatched through the NervousSystem at each step.
   window onto the core, not a second brain. Binding a socket in tests is opt-in (`JARVIS_UI_SMOKE=1`), so
   CI/offline stay hermetic. The §38 boundary holds: no LLM in judgment; the browser's voice/vision are I/O,
   not cognition.
+- **D35** Recall is a **candidate, not belief**: a `MemoryRetriever` supplies *recalled context* on the
+  episode (never belief-evidence; memory is not truth, Vision §22) and a *stance* (Memory / partial_memory)
+  for the surface. The seam is a domain Protocol with a deterministic lexical adapter (offline default,
+  D8); semantic retrieval swaps in behind the same Protocol (Increment 108). A question-shaped memory is
+  never recalled as knowledge.
+- **D36** Reasoning is **inference, not judgement**: a `Reasoner` proposes a provisional answer as response
+  context — never belief-evidence, never confidence. Its output may be folded in as the *weakest*
+  `EvidenceSource.INFERENCE` evidence (weight 0.2, Increment 110) so an unconfirmed answer is held faintly
+  and a term only matures it via `confirm()`. The executive is the decider (Vision §37, §38, D6).
+- **D37** Edge capabilities are **earned and live-backed**: `can_do(name)` is true only when a capability is
+  both *acquired* (Odysseus, deliberate step, Vision §28) and backed by a ready `CapabilityProvider`.
+  Research/compare/reason/semantic-recall register providers like the web seams, so the same gate applies
+  to every catalog capability except speech (kept honest: a silent reasoner or lexical-only recall does not
+  report `can_do`).
+- **D38** Edge consultation is a **deliberate, gated step**: a `KnowledgeSource` edge (research → weaker
+  `EXTERNAL_SOURCE`; compare → weakest `INFERENCE`) is consulted only when the episode lacks real support
+  and strong recall, at most once, recorded in the episode (`consulted`/`record_consult`). It gathers
+  candidate evidence; empty/failed is honest None (D6). Opt-in: an un-wired Jarvis never consults.
+- **D39** Material-edge capabilities follow one pattern: a domain Protocol at the edge + an infrastructure
+  adapter (injectable io/net → offline tests, env-gated root, `build_*() -> None` when unconfigured,
+  D7/D8) + delegated `Jarvis` methods + a `CapabilityProvider` in the registry. Calendar/tasks/notes/mail/
+  speech/agent all follow it; `can_do` reflects acquisition AND provider availability.
+- **D40** An agent-bridge may **delegate material actions** (never cognition): the edge agent executes
+  concrete tasks and returns outcomes with provenance; it never substitutes Jarvis's judgement, never
+  writes to beliefs/memory directly, and is governed by the controlled-autonomy policy + Tool Registry
+  permission levels (see the revised D1 in `docs/claude/DECISIONS.md`).
 
 ---
 
@@ -1676,18 +1920,18 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**The command center now has voice, a synced face, live state, tuning, and a reasoning panel (Increments
-89–91).** The natural next moves — pick one:
-- **A provider/perceiver switcher in the UI (recommended):** show which perceiver is live (keyword vs a real
-  LLM) and let the developer point it at any registered provider at runtime — the open registry (Increment
-  87) already makes every provider config, so this is the UI binding for the "swap LLM easily" requirement.
-  Needs a small read surface (current provider) and a `set_perceiver`/config command; keep the secret in the
-  env, never in the page. Pure `handle` branches + socket-free tests; browser-verified.
-- **Or Track B for real:** stop pretending with the keyword perceiver — run the command center against a live
-  Groq/Ollama model end to end (the plumbing exists since Increment 88) and watch real language ground real
-  beliefs, with the reasoning panel showing the LLM-extracted evidence. This is a *usage/validation* step,
-  not new code; the honest deliverable is a documented live run + any rough edges it surfaces.
-- **Or polish:** streaming replies; a mic-driven "push to talk" affordance; persistence on by default.
+**The command center now has voice, a synced face, live state, tuning, a reasoning panel, a capability
+catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), and a real LLM path
+(Increments 89–134).** The natural next moves — pick one:
+- **Reset the audit gates (recommended):** 5 ruff errors (import order in `command_center.py` + line
+  length in two tests) and 44 pyright errors (all in newer tests) accumulated after Increment 110. The
+  repo's own standard is "ruff clean · pyright strict 0 errors", so this is scoped, mechanical debt with
+  no design risk — a good first increment after the docs.
+- **Or an honest gap:** incremental/deep reasoning across the short-term `ConversationContext` — the
+  Increment-114 limitation (the reasoner answers per-message, not over the recent turns) is still open.
+- **Or live-tunable knobs:** make the remaining thresholds (`GROUNDED_CONFIDENCE_THRESHOLD`,
+  `_INSIGHT_CONFIDENCE`, weighting policy, `_MAX_GOAL_REFLECTIONS`) injectable and expose them in Tools —
+  each made injectable via constructor/config, never a module constant.
 - Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
   constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
   §38 boundary intact (the LLM extracts candidate evidence, it never decides).
@@ -1696,64 +1940,74 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## After that — remaining directions
 
-Track A (the reflective cycle) is complete and persistent; **Track C (§15 energy) has both its seams
-done** (cost visible + a fatigue budget, Increments 84–85); **Track B's seam is done** (Increment 86,
-stub-backed). The remaining directions:
+Track A (the reflective cycle) is complete and persistent; **Track B is live** (Increments 86–98); **Track
+C (§15 energy) has both its seams done** (cost visible + a fatigue budget, Increments 84–85, + decay
+weighting, Increment 113). The remaining directions:
 
-- **Track B — an LLM-backed `PerceptionSource` (§32).** The highest external-value jump: it is what lets
-  Jarvis understand *real* language instead of the toy keyword rule. Gated on an explicit design decision
-  — which provider, where the API secret lives, how offline/CI tests still run, and the §38 boundary (the
-  LLM produces `Evidence`, never decides). **Must be provider-swappable via config (user requirement,
-  Track B/[[jarvis-user-requirements]]).** When you say "go Track B", the next step is a design increment
-  (provider-agnostic interface + a stub adapter proving the seam), not a live API call.
-- **Track E — Command Center** (chat with Jarvis + tune params). Captured as a user requirement; likely
-  lands after Track B (real language). The config-surface work (making tunables injectable) proceeds
-  opportunistically as we add each knob.
-- **Track C/D leftovers (opportunistic).** More §15 (charge deliberations; energy recovery over time);
-  unify the two `CognitiveEpisode` shapes; `TemporalStability` for hypotheses; injectable weighting
-  policy; persist traces.
+- **Capability depth beyond the seams:** the calendar/tasks/notes/mail/speech/agent edges exist as seams +
+  adapters; each can be deepened (CalDAV sync, scheduling execution, STT integration, richer delegation
+  scopes). Each must stay behind its domain Protocol (D39), earned (D37), and offline-testable (D8).
+- **Conversation context for reasoning:** have the reasoner consume the short-term `ConversationContext`
+  so deep multi-turn "¿por qué?" resolution does not lean on a fresh model call per message (Increment-114
+  limitation).
+- **Track C/D leftovers (opportunistic).** More §15 energy modelling (charge deliberations; energy recovery
+  over time); unify the two `CognitiveEpisode` shapes; `TemporalStability` for hypotheses; injectable
+  weighting policy at the `Jarvis(...)` level (partial: decay policy is injectable, Increment 113, the
+  per-belief default is not); pin ruff/pyright in a lockfile; consider a real DB behind the repository
+  contracts (D10).
 
-*Recommendation: Track B is the biggest leap and the natural next big move — say the word and I write the
-design increment first (no live API, provider-agnostic seam + stub). Otherwise I pick up an opportunistic
-Track C/D finish-off.*
+*Recommendation: reset the audit gates first — the debt is mechanical and the repo's own standard demands
+it. Then, if you want visible capability next, the ConversationContext-for-reasoning gap is the most
+"cognitive companion" of the open items.*
 
-*(When ready for the §32 LLM adapter, that is a separate track needing an API/secret decision — flag it
- and we design it explicitly. §15 cognitive energy also still open. Deferred, natural follow-ups:
-excessive-complexity self-observation tendency; a real DB behind the JSON stores; persisting traces;
-semantic trigger↔trait matching; recurring-goals/working-patterns facets; weighting-policy injection.)*
+*(Deferred, natural follow-ups: excessive-complexity self-observation tendency; semantic trigger↔trait
+matching now that embeddings exist; recurring-goals/working-patterns facets; live STT wiring for the speech
+seam.)*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-08-24, Increment 74)
+## Known limitations / not built yet  (refreshed 2026-09-04, Increment 134)
 
-**Big capability — now landed (Increments 87–93):**
-- **Real perception is wired end-to-end.** The `PerceptionSource` seam (Increments 63–68) now has, besides
-  the dumb `KeywordPerception`, an LLM-backed `LlmPerception` behind the same Protocol (§32/§38), an open
-  provider registry (Incr 87), env-config (Incr 88), a UI switcher (Incr 92), and panel-entered credentials
-  saved to `.env` (Incr 93). The developer runs the center against a live Groq/Ollama/etc. from the browser;
-  the keyword rule stays the offline default. Remaining: streaming replies, and more live-tunable knobs.
+**Landed since the last refresh (do not re-plan):**
+- The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
+  seven stages including Connect and Act (P0 fix, Increment 111); the Reflect stage is a genuine review
+  with an `EpisodeReflected` note (P1, Increment 112); refutations and the **episode trace persist** (JSONL,
+  Increments 83 + 112).
+- **Real perception is wired end-to-end** (Increments 86–93): `LlmPerception` behind the `PerceptionSource`
+  seam, an open provider registry, env-config, a UI switcher, `.env` creds, streaming replies (101),
+  per-provider keys/models (102/103). The keyword rule stays the offline default.
+- **Memory recall + reasoning + learning loop** (Increments 104–110): lexical and semantic (embedding)
+  recall, identity-aware answers, provisional inference answers that mature on confirmation, self-diagnosing
+  provider errors, and decay weighting (113).
+- **Capabilities at the edge** (Increments 115–134): web (Agent-Reach), deep research, blind model
+  comparison, tool registry, notes, mail (real IMAP/SMTP), calendar (local + Google), task scheduler,
+  speech-perception seam, agent delegation.
 
-**Reflective cycle — partially built (see Roadmap for order):**
-- Connect ✅ (Increment 74). Reflect / autonomous Hypothesise / Challenge / cycle-wiring: NOT built.
-- `reflection` in the executive is still a lifecycle placeholder (no genuine review of reasoning); the
-  real Reflect stage is the next increment. Decision policy is still a confidence threshold (D14).
-
-**Smaller open threads:**
-- Deliberations reuse `CognitiveEpisode` as a lifecycle shell (two episode shapes gated by `EpisodeKind`
-  rather than one unified belief+hypothesis model).
-- `TemporalStability` is span-based (no count/recency weighting) and derived for beliefs, not hypotheses.
-- Weighting policy is per-belief (default `SourceWeightingPolicy` — §11 source weighting DOES exist,
-  Increment 7) but not injectable at the `Jarvis(...)` level.
-- Belief/connection identity keys on exact strings (D17): trigger for beliefs, evidence *content* for
-  connections. No semantic matching yet — the deliberate later, richer step.
-- Persistence is per-store JSON (`Jarvis.persistent` wires all 8, incl. reflective-cycle refutations);
-  no real DB; traces are not persisted.
-- §15 cognitive energy/cost: not started (self-contained track, still open).
-- NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
+**Still open / honest gaps:**
+- A real database behind the repository contracts (D10) — persistence is per-store JSON (now crash-safe).
+- `TemporalStability` is span-based (no count/recency weighting beyond the opt-in decay policy) and derived
+  for beliefs, not hypotheses.
+- Weighting policy is injectable at `Jarvis(...)` only as the decay composition (Increment 113); the
+  per-belief default source policy is not yet overridable at the root level.
+- Belief/connection identity still keys on exact strings (D17); semantic matching exists for *recall*
+  (embeddings) but not for belief/connection identity.
+- Deliberations reuse `CognitiveEpisode` as a lifecycle shell (two episode shapes gated by `EpisodeKind`)
+  rather than one unified belief+hypothesis model.
+- The LLM reasoner does **not** yet consume the short-term `ConversationContext` — deep multi-turn
+  "¿por qué?" resolution leans on a fresh model call per message (Increment-114 limitation).
+- Speech has a perception seam but no live STT backer; real instruction execution is unimplemented
+  (instructions are acknowledged honestly, not acted on — earned agency).
+- Notes/tasks/calendar local adapters are file-backed (no CalDAV/ICS sync); email has a real IMAP/SMTP
+  adapter but no per-account UI management.
+- NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile (and at
+  HEAD ruff/pyright are NOT clean — see the debt listed in the next-increment section).
 
 **Already built (do not list as missing):** goals & decomposition, curiosity (incl. give-up/ask-for-help),
 episodic + belief + companion + action memory, self-model (3 tendencies), graded autonomy, attention,
-persistence across restart, perception seam + streams + contested-belief resolution, belief connections.
+persistence across restart (crash-safe), perception seam + streams + contested-belief resolution, belief
+connections, the full reflective cycle, trace persistence, decay forgetting, semantic recall, provisional
+reasoning + confirmation, the five edge capability seams + tool registry, and the command center
+dashboard/sphere/catalog surface.
 
 ---
 

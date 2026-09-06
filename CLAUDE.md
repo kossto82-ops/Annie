@@ -51,11 +51,17 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 90. The reflective cognitive cycle is complete. The command center exists and its speech mouth synchronisation is working.
+The current project is around Increment 134 (see `STATUS.md`). The reflective cognitive cycle is
+complete; recall (lexical + semantic), provisional reasoning with a learning loop, memory decay, and
+the capability edges (web/research/compare/tools/notes/mail/calendar/tasks/agent/speech seam) are
+implemented. The command center exists with voice, a sphere/face, streaming, a reasoning panel, and a
+capability/tool surface; a live LLM provider is opt-in and must remain provider-swappable and
+offline-testable.
 
-The most useful next UI increment currently identified is exposing reasoning/provenance through a `trace` command and a reasoning panel. However, **do not assume this is mandatory**: follow the user's current task.
-
-Track B (real LLM perception) has its provider-agnostic seam and registry, but a live provider adapter is still opt-in and must remain provider-swappable and offline-testable.
+The most useful next increment currently identified is a scoped, mechanical reset of the audit gates
+(ruff + pyright, debt in newer tests) and — for visible capability — having the reasoner consume the
+short-term `ConversationContext`. However, **do not assume this is mandatory**: follow the user's
+current task.
 
 ## How to work
 

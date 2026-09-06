@@ -21,10 +21,11 @@
                     │ Reflection / Curiosity      │
                     │ Goals / Actions              │
                     │ Capabilities (Odysseus)      │
+                    │ Tools / Intent / Recall      │
                     │ Domain Events                │
                     └──────────────┬──────────────┘
                                    │ protocols
-                                   ▼
+                                    ▼
                     ┌─────────────────────────────┐
                     │ Infrastructure              │
                     │ JSON / memory stores        │
@@ -38,21 +39,32 @@
 
 ```text
 src/jarvis/
-├── jarvis.py
+├── jarvis.py                 Jarvis composition root (public API + persistent() wiring)
 ├── domain/
-│   ├── aggregates/
-│   ├── entities/
-│   ├── enums/
-│   ├── events/
-│   ├── perception/
-│   ├── repositories/
-│   ├── services/
-│   └── value_objects/
-├── executive/
-├── infrastructure/
-├── interface/
-├── nervous_system/
-└── observability/
+│   ├── aggregates/           CognitiveEpisode, HypothesisSet, CompanionModel
+│   ├── conversation/         IntentClassifier (bilingual) + ConversationContext
+│   ├── entities/             Belief, Hypothesis
+│   ├── enums/                episode / evidence / attention / action / capability / memory / permission kinds
+│   ├── events/               domain + episode + evidence + belief + hypothesis + action + tool events
+│   ├── perception/           PerceptionSource, CompanionPerceptionSource, SpeechPerceptionSource
+│   ├── reasoning/            Reasoner Protocol + Inference
+│   ├── repositories/         Belief / Episode / Refutation / Capability protocols
+│   ├── retrieval/            MemoryRetriever, ExternalSource, ResearchSource, NotesStore,
+│   │                         CalendarStore, TaskScheduler, MailBox, TaskAgent
+│   ├── services/             weighting, self-observation, curiosity, action advisor, goal reflection,
+│   │                         reflection, hypothesis generation, association, capability scout/evaluator/
+│   │                         gap-observer, knowledge source, model compare
+│   ├── tools/                Tool Protocol, ToolRegistry, ToolPolicy
+│   └── value_objects/        evidence, confidence, goals, actions, capabilities, notes, email,
+│                             calendar events, scheduled tasks, tool specs/calls/results, recalled
+│                             memory, inference, retrieved documents, research reports, model runs…
+├── executive/                ExecutiveController (recall / consult / reason seams before deciding)
+├── infrastructure/           JSON + in-memory stores, trace (JSONL), perceivers, language models,
+│                             provider registry, embedder, edge adapters (Agent-Reach, SearXNG, notes,
+│                             mail IMAP/SMTP, calendar local/Google, task scheduler, task agent), tools
+├── interface/                command_center.py (pure handle/route/snapshot) + server.py + console.html
+├── nervous_system/           synchronous subscribe/publish/dispatch
+└── observability/            EpisodeTrace (in-memory + JSONL sinks)
 ```
 
 ## Responsibility rules
@@ -90,6 +102,9 @@ CognitiveEpisode
        ↓
 retrieve/adopt existing belief if present
        ↓
+recall       (memory seam: stance/context, never belief-conf — D35)
+consult      (knowledge-source seam: one deliberate edge visit — D38)
+reason       (reasoner seam: optional provisional inference — D36)
 observe evidence
        ↓
 derive confidence/stability
@@ -100,6 +115,9 @@ persist updated belief + episode
        ↓
 publish domain events
 ```
+
+Each seam (recall / consult / reason) is *candidate evidence or context only*; the executive stays the
+decider and confidence stays derived.
 
 The reflective flow is:
 
@@ -119,6 +137,43 @@ Learn
 Act / recommend verification
 ```
 
+The conversational flow (command center `say`, Increment 114) routes by intent first:
+
+```text
+utterance
+   ↓
+classify intent (GREETING/SMALLTALK/…/REMEMBER/STATEMENT)
+   ↓
+conversation turn  OR  perceive (world + companion) → recall → consult → reason → reply
+```
+
+## Market-edge capabilities & seams
+
+Every concrete capability sits behind a **domain Protocol** in `domain/retrieval` (or `domain/tools`)
+with an **infrastructure adapter** at the edge (injectable io/net, offline default, `build_*() -> None`
+when unconfigured — D7/D8). Jarvis exposes delegated methods; a `CapabilityProvider` in the registry
+reports readiness, so `can_do` is honest (D37).
+
+```text
+capability name                    seam (Protocol)                      adapter at the edge
+──────────────────────────────────────────────────────────────────────────────────────────────
+search the web / read documents    ExternalSource                       AgentReachSource
+deep research                      ResearchSource                       SearXNG adapter
+compare language models            ModelComparator                      RegistryModelComparator
+reason with a language model       Reasoner                             LlmReasoner / SilentReasoner
+recall by meaning                  MemoryRetriever                      EmbeddingMemoryRetriever
+manage notes                       NotesStore                           LocalNotesStore
+send/read email                    MailBox                              IMAPSMTPMailBox
+manage calendar                    CalendarStore                        LocalCalendarStore + Google
+manage tasks                       TaskScheduler                        LocalTaskScheduler
+delegate to an agent               TaskAgent                            ToolRegistryTaskAgent (or edge)
+perceive speech                    SpeechPerceptionSource               browser STT (seam, no backer yet)
+execute tools                      ToolRegistry + ToolPolicy            FileSystemTool / EchoTool
+```
+
+Material actions may be delegated to an edge agent behind these seams (revised D1) — the agent returns
+*outcomes with provenance*, never Jarvis's judgement (D6), never writes to beliefs/memory directly.
+
 ## Odysseus (capability acquisition)
 
 Odysseus is the mechanism by which Jarvis recognises and grows new *capabilities* --
@@ -129,7 +184,11 @@ Phase 4 added the self-initiated half: Jarvis noticing recurring subjects it fai
 answer, as the seed of a need; Phase 5 backed the remaining seams -- reasoning and
 meaning-recall -- so every catalog capability except speech now reports live when its
 runtime provider is active; Phase 6 closed the loop -- the reflective cycle now
-auto-scouts capability gaps as part of its own pass.
+auto-scouts capability gaps as part of its own pass; **Phase 7 (the Odysseus Fases 0–N
+sweep, Increments 115–134)** expanded the catalog to the concrete edge domains (web,
+deep research, model comparison, tools, notes, mail, calendar, tasks, agent, speech)
+and revised D1 so Jarvis may delegate *material* actions to an edge agent behind a domain
+seam — never cognition (see `docs/claude/INTEGRACION_ODYSSEUS.md` for the full plan).
 
 The flow:
 
@@ -217,12 +276,39 @@ Belief / hypothesis / decision
 
 The model must not directly set belief confidence or make the core decision.
 
+## Recall / reasoning / consult boundary
+
+The three "answer the unknown" seams mirror each other and are strictly candidate-or-context
+(D35/D36/D38):
+
+```text
+question with no grounded belief
+      ↓
+MemoryRetriever   → recalled context/stance (never belief-confidence; memory ≠ truth)
+KnowledgeSource   → one deliberate edge consult: candidate Evidence (research: EXTERNAL_SOURCE
+                   0.4; compare: INFERENCE 0.5) — honest None when empty/failed
+Reasoner          → provisional Inference as response context; may be folded in as the
+                   weakest INFERENCE evidence (0.2) and matured only via confirm()
+      ↓
+executive still decides; confidence still derived
+```
+
+- Recall is opt-in (offline default lexical), edges are opt-in (un-wired Jarvis never consults), and
+  the reasoner is opt-in (`SilentReasoner` when no provider).
+- A reasoned answer is *remembered* as weak, clearly-sourced `INFERENCE` evidence (learning loop,
+  Increment 110); it is grounded only by real evidence or a companion's `confirm()`.
+
 ## Persistence boundary
 
-Repositories belong to the domain as protocols. JSON/in-memory stores belong to infrastructure.
+Repositories belong to the domain as protocols. JSON/in-memory stores (and the JSONL episode trace)
+belong to infrastructure. All writes are crash-safe (atomic temp+rename, Increment 111).
 
 A future database should implement the same repository contracts rather than moving database concepts into the domain.
 
 ## UI boundary
 
 The Command Center is a window onto Jarvis. If a UI feature requires new cognitive behaviour, implement that behaviour in the core first; do not hide cognition in JavaScript or HTTP handlers.
+
+The UI does no perception, recall, or reasoning of its own: `handle`/`route`/`snapshot` call Jarvis's
+ordinary methods and render what the core derived. Intent classification lives in the domain
+(`domain/conversation/intent.py`), not the UI, so conversation routing is testable socket-free.
