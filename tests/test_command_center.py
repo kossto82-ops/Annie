@@ -1366,6 +1366,38 @@ class TestDocumentsCommand:
         assert "Removed" in result["reply"]
         assert jarvis.list_documents() == ()
 
+    def test_search_finds_documents_by_name(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("api.md", b"Jarvis api over websocket")
+        jarvis.write_document("runbook.md", b"deployment runbook")
+        result = handle(jarvis, "documents", {"action": "search", "query": "api"})
+        assert isinstance(result["reply"], str)
+        assert "api.md" in result["reply"]
+        assert "runbook.md" not in result["reply"]
+        assert result["count"] == 1
+
+    def test_search_requires_a_query(self) -> None:
+        result = handle(_documents_able_jarvis(), "documents", {"action": "search"})
+        assert isinstance(result["reply"], str)
+        assert "query" in result["reply"].lower()
+
+    def test_search_with_no_match_is_honest(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("api.md", b"Jarvis api")
+        result = handle(jarvis, "documents", {"action": "search", "query": "zebra"})
+        assert isinstance(result["reply"], str)
+        assert "nothing" in result["reply"].lower()
+        assert result["count"] == 0
+
+    def test_search_respects_an_invalid_limit(self) -> None:
+        jarvis = _documents_able_jarvis()
+        for name in ("a.txt", "b.txt", "c.txt", "d.txt", "e.txt", "f.txt"):
+            jarvis.write_document(name, b"target doc")
+        result = handle(jarvis, "documents", {
+            "action": "search", "query": ".txt", "limit": "bogus",
+        })
+        assert result["count"] == 5  # default limit
+
     def test_missing_action_is_guided(self) -> None:
         result = handle(_documents_able_jarvis(), "documents", {})
         assert isinstance(result["reply"], str)

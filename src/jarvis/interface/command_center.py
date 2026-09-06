@@ -1647,15 +1647,17 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
 def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
     """Manage the files the companion shares (work-with-files capability).
 
-    Actions: ``list``, ``read``, ``save``, ``remove``. ``save`` takes ``name`` and
-    ``content`` with ``encoding`` ``"text"`` (default) or ``"b64"`` (binary kept
-    intact). ``read`` returns the content as text (truncated for the surface) or
-    base64.
+    Actions: ``list``, ``read``, ``save``, ``search``, ``remove``. ``save`` takes
+    ``name`` and ``content`` with ``encoding`` ``"text"`` (default) or ``"b64"``
+    (binary kept intact). ``read`` returns the content as text (truncated for the
+    surface) or base64. ``search`` takes ``query`` and returns the documents whose
+    name or text match, each with a snippet and match strength -- candidates, never
+    a verdict.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
         return {
-            "reply": "Use documents with action 'list', 'read', 'save', or 'remove'.",
+            "reply": "Use documents with action 'list', 'read', 'save', 'search', or 'remove'.",
             "speak": False,
         }
     if jarvis.documents_store is None:
@@ -1704,6 +1706,35 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
                 "reply": f"Kept {name} ({nbytes} bytes{note}).",
                 "speak": False,
                 "name": name,
+            }
+        if action == "search":
+            query = str(payload.get("query", "")).strip()
+            if not query:
+                return {"reply": "Provide a query to search my documents.", "speak": False}
+            limit_raw = payload.get("limit", 5)
+            try:
+                limit = int(limit_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                limit = 5
+            hits = jarvis.search_documents(query, limit=limit)
+            if not hits:
+                return {
+                    "reply": "Nothing in my documents matches that.",
+                    "speak": False,
+                    "count": 0,
+                }
+            lines = "".join(
+                f"  - {hit.name} ({hit.relevance:.2f}): {hit.snippet}\n"
+                for hit in hits
+            )
+            return {
+                "reply": f"Documents matching \"{query}\" ({len(hits)}):\n\n{lines}",
+                "speak": False,
+                "count": len(hits),
+                "hits": [
+                    {"name": hit.name, "snippet": hit.snippet}
+                    for hit in hits
+                ],
             }
         if action == "remove":
             name = _document_name(payload.get("name"))

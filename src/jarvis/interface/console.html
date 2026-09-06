@@ -148,6 +148,10 @@
     border: 1px solid var(--edge); padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; }
   .switch:hover { border-color: var(--teal2); color: #fff; }
   .hint { font-size: 11px; color: var(--dim); margin: 2px 0 4px; }
+  .docsearch { display: flex; gap: 8px; margin: 10px 0; }
+  .docsearch input { flex: 1; min-width: 0; background: var(--panel2); border: 1px solid var(--edge);
+    border-radius: 9px; padding: 7px 12px; color: var(--ink); font-size: 12.5px; outline: none; }
+  .docsearch input:focus { border-color: var(--teal2); }
 
   /* Chat view: fills the right column next to the sphere. */
   .chatview { display: grid; grid-template-rows: auto minmax(0,1fr) auto auto; min-height: 0; min-width: 0; }
@@ -360,7 +364,11 @@
         <div class="card2">
           <h3>Documentos — los archivos que compartes</h3>
           <div class="hint">Adjunta un archivo en el chat (clip) y lo guardo entero. Los que son texto puedo
-            leerlos; los binarios los conservo intactos.</div>
+            leerlos y buscarlos; los binarios los conservo intactos.</div>
+          <div class="docsearch">
+            <input id="docQuery" type="search" placeholder="Buscar en mis archivos…" autocomplete="off">
+            <button type="button" class="switch" id="docSearchBtn">Buscar</button>
+          </div>
           <div id="docbody"><div class="muted">cargando…</div></div>
         </div>
       </div>
@@ -615,7 +623,7 @@ function renderTools(s) {
   }
 }
 
-/* ---- documents: the shared files, listed, readable ---------------------- */
+/* ---- documents: the shared files, listed, searched, readable ------------ */
 function renderDocuments(s) {
   const names = s.documents || [];
   $("docCount").textContent = names.length;
@@ -639,6 +647,40 @@ function renderDocuments(s) {
     row.appendChild(lbl); row.appendChild(btn);
     box.appendChild(row);
   });
+}
+async function searchDocuments() {
+  const query = ($("docQuery").value || "").trim();
+  if (!query) return;
+  let data;
+  try {
+    data = await api("documents", { action: "search", query });
+  } catch (e) {
+    bubble("jarvis", "No pude buscar: " + e);
+    return;
+  }
+  const box = $("docbody");
+  const hits = data.hits || [];
+  if (!hits.length) {
+    box.innerHTML = '<div class="muted">Nada en mis archivos coincide con «' + query + '».</div>';
+    return;
+  }
+  box.innerHTML = "";
+  hits.forEach((h) => {
+    const row = document.createElement("div"); row.className = "row";
+    const name = document.createElement("div");
+    name.className = "lbl"; name.textContent = h.name;
+    name.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0";
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "switch"; btn.textContent = "Leer";
+    btn.addEventListener("click", () => readDocument(h.name));
+    row.appendChild(name); row.appendChild(btn);
+    box.appendChild(row);
+    const snip = document.createElement("div");
+    snip.style.cssText = "font-size:11px;color:var(--dim);margin:2px 0 6px";
+    snip.textContent = h.snippet || "";
+    box.appendChild(snip);
+  });
+  bubble("jarvis", data.reply || ("Busqué «" + query + "» en tus archivos."));
 }
 function toBase64(bytes) {
   let bin = "";
@@ -993,6 +1035,11 @@ async function learnAboutMe() {
   }
 }
 $("learnbtn").addEventListener("click", learnAboutMe);
+
+$("docSearchBtn").addEventListener("click", searchDocuments);
+$("docQuery").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") searchDocuments();
+});
 
 async function runToolPanel(cmd, payload, outId) {
   const out = $(outId);
