@@ -161,3 +161,20 @@ class TestPersistentFactory:
         second = Jarvis.persistent(tmp_path)
         assert second.can_do("perceive speech")
         assert "perceive speech" in second.usable_capabilities()
+
+    def test_command_center_persists_capabilities_and_needs(self, tmp_path: Path) -> None:
+        # The command center's own composition root -- not just Jarvis.persistent --
+        # must also remember acquisitions and needs across a restart (Vision §21, §34).
+        from jarvis.interface.server import create_jarvis
+
+        first = create_jarvis(home=tmp_path)
+        assert (tmp_path / "capabilities.json").exists()
+        first.recognise_need("I need fresh outside information", "to plan the day")
+        assert (tmp_path / "needs.json").exists()
+        assert first.capability_needs()
+
+        second = create_jarvis(home=tmp_path)
+        assert second.capability_needs()
+        # The live ear keeps an acquired capability usable after the "restart".
+        assert second.can_do("perceive speech")
+        assert "perceive speech" in second.usable_capabilities()

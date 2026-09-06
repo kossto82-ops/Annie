@@ -47,7 +47,7 @@ from jarvis.domain.services.capability_gap_observation import (
     CapabilityGap,
     detect_capability_gaps,
 )
-from jarvis.domain.services.capability_scout import scout
+from jarvis.domain.services.capability_scout import catalog, scout
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
@@ -1361,6 +1361,38 @@ class Jarvis:
                 if self.can_do(capability.name)
             )
         )
+
+    def provision_live_capabilities(self) -> tuple[Capability, ...]:
+        """Mark every live-backed catalog capability as acquired (Odysseus, D37).
+
+        A capability counts as live when a registered edge provider serves it and
+        reports available -- i.e. the operator has actually wired that seam (web,
+        email, calendar, tasks, notes, speech, a real reasoner, meaning-recall).
+        That wiring is the evidence, so provisioning turns each live catalog entry
+        into an *acquired* capability: a freshly deployed assistant starts out
+        owning what it was configured with, and a restarting one finds its hands
+        still there. Deliberately rejected entries stay rejected, already-acquired
+        ones are left untouched, and nothing outside the catalog is provisioned.
+        Idempotent; returns the capabilities this call newly acquired.
+        """
+        registry = self._capability_providers
+        if registry is None:
+            return ()
+        provisioned: list[Capability] = []
+        for candidate in catalog():
+            provider = registry.provider_for(candidate.name)
+            if provider is None or not provider.is_available():
+                continue
+            current = self._capabilities.get_by_name(candidate.name)
+            if current is None:
+                acquired = candidate.mark_acquired()
+                self._capabilities.save(acquired)
+                provisioned.append(acquired)
+            elif current.status is CapabilityStatus.PROPOSED:
+                acquired = current.mark_acquired()
+                self._capabilities.save(acquired)
+                provisioned.append(acquired)
+        return tuple(provisioned)
 
     def observe_capability_gaps(self) -> tuple[CapabilityGap, ...]:
         """The recurring subjects Jarvis keeps failing to answer, from its own

@@ -512,3 +512,74 @@ class TestCapabilityProviders:
         assert not jarvis.can_do("perceive speech")
         with pytest.raises(RuntimeError):
             jarvis.perceive_speech("hello")
+
+
+class TestProvisionLiveCapabilities:
+    def test_nothing_is_provisioned_without_a_registry(self) -> None:
+        jarvis = Jarvis()
+        assert jarvis.provision_live_capabilities() == ()
+        assert jarvis.capabilities() == ()
+
+    def test_a_live_provider_provisions_its_catalog_capability(self) -> None:
+        registry = StaticCapabilityRegistry(
+            _by_name={"manage notes": _StubProvider("manage notes")}
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        provisioned = jarvis.provision_live_capabilities()
+        assert tuple(c.name for c in provisioned) == ("manage notes",)
+        held = jarvis.capabilities()
+        assert len(held) == 1
+        assert held[0].status is CapabilityStatus.ACQUIRED
+        assert jarvis.can_do("manage notes")
+        assert jarvis.usable_capabilities() == ("manage notes",)
+
+    def test_provisioning_is_idempotent(self) -> None:
+        registry = StaticCapabilityRegistry(
+            _by_name={"manage notes": _StubProvider("manage notes")}
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        first = jarvis.provision_live_capabilities()
+        assert len(first) == 1
+        assert jarvis.provision_live_capabilities() == ()
+
+    def test_an_unavailable_provider_is_not_provisioned(self) -> None:
+        registry = StaticCapabilityRegistry(
+            _by_name={"manage notes": _StubProvider("manage notes", available=False)}
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        assert jarvis.provision_live_capabilities() == ()
+        assert jarvis.capabilities() == ()
+
+    def test_a_deliberate_reject_is_not_re_provisioned(self) -> None:
+        registry = StaticCapabilityRegistry(
+            _by_name={"manage notes": _StubProvider("manage notes")}
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        jarvis.remember_capability(jarvis.need_capability("manage notes", "for growth")[0])
+        jarvis.reject_capability("manage notes")
+        assert jarvis.provision_live_capabilities() == ()
+        held = jarvis.capabilities()
+        assert len(held) == 1
+        assert held[0].status is CapabilityStatus.REJECTED
+
+    def test_a_proposed_capability_is_upgraded_in_place(self) -> None:
+        registry = StaticCapabilityRegistry(
+            _by_name={"manage notes": _StubProvider("manage notes")}
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        proposed = jarvis.need_capability("manage notes", "for growth")[0]
+        jarvis.remember_capability(proposed)
+        jarvis.provision_live_capabilities()
+        held = jarvis.capabilities()
+        assert len(held) == 1
+        assert held[0].status is CapabilityStatus.ACQUIRED
+        # The earned provenance is preserved, not replaced by the catalog's.
+        assert held[0].provenance == proposed.provenance
+
+    def test_nothing_outside_the_catalog_is_provisioned(self) -> None:
+        registry = StaticCapabilityRegistry(
+            _by_name={"some unknown skill": _StubProvider("some unknown skill")}
+        )
+        jarvis = Jarvis(capability_providers=registry)
+        assert jarvis.provision_live_capabilities() == ()
+        assert jarvis.capabilities() == ()

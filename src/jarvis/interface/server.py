@@ -27,6 +27,7 @@ from jarvis.infrastructure.calendar_store import build_calendar_store
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.google_calendar import build_google_calendar_store
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
+from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.language_model import LanguageModel
@@ -115,7 +116,9 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
 
     The edge capabilities (web, deep research, model comparison, email, delegation,
     notes) are wired from the environment when configured and stay ``None`` otherwise,
-    so the same Jarvis works fully offline. ``can_do`` reflects which are live.
+    so the same Jarvis works fully offline. ``can_do`` reflects which are live. Every
+    capability with a live provider at build time is provisioned as acquired, so the
+    assistant starts out owning what it was configured with (D37).
     """
     settings = settings_from_env()
     perception: PerceptionSource = perceiver_from_settings(settings)
@@ -149,6 +152,8 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             goals_store=JsonBeliefStore(base / "goals.json"),
             subgoals_store=JsonBeliefStore(base / "subgoals.json"),
             refutations_store=JsonRefutationStore(base / "refutations.json"),
+            capabilities_store=JsonCapabilityStore(base / "capabilities.json"),
+            needs_store=JsonBeliefStore(base / "needs.json"),
             perception=perception,
             companion_perception=companion_perception,
             enable_recall=True,
@@ -187,6 +192,11 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     local_tasks = build_task_scheduler()
     if local_tasks is not None:
         jarvis.set_task_scheduler(local_tasks)
+    # Provision every capability whose provider is wired and available at boot, so a
+    # freshly configured assistant starts out owning what it was set up with and the
+    # command center keeps showing it as ready (D37). The stores persist those
+    # acquisitions under ``home``; deliberate rejects are respected.
+    jarvis.provision_live_capabilities()
     return jarvis
 
 
