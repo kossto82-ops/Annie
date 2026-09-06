@@ -8,6 +8,7 @@ it is exercised directly here. The socket in `server.py` only moves these bytes.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -1015,12 +1016,20 @@ class _FakeDocumentStore:
         self._docs.pop(name, None)
 
     def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
-        lowered = query.lower()
-        return tuple(
-            DocumentHit(name=name, snippet=name, relevance=1.0)
-            for name in self.list_documents()
-            if lowered in name.lower()
-        )[:limit]
+        words = {w for w in re.findall(r"\w+", query.lower()) if len(w) >= 2}
+        if not words:
+            return ()
+        hits: list[DocumentHit] = []
+        for name in self.list_documents():
+            overlap = words & {w for w in re.findall(r"\w+", name.lower()) if len(w) >= 2}
+            if not overlap:
+                continue
+            hits.append(
+                DocumentHit(
+                    name=name, snippet=name, relevance=len(overlap) / len(words)
+                )
+            )
+        return tuple(hits)[:limit]
 
 
 def _documents_able_jarvis() -> Jarvis:
@@ -1408,6 +1417,35 @@ class TestDocumentsCommand:
         result = handle(jarvis, "documents", {"action": "read", "name": "missing"})
         assert isinstance(result["reply"], str)
         assert "couldn't" in result["reply"]
+
+
+class TestDocumentChipInSay:
+    """Stored documents ride chat recall as honest chips, never as 'remembered facts'."""
+
+    def test_say_points_to_a_matching_document(self) -> None:
+        jarvis = Jarvis(enable_recall=True, documents_store=_FakeDocumentStore())  # type: ignore[arg-type]
+        jarvis.write_document("api.md", b"Jarvis api over websocket")
+        result = handle(jarvis, "say", {"text": "¿cómo funciona la api?"})
+        assert isinstance(result["reply"], str)
+        assert "api.md" in result["reply"]
+        assert "I remember that" not in result["reply"]
+        chips = cast("list[dict[str, str]]", result["documents"])
+        assert chips[0]["name"] == "api.md"
+        assert chips[0]["snippet"]
+
+    def test_say_with_memory_and_document_shows_both(self) -> None:
+        jarvis = Jarvis(enable_recall=True, documents_store=_FakeDocumentStore())  # type: ignore[arg-type]
+        jarvis.perceive("prefiero trabajar por la noche")
+        jarvis.write_document("noche.txt", b"horario nocturno")
+        result = handle(jarvis, "say", {"text": "¿es de noche?"})
+        assert "I remember that" in cast(str, result["reply"])  # memory still leads the wording
+        names = [chip["name"] for chip in cast("list[dict[str, str]]", result["documents"])]
+        assert "noche.txt" in names
+
+    def test_say_without_documents_has_no_chip(self) -> None:
+        jarvis = Jarvis(enable_recall=True)
+        result = handle(jarvis, "say", {"text": "¿algo nuevo?"})
+        assert "documents" not in result
 
 
 class TestRoute:

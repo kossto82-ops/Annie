@@ -35,6 +35,7 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.services.capability_scout import catalog
 from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.capability import Capability
@@ -436,19 +437,52 @@ def _knowledge_reply(jarvis: Jarvis, text: str) -> Reply:
 
     Recent dialogue is the primary context. Existing long-term memory may still help,
     but this path writes neither companion traits nor world beliefs; persistence is
-    reserved for explicit remember/learn/confirmation actions.
+    reserved for explicit remember/learn/confirmation actions. Stored documents that
+    bear on the turn ride along as honest chips -- the companion sees which of its
+    own files Jarvis is drawing from, never a verdict about them.
     """
     recalled = jarvis.recall(text)
+    documents = _document_recall(recalled)
+    memories = tuple(r for r in recalled if r.kind is not MemoryKind.DOCUMENT)
     inference = jarvis.reason(
         text,
         memory=recalled,
         conversation=jarvis.conversation.before_current(),
     )
     if inference is not None:
-        return _plain(inference.answer, "conversation")
-    if recalled:
-        return _natural_memory_reply(recalled)
-    return _engage_reply(text, None, [])
+        reply = _plain(inference.answer, "conversation")
+    elif memories:
+        reply = _natural_memory_reply(memories)
+    elif documents:
+        reply = _document_note(documents)
+    else:
+        reply = _engage_reply(text, None, [])
+    if documents:
+        reply["documents"] = [
+            {"name": _document_name_from(r), "snippet": r.content} for r in documents
+        ]
+    return reply
+
+
+def _document_recall(recalled: tuple[RecalledMemory, ...]) -> tuple[RecalledMemory, ...]:
+    """The recalled items that are stored documents, in recall order."""
+    return tuple(r for r in recalled if r.kind is MemoryKind.DOCUMENT)
+
+
+def _document_name_from(memory: RecalledMemory) -> str:
+    """The document's name from its provenance (``document: <name>``)."""
+    return memory.provenance.removeprefix("document: ") or memory.content
+
+
+def _document_note(documents: tuple[RecalledMemory, ...]) -> Reply:
+    """Honestly surface that Jarvis finds the answer in the companion's own file."""
+    first = documents[0]
+    name = _document_name_from(first)
+    return _plain(
+        f"I have a file that bears on that — {name}: \"{first.content}\". "
+        "Want me to read it?",
+        "conversation",
+    )
 
 
 def _natural_memory_reply(recalled: tuple[RecalledMemory, ...]) -> Reply:

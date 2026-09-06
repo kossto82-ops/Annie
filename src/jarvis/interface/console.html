@@ -158,6 +158,8 @@
   .chat { overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; min-height: 180px; }
   .msg { max-width: min(88%, 62ch); padding: 11px 15px; border-radius: 14px; white-space: pre-wrap;
     font-size: 13.5px; line-height: 1.6; overflow-wrap: break-word; }
+  .docchip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .docchip .switch { width: auto; margin: 0; padding: 5px 10px; font-size: 11.5px; }
   .msg.you { align-self: flex-end; background: #152238; border: 1px solid #233657;
     border-bottom-right-radius: 5px; }
   .msg.jarvis { align-self: flex-start; background: #0a1322; border: 1px solid #1a2a48;
@@ -524,6 +526,21 @@ function appendToBubble(el, text) {
   el._textNode.textContent += text;
   const chat = $("chat");
   chat.scrollTop = chat.scrollHeight;
+}
+
+function addDocChips(el, docs) {
+  if (!el || !docs || !docs.length) return;
+  const chip = document.createElement("div");
+  chip.className = "docchip";
+  docs.forEach((d) => {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "switch"; btn.textContent = "archivo: " + (d.name || "?");
+    btn.title = d.snippet || d.name || "";
+    btn.addEventListener("click", () => readDocument(d.name));
+    chip.appendChild(btn);
+  });
+  if (el._textNode) el.insertBefore(chip, el._textNode);
+  else el.appendChild(chip);
 }
 
 function speak(text) {
@@ -914,7 +931,8 @@ async function converse(text) {
     await converseStreaming(text);
   } catch (e) {
     const data = await api("say", { text });
-    bubble("jarvis", data.reply, data.confidence);
+    const el = bubble("jarvis", data.reply, data.confidence);
+    addDocChips(el, data.documents);
     renderState(data.state);
     renderReasoning(data.provenance, data.trace);
     if (data.reply) articulate(data.reply);
@@ -941,6 +959,7 @@ async function converseStreaming(text) {
       speakFlag = !!m.speak;
       thinking = false; setMood("idle");
       el = bubble("jarvis", "");
+      addDocChips(el, m.documents);
     } else if (evt.event === "chunk") {
       if (!el) el = bubble("jarvis", "");
       full += evt.data.text; appendToBubble(el, evt.data.text);
