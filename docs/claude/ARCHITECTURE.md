@@ -143,6 +143,11 @@ The Challenge (stage four) carries the leading hypothesis's *derived* confidence
 as possibly overfitting -- reported honestly, never altering its strength, the ranking, or a tie
 (Increment 146).
 
+Episodes hold exactly ONE conclusion-model: a working `Belief` (conclusion) or a `HypothesisSet`
+(deliberation), in a single `_conclusion` slot. Both ride the same lifecycle and the same event
+boundary, and `EpisodeKind` is *derived* from which one the episode held -- never painted by the record
+callers (Increment 147).
+
 The conversational flow (command center `say`, Increment 114) routes by intent first:
 
 ```text

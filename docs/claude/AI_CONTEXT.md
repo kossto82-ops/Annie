@@ -167,6 +167,9 @@ Increments 111–112).
 - Temporal stability for hypotheses: hypotheses derive the same span-based `TemporalStability` as
   beliefs; the `Challenge` narration flags a narrow-time-window leader as possible overfitting without
   touching its strength, ranking or ties (Increment 146).
+- One `CognitiveEpisode` shape (Increment 147): the episode holds ONE conclusion-model — a `Belief` or a
+  `HypothesisSet` — in a single slot; both ride the same lifecycle, the same event boundary, and
+  `kind` (CONCLUSION/DELIBERATION) is derived from that conclusion, never painted by the caller.
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -178,7 +181,8 @@ Increments 111–112).
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
 - A real DB behind the repository contracts (D10); `TemporalStability` count/recency weighting beyond the
-  opt-in decay policy; more §15 energy modelling (charge deliberations).
+  opt-in decay policy; more §15 energy modelling (charge deliberations); document depth (ownership,
+  per-file ranking, editing via chat).
 - Live STT backer for the speech seam; real instruction execution (earned agency).
 - Document depth: ownership, per-file search ranking, or editing via the chat itself (folder awareness landed).
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).

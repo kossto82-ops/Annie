@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-07 (Increment 146)
+Last updated: 2026-09-07 (Increment 147)
 
 ---
 
@@ -1775,6 +1775,20 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   self-observation import it instead of three mirrored literals.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1122 passed, 3 skipped.
 
+### Increment 147 — one CognitiveEpisode shape ✅ (2026-09-07)
+- Deliberations previously shunted the `HypothesisSet` around as a local in the executive and painted
+  `kind=EpisodeKind.DELIBERATION` onto the record by hand, while conclusions got a genuine slot in the
+  aggregate (`_working_belief`). Two implicit shapes, two hand-painted tags (`002c364`).
+- The episode now holds ONE conclusion-model — a working `Belief` or a `HypothesisSet` — in a single
+  `_conclusion` slot: both ride the same lifecycle, flow their events through the same `pull_events`
+  boundary, and record through it. `kind` is derived from which conclusion the episode actually held
+  (a `HypothesisSet` deliberates, anything else concludes), so the label can never drift from the
+  episode and both hand-painted call sites disappear.
+- `observe()` now refuses single evidence on a deliberation (evidence must name a hypothesis — it goes
+  through the set), and `WorkingBelief`/`explain` stay None for the deliberation shape. Public surface
+  (`working_belief`, lifecycle, events) unchanged.
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1130 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2009,8 +2023,7 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
   tunable, expose it via constructor/config, not a module constant.
 
 ### Track D — smaller finish-offs (fold in opportunistically, not their own phase)
-- Unify the two `CognitiveEpisode` shapes (conclusion vs deliberation) — or document the split as final.
-- `TemporalStability` for hypotheses (currently beliefs only); count/recency weighting.
+- `TemporalStability` count/recency weighting (currently span-only; hypotheses now derive it too, 146).
 - Injectable weighting policy at `Jarvis(...)` level (currently per-belief default).
 - Semantic matching for belief/connection identity (beyond exact-string D17) — naturally becomes an
   LLM/embedding job once Track B exists.
@@ -2028,14 +2041,13 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), files/documents as a
 first-class surface, and a real LLM path (Increments 89–142); cognition thresholds are live-tunable (141),
 documents are folder-aware (142), the per-belief weighting policy is root-injectable (144), deep
-multi-turn reasoning rides a session span (145) and hypotheses narrate their own temporal stability
-(146).** The audit-gate reset (135), the reasoner-consuming-
+multi-turn reasoning rides a session span (145), hypotheses narrate their own temporal stability
+(146) and beliefs and hypothesis sets share one `CognitiveEpisode` shape (147).** The audit-gate reset (135), the reasoner-consuming-
 ConversationContext work (138), live knobs (141), the deterministic event guard (143), the
-weighting-policy seam (144), the reasoning span (145) and the hypothesis-stability narration (146) have
+weighting-policy seam (144), the reasoning span (145), the hypothesis-stability narration (146) and
+the episode-shape unification (147) have
 all landed. The mechanical debt is gone; the
 remaining choices are capability. Natural next moves — pick one:
-- **Unify the two `CognitiveEpisode` shapes** (deliberations reuse the episode as a lifecycle shell
-  rather than one belief+hypothesis model) — a design-debt clean-up.
 - **Document depth:** ownership, per-file search ranking, or editing documents via the chat itself.
 - **Or a remaining honest gap:** the real database behind the repository contracts (D10), the live STT
   backer behind the speech seam, or more §15 energy modelling (charge deliberations).
@@ -2058,7 +2070,7 @@ weighting, Increment 113). The remaining directions:
   too: the session `ReasoningSpan` (Increment 145) carries the discussion across turns. The span is
   conversation-scoped; extending it into the *episode* path or a live voice session stays open.
 - **Track C/D leftovers (opportunistic).** More §15 energy modelling (charge deliberations; energy recovery
-  over time); unify the two `CognitiveEpisode` shapes; count/recency weighting in `TemporalStability`
+  over time); count/recency weighting in `TemporalStability`
   beyond the opt-in decay policy; injectable
   weighting policy at the `Jarvis(...)` level (done — decay at Increment 113, per-belief root default at
   144); pin ruff/pyright in a lockfile; consider a real DB behind the repository
@@ -2067,8 +2079,9 @@ weighting, Increment 113). The remaining directions:
 *Recommendation: the mechanical gates debt is gone (Increment 135), the reasoner reads recent turns
 (Increment 138), cognition thresholds are live-tunable (Increment 141), documents are folder-aware
 (Increment 142), the per-belief weighting policy is root-injectable (144), deep multi-turn reasoning
-rides a session span (145) and hypotheses narrate their temporal stability (146). The least-risk next
-choice is unifying the two `CognitiveEpisode` shapes; the biggest-value one remains a real database (D10)
+rides a session span (145), hypotheses narrate their temporal stability (146) and beliefs and hypothesis
+sets share one `CognitiveEpisode` shape (147). The least-risk next
+choice is document depth; the biggest-value one remains a real database (D10)
 behind the
 repository contracts.*
 
@@ -2078,7 +2091,7 @@ seam.)*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-09-07, Increment 146)
+## Known limitations / not built yet  (refreshed 2026-09-07, Increment 147)
 
 **Landed since the last refresh (do not re-plan):**
 - The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
@@ -2115,6 +2128,9 @@ seam.)*
 - **Temporal stability for hypotheses** (Increment 146): hypotheses derive the same span-based
   `TemporalStability` estimator as beliefs; the `Challenge` narration flags a narrow-time-window leader
   as possible overfitting (anti-overfit, Vision §11) without touching its strength, ranking or ties.
+- **One `CognitiveEpisode` shape** (Increment 147): deliberations attach their `HypothesisSet` exactly
+  like conclusions attach their `Belief` — one `_conclusion` slot, one lifecycle, one event boundary;
+  `EpisodeKind` is derived from that conclusion, never painted by the record callers.
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
@@ -2127,8 +2143,8 @@ seam.)*
   it affecting ranking or ties.
 - Belief/connection identity still keys on exact strings (D17); semantic matching exists for *recall*
   (embeddings) but not for belief/connection identity.
-- Deliberations reuse `CognitiveEpisode` as a lifecycle shell (two episode shapes gated by `EpisodeKind`)
-  rather than one unified belief+hypothesis model.
+- The episode-shape split is *gone* (Increment 147): beliefs and hypothesis sets share one
+  `CognitiveEpisode` shape and `EpisodeKind` is derived from the conclusion, never painted.
 - *Deep multi-turn* reasoning: an incremental reasoning span over several turns is now built — the
   session `ReasoningSpan` (Increment 145) continues the discussion across turns with a deterministic
   thread lifecycle. The span is conversation-scoped and bounded; it is not yet carried into the
