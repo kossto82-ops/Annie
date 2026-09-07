@@ -34,6 +34,7 @@ from jarvis.domain.conversation.intent import (
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
+from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.services.capability_scout import catalog
@@ -1729,18 +1730,23 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
 def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
     """Manage the files the companion shares (work-with-files capability).
 
-    Actions: ``list``, ``read``, ``save``, ``search``, ``remove``. ``save`` takes
-    ``name`` and ``content`` with ``encoding`` ``"text"`` (default) or ``"b64"``
-    (binary kept intact), plus an optional ``path`` folder to file the document
-    under (``"docs/api.md"``, relative and sandbox-safe). ``read`` returns the
-    content as text (truncated for the surface) or base64. ``search`` takes
-    ``query`` and returns the documents whose name or text match, each with a
-    snippet and match strength -- candidates, never a verdict.
+    Actions: ``list``, ``read``, ``info``, ``save``, ``search``, ``remove``.
+    ``list`` names each document with its owner (companion-shared vs generated).
+    ``info`` answers "whose is that, and when did I get it?" from the recorded
+    provenance (Vision §26). ``save`` takes ``name`` and ``content`` with
+    ``encoding`` ``"text"`` (default) or ``"b64"`` (binary kept intact), an
+    optional ``path`` folder to file the document under (``"docs/api.md"``,
+    relative and sandbox-safe), and an optional ``owner`` ``"companion"``
+    (default) or ``"jarvis"``. ``read`` returns the content as text (truncated
+    for the surface) or base64. ``search`` takes ``query`` and returns the
+    documents whose name or text match, each with a snippet and match strength --
+    candidates, never a verdict.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
         return {
-            "reply": "Use documents with action 'list', 'read', 'save', 'search', or 'remove'.",
+            "reply": "Use documents with action 'list', 'read', 'info', 'save', "
+            "'search', or 'remove'.",
             "speak": False,
         }
     if jarvis.documents_store is None:
@@ -1755,7 +1761,7 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
             names = jarvis.list_documents()
             if not names:
                 return {"reply": "No documents yet — share a file.", "speak": False}
-            lines = "".join(f"  - {name}\n" for name in names)
+            lines = "".join(f"  - {_ownership_tag(jarvis, name)}{name}\n" for name in names)
             return {
                 "reply": f"Documents I'm keeping ({len(names)}):\n\n{lines}",
                 "speak": False,
@@ -1767,6 +1773,11 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
                 return {"reply": "Provide a document name to read.", "speak": False}
             raw = jarvis.read_document(name)
             return _document_read_reply(name, raw)
+        if action == "info":
+            name = _document_name(payload.get("name"))
+            if not name:
+                return {"reply": "Provide a document name to inspect.", "speak": False}
+            return _document_info_reply(name, jarvis)
         if action == "save":
             name = _document_name(payload.get("name"))
             if not name:
@@ -1791,7 +1802,10 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
                     return {"reply": "content was not valid base64.", "speak": False}
             else:
                 raw = str(content).encode("utf-8")
-            jarvis.write_document(name, raw)
+            owner = _document_owner(payload.get("owner"))
+            if owner is None:
+                return {"reply": "Owner must be 'companion' or 'jarvis'.", "speak": False}
+            jarvis.write_document(name, raw, owner=owner)
             nbytes = len(raw)
             note = " " if _looks_text(raw) else " (binary)"
             return {
@@ -1879,6 +1893,69 @@ def _looks_text(content: bytes) -> bool:
         return True
     except UnicodeDecodeError:
         return False
+
+
+def _ownership_tag(jarvis: Jarvis, name: str) -> str:
+    """A short attribution prefix for a document in a listing (Vision §26).
+
+    Companion-shared files are the norm; only a Jarvis-materialised artifact is
+    tagged explicitly, so the common case stays quiet.
+    """
+    meta = jarvis.document_meta(name)
+    if meta is not None and meta.owner is DocumentOwner.JARVIS:
+        return "[jarvis] "
+    return ""
+
+
+def _document_owner(raw: object) -> DocumentOwner | None:
+    """The attribution for a save, or None when the value is not a known owner."""
+    if raw is None:
+        return DocumentOwner.COMPANION
+    text = str(raw).strip().lower()
+    if text == "jarvis":
+        return DocumentOwner.JARVIS
+    if text == "companion":
+        return DocumentOwner.COMPANION
+    return None
+
+
+def _document_info_reply(name: str, jarvis: Jarvis) -> Reply:
+    """Render the recorded provenance of one document (Vision §26).
+
+    ``requested_at``/``updated_at``/``owner`` are the store's honest record of
+    attribution and timing; ``None`` means the file predates provenance tracking.
+    """
+    meta = jarvis.document_meta(name)
+    if meta is None:
+        return {
+            "reply": f"I keep {name} but no provenance was recorded for it — it "
+            "predates my ownership tracking.",
+            "speak": False,
+            "name": name,
+        }
+    owner = (
+        "companion — I'm keeping a file you shared"
+        if meta.owner is DocumentOwner.COMPANION
+        else "jarvis — a document I generated"
+    )
+    return {
+        "reply": (
+            f"{name}\n"
+            f"  Owner:   {owner}\n"
+            f"  Size:    {meta.size_bytes} bytes\n"
+            f"  Stored:  {meta.stored_at:%Y-%m-%d %H:%M} UTC\n"
+            f"  Updated: {meta.updated_at:%Y-%m-%d %H:%M} UTC"
+        ),
+        "speak": False,
+        "name": name,
+        "meta": {
+            "name": meta.name,
+            "owner": meta.owner.value,
+            "size_bytes": meta.size_bytes,
+            "stored_at": meta.stored_at.isoformat(),
+            "updated_at": meta.updated_at.isoformat(),
+        },
+    }
 
 
 def _document_read_reply(name: str, raw: bytes) -> Reply:

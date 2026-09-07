@@ -3,14 +3,17 @@
 The store keeps one file per document under a bounded root -- exactly the bytes
 of whatever the companion shares, flat or filed under a relative folder. Every
 test here drives a fake io driver so no real disk is touched: reading, writing
-binary text, listing, deleting, nested folders, the bounded-path sandbox, and
-the ``None`` offline factory are all exercised directly.
+binary text, listing, deleting, nested folders, the bounded-path sandbox, the
+``None`` offline factory, and the recorded provenance (owner + timing) are all
+exercised directly.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.infrastructure.document_store import LocalDocumentStore, build_document_store
 
 
@@ -30,6 +33,19 @@ class _FakeIO:
         if operation == "delete":
             self.files.pop(path, None)
         return b""
+
+
+class _FakeClock:
+    def __init__(self, start: datetime) -> None:
+        self._current = start
+
+    def __call__(self) -> datetime:
+        self._current += timedelta(minutes=1)
+        return self._current
+
+
+def _start() -> datetime:
+    return datetime(2026, 9, 7, 10, 0, tzinfo=UTC)
 
 
 class TestLocalDocumentStore:
@@ -189,3 +205,69 @@ class TestDocumentSearch:
         assert len(store.search_documents("alpha", limit=1)) == 1
         assert store.search_documents("nonexistent term") == ()
         assert store.search_documents("   ") == ()  # no scoreable tokens
+
+
+class TestDocumentProvenance:
+    """Attribution and timing are recorded per document (Vision §26)."""
+
+    def test_write_records_companion_owner_by_default(self) -> None:
+        io = _FakeIO()
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io, clock=_FakeClock(_start()))
+        store.write_document("notes.md", b"hello")
+        meta = store.document_meta("notes.md")
+        assert meta is not None
+        assert meta.name == "notes.md"
+        assert meta.owner is DocumentOwner.COMPANION
+        assert meta.size_bytes == 5
+
+    def test_write_can_attribute_a_jarvis_generated_document(self) -> None:
+        io = _FakeIO()
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io, clock=_FakeClock(_start()))
+        store.write_document("report.md", b"# report", owner=DocumentOwner.JARVIS)
+        meta = store.document_meta("report.md")
+        assert meta is not None
+        assert meta.owner is DocumentOwner.JARVIS
+
+    def test_rewrite_keeps_stored_at_and_refreshes_updated_at(self) -> None:
+        io = _FakeIO()
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io, clock=_FakeClock(_start()))
+        store.write_document("v2.txt", b"old")
+        first = store.document_meta("v2.txt")
+        assert first is not None
+        store.write_document("v2.txt", b"brand new")
+        second = store.document_meta("v2.txt")
+        assert second is not None
+        assert second.stored_at == first.stored_at
+        assert second.updated_at > first.updated_at
+        assert second.size_bytes == 9
+
+    def test_meta_is_none_for_a_file_without_provenance(self) -> None:
+        io = _FakeIO({"legacy.txt": b"x"})  # predates provenance tracking
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io, clock=_FakeClock(_start()))
+        assert store.document_meta("legacy.txt") is None
+
+    def test_list_and_search_never_surface_the_index(self) -> None:
+        io = _FakeIO()
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io, clock=_FakeClock(_start()))
+        store.write_document("notes.md", b"hello there")
+        assert store.list_documents() == ("notes.md",)
+        assert "_jarvis-meta.json" not in store.list_documents()
+        assert store.search_documents("jarvis meta") == ()
+
+    def test_remove_drops_its_provenance(self) -> None:
+        io = _FakeIO()
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io, clock=_FakeClock(_start()))
+        store.write_document("gone.txt", b"x")
+        store.remove_document("gone.txt")
+        assert store.document_meta("gone.txt") is None
+
+    def test_provenance_survives_a_reload(self) -> None:
+        # A second store over the same io sees the same recorded attribution.
+        io = _FakeIO()
+        first = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io, clock=_FakeClock(_start()))
+        first.write_document("notes.md", b"hello", owner=DocumentOwner.JARVIS)
+        reloaded = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        meta = reloaded.document_meta("notes.md")
+        assert meta is not None
+        assert meta.owner is DocumentOwner.JARVIS
+        assert meta.name == "notes.md"

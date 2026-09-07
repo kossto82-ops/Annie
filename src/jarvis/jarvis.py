@@ -18,6 +18,7 @@ from jarvis.domain.conversation.conversation_context import ConversationContext,
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
+from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
@@ -81,6 +82,7 @@ from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.document_hit import DocumentHit
+from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.email_message import EmailMessage
 from jarvis.domain.value_objects.energy_costs import EnergyCosts
 from jarvis.domain.value_objects.evidence import Evidence
@@ -956,16 +958,32 @@ class Jarvis:
             raise RuntimeError("no documents capability configured; set_documents_store")
         return self._documents_store.read_document(name)
 
-    def write_document(self, name: str, content: bytes | str) -> None:
+    def write_document(
+        self, name: str, content: bytes | str, *, owner: DocumentOwner = DocumentOwner.COMPANION
+    ) -> None:
         """Store (or replace) the document ``name`` through the documents capability.
 
         ``content`` may be text (encoded utf-8) or raw bytes -- any file type is
-        kept intact. A reversible, local side-effect gated in the caller.
+        kept intact. ``owner`` attributes the artifact (Vision §26): who gave
+        Jarvis this file; the companion is the default, a Jarvis-materialised
+        report passes ``DocumentOwner.JARVIS``. A reversible, local side-effect
+        gated in the caller.
         """
         if self._documents_store is None:
             raise RuntimeError("no documents capability configured; set_documents_store")
         payload = content if isinstance(content, bytes) else content.encode("utf-8")
-        self._documents_store.write_document(name, payload)
+        self._documents_store.write_document(name, payload, owner=owner)
+
+    def document_meta(self, name: str) -> DocumentMeta | None:
+        """The recorded provenance of ``name``, or None when none was recorded.
+
+        Attribution and timing (Vision §26) -- whose artifact it is and when it
+        was stored/updated; ``None`` honestly says the store keeps no provenance
+        for that file. Raises when offline (no store to ask).
+        """
+        if self._documents_store is None:
+            raise RuntimeError("no documents capability configured; set_documents_store")
+        return self._documents_store.document_meta(name)
 
     def remove_document(self, name: str) -> None:
         """Delete the document ``name`` through the documents capability."""

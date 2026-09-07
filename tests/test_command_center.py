@@ -18,6 +18,7 @@ import pytest
 
 from jarvis import Jarvis
 from jarvis.domain.enums.capability_status import CapabilityStatus
+from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.perception.companion_perception import CompanionObservation
@@ -28,6 +29,7 @@ from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.document_hit import DocumentHit
+from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
@@ -1037,6 +1039,7 @@ class _FakeDocumentStore:
 
     def __init__(self) -> None:
         self._docs: dict[str, bytes] = {}
+        self._meta: dict[str, DocumentMeta] = {}
 
     def list_documents(self) -> tuple[str, ...]:
         return tuple(sorted(self._docs))
@@ -1046,11 +1049,26 @@ class _FakeDocumentStore:
             raise KeyError(name)
         return self._docs[name]
 
-    def write_document(self, name: str, content: bytes) -> None:
+    def write_document(
+        self, name: str, content: bytes, *, owner: DocumentOwner = DocumentOwner.COMPANION
+    ) -> None:
         self._docs[name] = content
+        now = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+        previous = self._meta.get(name)
+        self._meta[name] = DocumentMeta(
+            name=name,
+            owner=owner,
+            size_bytes=len(content),
+            stored_at=previous.stored_at if previous is not None else now,
+            updated_at=now,
+        )
 
     def remove_document(self, name: str) -> None:
         self._docs.pop(name, None)
+        self._meta.pop(name, None)
+
+    def document_meta(self, name: str) -> DocumentMeta | None:
+        return self._meta.get(name)
 
     def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
         words = {w for w in re.findall(r"\w+", query.lower()) if len(w) >= 2}
@@ -1471,6 +1489,83 @@ class TestDocumentsCommand:
         result = handle(jarvis, "documents", {"action": "read", "name": "missing"})
         assert isinstance(result["reply"], str)
         assert "couldn't" in result["reply"]
+
+
+class TestDocumentProvenanceCommand:
+    """Ownership and timing are surfaced honestly (Vision §26)."""
+
+    def test_list_tags_a_jarvis_generated_document(self) -> None:
+        jarvis = _documents_able_jarvis()
+        handle(jarvis, "documents", {
+            "action": "save", "name": "plan.md", "content": "# plan",
+            "owner": "jarvis",
+        })
+        result = handle(jarvis, "documents", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "[jarvis] plan.md" in result["reply"]
+
+    def test_list_leaves_companion_documents_untagged(self) -> None:
+        jarvis = _documents_able_jarvis()
+        handle(jarvis, "documents", {
+            "action": "save", "name": "notes.txt", "content": "hello",
+        })
+        result = handle(jarvis, "documents", {"action": "list"})
+        assert isinstance(result["reply"], str)
+        assert "- notes.txt\n" in result["reply"]
+        assert "[jarvis]" not in result["reply"]
+
+    def test_info_reports_recorded_provenance(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("plan.md", b"# plan")
+        result = handle(jarvis, "documents", {"action": "info", "name": "plan.md"})
+        assert isinstance(result["reply"], str)
+        assert "Owner" in result["reply"]
+        assert "companion" in result["reply"]
+        assert "Stored" in result["reply"]
+        meta = cast("dict[str, object] | None", result["meta"])
+        assert meta is not None
+        assert meta["owner"] == "companion"
+
+    def test_info_shows_a_jarvis_owned_document(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("plan.md", b"x", owner=DocumentOwner.JARVIS)
+        result = handle(jarvis, "documents", {"action": "info", "name": "plan.md"})
+        assert isinstance(result["reply"], str)
+        assert "jarvis" in result["reply"]
+
+    def test_info_without_provenance_is_honest(self) -> None:
+        jarvis = _documents_able_jarvis()
+        result = handle(jarvis, "documents", {"action": "info", "name": "ancient.txt"})
+        assert isinstance(result["reply"], str)
+        assert "no provenance" in result["reply"]
+
+    def test_info_requires_a_name(self) -> None:
+        result = handle(_documents_able_jarvis(), "documents", {"action": "info"})
+        assert isinstance(result["reply"], str)
+        assert "name" in result["reply"]
+
+    def test_save_accepts_a_jarvis_owner(self) -> None:
+        jarvis = _documents_able_jarvis()
+        handle(jarvis, "documents", {
+            "action": "save", "name": "report.md", "content": "x", "owner": "jarvis",
+        })
+        meta = jarvis.document_meta("report.md")
+        assert meta is not None
+        assert meta.owner is DocumentOwner.JARVIS
+
+    def test_save_rejects_an_unknown_owner(self) -> None:
+        jarvis = _documents_able_jarvis()
+        result = handle(jarvis, "documents", {
+            "action": "save", "name": "a.txt", "content": "x", "owner": "weird",
+        })
+        assert isinstance(result["reply"], str)
+        assert "Owner must be" in result["reply"]
+        assert jarvis.list_documents() == ()
+
+    def test_info_without_a_store_is_a_clear_message(self) -> None:
+        result = handle(Jarvis(), "documents", {"action": "info", "name": "a.txt"})
+        assert isinstance(result["reply"], str)
+        assert "documents capability" in result["reply"]
 
 
 class TestDocumentChipInSay:

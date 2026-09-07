@@ -17,12 +17,14 @@ import pytest
 from jarvis import Jarvis
 from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
+from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.services.capability_scout import catalog, scout
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.document_hit import DocumentHit
+from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.capability_registry import (
     ExternalSourceCapability,
@@ -605,11 +607,27 @@ class _FakeDocumentsStore:
             raise KeyError(name)
         return self.docs[name]
 
-    def write_document(self, name: str, content: bytes) -> None:
+    def write_document(
+        self, name: str, content: bytes, *, owner: DocumentOwner = DocumentOwner.COMPANION
+    ) -> None:
         self.docs[name] = content
 
     def remove_document(self, name: str) -> None:
         self.docs.pop(name, None)
+
+    def document_meta(self, name: str) -> DocumentMeta | None:
+        if name not in self.docs:
+            return None
+        from datetime import UTC, datetime
+
+        now = datetime(2026, 9, 1, tzinfo=UTC)
+        return DocumentMeta(
+            name=name,
+            owner=DocumentOwner.COMPANION,
+            size_bytes=len(self.docs[name]),
+            stored_at=now,
+            updated_at=now,
+        )
 
     def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
         lowered = query.lower()

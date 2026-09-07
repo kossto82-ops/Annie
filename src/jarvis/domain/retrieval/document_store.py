@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.value_objects.document_hit import DocumentHit
+from jarvis.domain.value_objects.document_meta import DocumentMeta
 
 
 class DocumentStore(Protocol):
@@ -36,17 +38,33 @@ class DocumentStore(Protocol):
         """
         ...
 
-    def write_document(self, name: str, content: bytes) -> None:
+    def write_document(
+        self,
+        name: str,
+        content: bytes,
+        *,
+        owner: DocumentOwner = DocumentOwner.COMPANION,
+    ) -> None:
         """Store (or replace) the document ``name`` with ``content``.
 
         Names are bounded, relative, forward-slash paths -- never absolute and
         never ``.``/``..`` -- so a stored file can never escape the store's
-        bounded root.
+        bounded root. ``owner`` attributes the document (Vision §26): who gave
+        Jarvis this artifact.
         """
         ...
 
     def remove_document(self, name: str) -> None:
         """Delete the document ``name``; a no-op when it does not exist."""
+        ...
+
+    def document_meta(self, name: str) -> DocumentMeta | None:
+        """The recorded provenance of ``name``, or None when none was recorded.
+
+        Attribution and timing (Vision §26) -- who owns the document and when it
+        was stored/updated. Honest ``None`` means the store keeps no provenance
+        for that file; it is never a guess.
+        """
         ...
 
     def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
