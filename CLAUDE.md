@@ -52,15 +52,17 @@ Read these files only when relevant:
 ## Current priority
 
 The current project is around Increment 134 (see `STATUS.md`). The reflective cognitive cycle is
-complete; recall (lexical + semantic), provisional reasoning with a learning loop, memory decay, and
-the capability edges (web/research/compare/tools/notes/mail/calendar/tasks/agent/speech seam) are
-implemented. The command center exists with voice, a sphere/face, streaming, a reasoning panel, and a
-capability/tool surface; a live LLM provider is opt-in and must remain provider-swappable and
-offline-testable.
+complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
+consumes the short-term `ConversationContext`), memory decay, and the capability edges
+(web/research/compare/tools/notes/mail/calendar/tasks/agent/speech seam) are implemented. Files/documents
+are a first-class surface (accept, recall, search, chip in chat, read). The command center exists with
+voice, a sphere/face, streaming, a reasoning panel, and a capability/tool surface; a live LLM provider is
+opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD (ruff ·
+pyright strict 0 errors).
 
-The most useful next increment currently identified is a scoped, mechanical reset of the audit gates
-(ruff + pyright, debt in newer tests) and — for visible capability — having the reasoner consume the
-short-term `ConversationContext`. However, **do not assume this is mandatory**: follow the user's
+The most useful next increments currently identified are live-tunable knobs, documents/files depth, or a
+deep multi-turn reasoning span (the reasoner receives recent turns but each message is still a fresh
+model call). However, **do not assume this is mandatory**: follow the user's
 current task.
 
 ## How to work

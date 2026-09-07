@@ -50,7 +50,7 @@ src/jarvis/
 │   ├── reasoning/            Reasoner Protocol + Inference
 │   ├── repositories/         Belief / Episode / Refutation / Capability protocols
 │   ├── retrieval/            MemoryRetriever, ExternalSource, ResearchSource, NotesStore,
-│   │                         CalendarStore, TaskScheduler, MailBox, TaskAgent
+│   │                         CalendarStore, TaskScheduler, MailBox, TaskAgent, DocumentStore
 │   ├── services/             weighting, self-observation, curiosity, action advisor, goal reflection,
 │   │                         reflection, hypothesis generation, association, capability scout/evaluator/
 │   │                         gap-observer, knowledge source, model compare
@@ -61,7 +61,8 @@ src/jarvis/
 ├── executive/                ExecutiveController (recall / consult / reason seams before deciding)
 ├── infrastructure/           JSON + in-memory stores, trace (JSONL), perceivers, language models,
 │                             provider registry, embedder, edge adapters (Agent-Reach, SearXNG, notes,
-│                             mail IMAP/SMTP, calendar local/Google, task scheduler, task agent), tools
+│                             mail IMAP/SMTP, calendar local/Google, task scheduler, task agent,
+│                             LocalDocumentStore, DocumentMemoryRetriever), tools
 ├── interface/                command_center.py (pure handle/route/snapshot) + server.py + console.html
 ├── nervous_system/           synchronous subscribe/publish/dispatch
 └── observability/            EpisodeTrace (in-memory + JSONL sinks)
@@ -144,8 +145,14 @@ utterance
    ↓
 classify intent (GREETING/SMALLTALK/…/REMEMBER/STATEMENT)
    ↓
-conversation turn  OR  perceive (world + companion) → recall → consult → reason → reply
+conversation turn  OR  perceive (world + companion) → recall (memory + documents)
+                                                  → consult → reason (with recent turns) → reply
 ```
+
+Since Increment 138 the reasoner receives the short-term `ConversationContext` (recent turns) in this
+flow and in episode reasoning (`think(…, conversation=…)` → executive run → `_reason_into`). Replies that
+recalled a matching document carry a `documents` chip list (name + snippet) in the stream meta and the
+fallback JSON.
 
 ## Market-edge capabilities & seams
 
@@ -169,10 +176,22 @@ manage tasks                       TaskScheduler                        LocalTas
 delegate to an agent               TaskAgent                            ToolRegistryTaskAgent (or edge)
 perceive speech                    SpeechPerceptionSource               browser STT (seam, no backer yet)
 execute tools                      ToolRegistry + ToolPolicy            FileSystemTool / EchoTool
+work with files                    DocumentStore                        LocalDocumentStore
+edit project files                 ToolRegistry (project: roots)        FileSystemTool
 ```
 
 Material actions may be delegated to an edge agent behind these seams (revised D1) — the agent returns
 *outcomes with provenance*, never Jarvis's judgement (D6), never writes to beliefs/memory directly.
+
+## Files & documents
+
+An extra storage seam (`DocumentStore`) treats companion files as bytes the core may list/read/write/
+remove (`LocalDocumentStore`, io-injectable, offline default `build_document_store`). Documents also
+feed **recall**: `DocumentMemoryRetriever` wraps any base retriever and appends lexical `DocumentHit`s
+(`MemoryKind.DOCUMENT`, procedure `"document: <name>"`). The wrap is source-aware — the retriever keeps a
+callable to the current store, so swapping `set_documents_store` at runtime is honoured without rewiring.
+`say` separates document hits from memory and renders them as chips; snippets never quote opaque binary
+bytes (binary findable by name only).
 
 ## Odysseus (capability acquisition)
 

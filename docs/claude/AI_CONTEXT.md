@@ -69,11 +69,17 @@ for all stores (incl. capabilities, refutations, trace).
 
 **Recall seam** (`MemoryRetriever` + `RecalledMemory`): a deterministic lexical adapter (offline default)
 and an embedding-backed semantic retriever (recall by meaning, Increment 108). Recall supplies *stance*,
-never belief-confidence (memory is not truth, Vision §22).
+never belief-confidence (memory is not truth, Vision §22). Since Increment 138 both paths are wrapped by
+`DocumentMemoryRetriever`, which folds matching companion **documents** into the recalled set as
+`MemoryKind.DOCUMENT` (`DocumentHit` name/snippet/relevance; lexical match; snippets never quote opaque
+binary bytes).
 
 **Reasoning seam** (`Reasoner` + `Inference`): `LlmReasoner` proposes a provisional answer; folded in as
 the weakest `EvidenceSource.INFERENCE` (0.2) so an unconfirmed answer is held faintly and matures only
-via `confirm()` (learning loop, Increment 110).
+via `confirm()` (learning loop, Increment 110). Since Increment 138 the reasoner receives the short-term
+recent turns (`ConversationContext`) in **both** the conversational (`say`/`reason`) and episode
+(`think(…, conversation=…)` → `executive run` → `_reason_into`) paths; each message is still a fresh
+model call (deep multi-turn spans are open).
 
 **Forgetting** (`DecayingWeightingPolicy`, opt-in): evidence contribution fades with a half-life clock —
 nothing forgets unless a decaying policy is explicitly wired in (Increment 113).
@@ -104,7 +110,9 @@ Edge seams (domain protocol → infrastructure adapter, injectable io/net, offli
 web internet (`ExternalSource`/Agent-Reach), deep research (`ResearchSource`/SearXNG), blind model
 comparison (`ModelComparator`), tool registry + policy (`ToolRegistry`), notes (`NotesStore`), mail
 (`MailBox`/real IMAP-SMTP), calendar (`CalendarStore`/local + Google), tasks (`TaskScheduler`),
-agent delegation (`TaskAgent`), speech perception (`SpeechPerceptionSource`). Material actions can be
+agent delegation (`TaskAgent`), speech perception (`SpeechPerceptionSource`), and files/documents
+(`DocumentStore` over bytes + `LocalDocumentStore`, flat name-keyed; `JARVIS_PROJECT_ROOTS` feeds the
+`FileSystemTool` `project:` roots as a tool edge). Material actions can be
 delegated to an edge agent behind these seams, never cognition (revised D1).
 
 ### Command Center
@@ -115,7 +123,8 @@ face/sphere, and the capability/tool panels. Python remains the cognitive core.
 `handle`, `route`, and `snapshot` are pure/socket-free and tested independently from the server. Surface
 commands: `say` (with streaming + reasoning panel), `explain`, `reflect`, `wonder`, `introspect`,
 `perceiver` (switch provider/model/key), `capability` (notice/list/acquire/reject), `tool` (list/run),
-`external` (read/search web), `research`, `compare`, plus the notes/mail/calendar/tasks delegation.
+`external` (read/search web), `research`, `compare`, `documents` (list/read/save/remove/search), plus the
+notes/mail/calendar/tasks delegation.
 `_say` routes on intent first (Increment 114): conversation turns never touch perception/memory/beliefs.
 
 ## Reflective cycle
@@ -140,13 +149,18 @@ Increments 111–112).
 - LLM abstraction/registry/live providers + self-diagnosing errors: implemented; live is opt-in.
 - Capabilities: acquisition model + scout + edge providers + 12+ catalog entries (web, research, compare,
   tools, notes, mail, calendar, tasks, agent, speech seam).
-- Command Center: implemented (voice, sphere/face, streaming, reasoning panel, capability/tool panels).
+- Command Center: implemented (voice, sphere/face, streaming, reasoning panel, capability/tool panels,
+  Documentos panel with list/search/read/write/remove).
+- Documents in recall: `MemoryKind.DOCUMENT` + `DocumentHit`, lexical `search_documents`, wrapped recall
+  (semantic + documents), and document chips in `say` replies (read-through on click).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
 
-- Reset the audit gates at HEAD: 5 ruff errors + 44 pyright errors (all in newer tests; see STATUS.md).
-- Reasoner does not yet consume the short-term `ConversationContext` (multi-turn depth).
+- Reset the audit gates at HEAD: 5 ruff errors + 44 pyright errors (all in newer tests; see STATUS.md). *(DONE — Increment 135: ruff clean · pyright strict 0 errors.)*
+- Deep multi-turn reasoning: the reasoner receives the short-term `ConversationContext` in both paths
+  (Increment 138) but each message is still a fresh model call; an incremental reasoning span over several
+  turns is not built.
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
 - A real DB behind the repository contracts (D10); per-belief weighting not yet root-injectable;

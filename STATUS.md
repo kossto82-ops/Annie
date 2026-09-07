@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-04 (Increment 134)
+Last updated: 2026-09-06 (Increment 140)
 
 ---
 
@@ -1672,6 +1672,46 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
 - Gates (HEAD): ruff clean · pyright (errors only in newer tests, see debt below) ·
   pytest 1002 passed, 3 skipped.
 
+### Increment 135 — audit gates reset ✅ (2026-09-06)
+- Ruff clean + pyright strict with **0 errors** across `src` and `tests` (`036cc86`): import-order,
+  line-length and typing fixes in newer tests, plus a `knowledge_source.py` typing fix. Closes the
+  "gates not clean at HEAD" debt from Increment 134.
+
+### Increment 136 — persist capabilities/needs and provision live-backed at boot ✅ (2026-09-06)
+- `Jarvis.persistent()` now persists capabilities, capability needs and their stats
+  (`JsonCapabilityStore`), and at boot provisions every persisted capability whose provider is live
+  (`fa7e935`); the server wires the store in.
+
+### Increment 137 — accept files and edit shared project folders ✅ (2026-09-06)
+- `DocumentStore` domain seam over raw bytes (list/read/write/remove) + `LocalDocumentStore`
+  (flat names, injectable io, offline default via `build_document_store`) (`06b7c6e`).
+- Catalog gains "work with files" and "edit project files"; `DocumentsCapability` /
+  `ProjectFilesCapability` registered in `build_default_registry`.
+- `Jarvis.list/read/write/remove_document`, `set_documents_store`, `set_project_files`;
+  `documents` command (list/read/save/remove, text|b64); snapshot exposes `documents`; UI gets the
+  "Documentos" panel; `JARVIS_PROJECT_ROOTS` feeds the `FileSystemTool` as `project:` roots.
+
+### Increment 138 — reason with conversation context and recall stored documents ✅ (2026-09-06)
+- Episodes now thread the short-term `ConversationContext` into reasoning:
+  `think(… conversation=…)` → `executive run` → `_reason_into` → `infer(trigger, recalled, conversation)`
+  (`84e22cf`). Closes the Increment-114 gap: the reasoner receives recent turns in **both** paths
+  (`say`/`reason` conversationally and `think`/episode).
+- Documents ride **recall**: `MemoryKind.DOCUMENT`, `DocumentHit` VO,
+  `DocumentStore.search_documents` (lexical; binary findable by name only, snippet never quotes
+  opaque bytes — D37), and `DocumentMemoryRetriever` wrapping any base retriever (keeps the lexical
+  offline default; joins the embedding retriever when enabled).
+
+### Increment 139 — documents search command + UI ✅ (2026-09-06)
+- `documents search` action (`query` + optional `limit`, structured `hits` in the reply) and a
+  search box in the Documentos panel (`7c943c2`).
+
+### Increment 140 — surface companion documents in chat recall ✅ (2026-09-06)
+- `say` splits recalled hits into documents vs memory by `MemoryKind.DOCUMENT`; a matching file is
+  offered honestly ("I have a file that bears on that — api.md…") (`18ce7e7`). Any reply with
+  relevant documents carries a `documents` chip list rendered in the stream and fallback, and the
+  chip double-check reads the file.
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1066 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1921,17 +1961,19 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 ## Next increment (recommended, not yet started)
 
 **The command center now has voice, a synced face, live state, tuning, a reasoning panel, a capability
-catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), and a real LLM path
-(Increments 89–134).** The natural next moves — pick one:
-- **Reset the audit gates (recommended):** 5 ruff errors (import order in `command_center.py` + line
-  length in two tests) and 44 pyright errors (all in newer tests) accumulated after Increment 110. The
-  repo's own standard is "ruff clean · pyright strict 0 errors", so this is scoped, mechanical debt with
-  no design risk — a good first increment after the docs.
-- **Or an honest gap:** incremental/deep reasoning across the short-term `ConversationContext` — the
-  Increment-114 limitation (the reasoner answers per-message, not over the recent turns) is still open.
-- **Or live-tunable knobs:** make the remaining thresholds (`GROUNDED_CONFIDENCE_THRESHOLD`,
+catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), files/documents as a
+first-class surface, and a real LLM path (Increments 89–140).** Since the last recommendation both the
+audit-gate reset (Increment 135) and the reasoner-consuming-ConversationContext work (Increment 138)
+have landed. Natural next moves — pick one:
+- **Live-tunable knobs:** make the remaining thresholds (`GROUNDED_CONFIDENCE_THRESHOLD`,
   `_INSIGHT_CONFIDENCE`, weighting policy, `_MAX_GOAL_REFLECTIONS`) injectable and expose them in Tools —
   each made injectable via constructor/config, never a module constant.
+- **Documents/files depth:** documents now recall + search + chip in chat (Increments 137–140); deepen
+  them (folder-aware `DocumentStore`, snippets per user files, a "read document" follow-up that consults
+  the file during reasoning rather than one-shot).
+- **Or a remaining honest gap:** true *deep multi-turn* reasoning — the reasoner receives recent turns
+  (Increment 138) but each message is still a fresh model call; an incremental reasoning span over many
+  turns remains open.
 - Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
   constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
   §38 boundary intact (the LLM extracts candidate evidence, it never decides).
@@ -1947,18 +1989,18 @@ weighting, Increment 113). The remaining directions:
 - **Capability depth beyond the seams:** the calendar/tasks/notes/mail/speech/agent edges exist as seams +
   adapters; each can be deepened (CalDAV sync, scheduling execution, STT integration, richer delegation
   scopes). Each must stay behind its domain Protocol (D39), earned (D37), and offline-testable (D8).
-- **Conversation context for reasoning:** have the reasoner consume the short-term `ConversationContext`
-  so deep multi-turn "¿por qué?" resolution does not lean on a fresh model call per message (Increment-114
-  limitation).
+- **Conversation context for reasoning (landed, Increment 138);** the open edge is now *deep multi-turn*:
+  the reasoner receives the short-term turns in both paths (`say`/`reason` and episodes) but still makes a
+  fresh model call per message — an incremental reasoning span over several turns is not built.
 - **Track C/D leftovers (opportunistic).** More §15 energy modelling (charge deliberations; energy recovery
   over time); unify the two `CognitiveEpisode` shapes; `TemporalStability` for hypotheses; injectable
   weighting policy at the `Jarvis(...)` level (partial: decay policy is injectable, Increment 113, the
   per-belief default is not); pin ruff/pyright in a lockfile; consider a real DB behind the repository
   contracts (D10).
 
-*Recommendation: reset the audit gates first — the debt is mechanical and the repo's own standard demands
-it. Then, if you want visible capability next, the ConversationContext-for-reasoning gap is the most
-"cognitive companion" of the open items.*
+*Recommendation: the mechanical gates debt is gone (Increment 135) and the reasoner now reads recent
+turns (Increment 138). The next choice is visible capability: live-tunable knobs (cheap, no design risk)
+or documents-depth (the newest surface).*
 
 *(Deferred, natural follow-ups: excessive-complexity self-observation tendency; semantic trigger↔trait
 matching now that embeddings exist; recurring-goals/working-patterns facets; live STT wiring for the speech
@@ -1966,7 +2008,7 @@ seam.)*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-09-04, Increment 134)
+## Known limitations / not built yet  (refreshed 2026-09-06, Increment 140)
 
 **Landed since the last refresh (do not re-plan):**
 - The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
@@ -1982,6 +2024,15 @@ seam.)*
 - **Capabilities at the edge** (Increments 115–134): web (Agent-Reach), deep research, blind model
   comparison, tool registry, notes, mail (real IMAP/SMTP), calendar (local + Google), task scheduler,
   speech-perception seam, agent delegation.
+- **Audit gates at HEAD:** ruff clean and pyright **strict 0 errors** across `src` and `tests`
+  (Increment 135).
+- **Capabilities/needs persist** and live-backed ones provision at boot (Increment 136).
+- **Files/documents as a surface** (Increments 137–140): `DocumentStore` seam over bytes + local adapter,
+  list/read/write/remove, `JARVIS_PROJECT_ROOTS` for the `FileSystemTool`, a Documentos panel, lexical
+  documents search, documents riding memory recall (MemoryKind.DOCUMENT), and document chips in `say`
+  replies — all behind offline, io-injectable adapters.
+- **Reasoner consumes the short-term `ConversationContext`** in both the conversational and episode paths
+  (Increment 138).
 
 **Still open / honest gaps:**
 - A real database behind the repository contracts (D10) — persistence is per-store JSON (now crash-safe).
@@ -1993,21 +2044,22 @@ seam.)*
   (embeddings) but not for belief/connection identity.
 - Deliberations reuse `CognitiveEpisode` as a lifecycle shell (two episode shapes gated by `EpisodeKind`)
   rather than one unified belief+hypothesis model.
-- The LLM reasoner does **not** yet consume the short-term `ConversationContext` — deep multi-turn
-  "¿por qué?" resolution leans on a fresh model call per message (Increment-114 limitation).
+- *Deep multi-turn* reasoning: the reasoner receives recent turns (Increment 138) but each message is a
+  fresh model call; an incremental reasoning span over several turns is not built.
+- Documents live in `LocalDocumentStore` (flat, name-keyed); no folder awareness, ownership, per-file
+  search ranking, or editing via the chat itself.
 - Speech has a perception seam but no live STT backer; real instruction execution is unimplemented
   (instructions are acknowledged honestly, not acted on — earned agency).
 - Notes/tasks/calendar local adapters are file-backed (no CalDAV/ICS sync); email has a real IMAP/SMTP
   adapter but no per-account UI management.
-- NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile (and at
-  HEAD ruff/pyright are NOT clean — see the debt listed in the next-increment section).
+- NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
 
 **Already built (do not list as missing):** goals & decomposition, curiosity (incl. give-up/ask-for-help),
 episodic + belief + companion + action memory, self-model (3 tendencies), graded autonomy, attention,
 persistence across restart (crash-safe), perception seam + streams + contested-belief resolution, belief
 connections, the full reflective cycle, trace persistence, decay forgetting, semantic recall, provisional
 reasoning + confirmation, the five edge capability seams + tool registry, and the command center
-dashboard/sphere/catalog surface.
+dashboard/sphere/catalog surface, plus the files/documents surface (accept, recall, search, chip, read).
 
 ---
 
