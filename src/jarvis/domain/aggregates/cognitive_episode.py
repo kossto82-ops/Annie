@@ -6,6 +6,13 @@ happened inside it. The episode owns its own state-machine invariants: only
 legal transitions are permitted, and it records a domain event for the facts
 that matter (started, completed).
 
+An episode reasons toward *one* conclusion-model -- either a working :class:`Belief`
+(conclusion shape) or a :class:`HypothesisSet` of competing explanations
+(deliberation shape) -- held in a single slot. There is no second episode shape:
+both conclusions ride the same lifecycle, the same event boundary, and the same
+derived :attr:`~CognitiveEpisode.kind`. Deliberations are not a caller-painted
+tag; they are structurally the same episode holding a set instead of a belief.
+
 The aggregate does not publish its own events -- it collects them, and an
 orchestrator (the executive controller) pulls and dispatches them. This keeps
 the domain free of infrastructure coupling.
@@ -16,8 +23,10 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
+from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.entities.belief import Belief, BeliefExplanation
 from jarvis.domain.enums.attention import Attention
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
@@ -70,7 +79,7 @@ class CognitiveEpisode:
     origin: TriggerOrigin = TriggerOrigin.COMPANION
     attention: Attention = Attention.FULL
     goal: Goal | None = None
-    _working_belief: Belief | None = field(default=None, repr=False)
+    _conclusion: Belief | HypothesisSet | None = field(default=None, repr=False)
     _evidence_request: EvidenceRequest | None = field(default=None, repr=False)
     _recalled: tuple[RecalledMemory, ...] = field(default=(), repr=False)
     _inference: Inference | None = field(default=None, repr=False)
@@ -105,7 +114,7 @@ class CognitiveEpisode:
             EpisodeCompleted(episode_id=self.id, correlation_id=self.id, result=result)
         )
 
-    # -- working belief (the conclusion the episode is reasoning toward) ------
+    # -- conclusion model (the belief or hypotheses the episode is reasoning toward)
 
     def form_working_belief(
         self, statement: str, policy: EvidenceWeightingPolicy | None = None
@@ -125,8 +134,24 @@ class CognitiveEpisode:
             if policy is not None
             else Belief(statement=statement)
         )
-        self._working_belief = belief
+        self._conclusion = belief
         return belief
+
+    def form_hypotheses(self, observation: str) -> HypothesisSet:
+        """Attach the competing explanations this episode will weigh (Vision §17).
+
+        Mirrors :meth:`form_working_belief` for the deliberation shape: the episode
+        is one lifecycle shell and one event boundary whichever conclusion-model it
+        holds (the hypothesis set's events flow through :meth:`pull_events` exactly
+        like a belief's do).
+        """
+        if self.state.is_terminal:
+            raise InvalidStateTransition(
+                f"Episode {self.id} is {self.state.value}; cannot form hypotheses"
+            )
+        hypothesis_set = HypothesisSet(observation=observation)
+        self._conclusion = hypothesis_set
+        return hypothesis_set
 
     def adopt_working_belief(self, belief: Belief) -> None:
         """Attach an existing belief retrieved from memory (Vision §3 continuity)."""
@@ -134,17 +159,47 @@ class CognitiveEpisode:
             raise InvalidStateTransition(
                 f"Episode {self.id} is {self.state.value}; cannot adopt a belief"
             )
-        self._working_belief = belief
+        self._conclusion = belief
+
+    @property
+    def conclusion(self) -> Belief | HypothesisSet | None:
+        """The conclusion-model this episode reasoned toward, if any."""
+        return self._conclusion
 
     @property
     def working_belief(self) -> Belief | None:
-        return self._working_belief
+        """The working belief, or None when the episode weighs hypotheses instead."""
+        conclusion = self._conclusion
+        if isinstance(conclusion, Belief):
+            return conclusion
+        return None
+
+    @property
+    def hypothesis_set(self) -> HypothesisSet | None:
+        """The competing explanations this episode weighs, or None for a belief."""
+        conclusion = self._conclusion
+        if isinstance(conclusion, HypothesisSet):
+            return conclusion
+        return None
+
+    @property
+    def kind(self) -> EpisodeKind:
+        """Which shape of cognition this episode is -- derived, not caller-painted.
+
+        An episode holding competing hypotheses is a DELIBERATION; anything else
+        (a working belief, or none while still reasoning) is a CONCLUSION. The tag
+        can never drift from the actual conclusion the episode carried (Vision §17).
+        """
+        if isinstance(self._conclusion, HypothesisSet):
+            return EpisodeKind.DELIBERATION
+        return EpisodeKind.CONCLUSION
 
     def explain(self) -> BeliefExplanation | None:
         """Explain the episode's conclusion, or None if it formed no belief."""
-        if self._working_belief is None:
+        belief = self.working_belief
+        if belief is None:
             return None
-        return self._working_belief.explain()
+        return belief.explain()
 
     def recall(self, memories: tuple[RecalledMemory, ...]) -> None:
         """Attach the memories retrieval surfaced as relevant to this trigger.
@@ -220,11 +275,19 @@ class CognitiveEpisode:
         """Route a piece of evidence to the episode's working belief.
 
         The belief's events are correlated to this episode, so the whole act of
-        cognition forms one traceable process (Vision §26).
+        cognition forms one traceable process (Vision §26). A deliberation episode
+        routes evidence to a specific hypothesis instead (through its
+        :class:`HypothesisSet`), never to the episode itself.
         """
-        if self._working_belief is None:
+        conclusion = self._conclusion
+        if conclusion is None:
             raise ValueError("Form a working belief before observing evidence")
-        self._working_belief.add_evidence(evidence, correlation_id=self.id)
+        if not isinstance(conclusion, Belief):
+            raise ValueError(
+                "A deliberation episode routes evidence to a hypothesis, not to "
+                "the episode; add it to the hypothesis set instead"
+            )
+        conclusion.add_evidence(evidence, correlation_id=self.id)
 
     def fail(self, reason: str) -> None:
         if self.state.is_terminal:
@@ -257,11 +320,12 @@ class CognitiveEpisode:
     # -- events --------------------------------------------------------------
 
     def pull_events(self) -> list[CognitiveEvent]:
-        """Return and clear this episode's events, including its belief's."""
+        """Return and clear this episode's events, including its conclusion's."""
         events = self._pending_events[:]
         self._pending_events.clear()
-        if self._working_belief is not None:
-            events.extend(self._working_belief.pull_events())
+        conclusion = self._conclusion
+        if conclusion is not None:
+            events.extend(conclusion.pull_events())
         return events
 
     # -- internals -----------------------------------------------------------

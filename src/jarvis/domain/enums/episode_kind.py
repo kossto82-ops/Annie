@@ -4,6 +4,10 @@ An episode can reach a single grounded conclusion (a working belief) or weigh
 competing explanations (a deliberation). Both are real acts of cognition worth
 remembering, but they measure differently -- self-observation over confidence and
 stability only makes sense for CONCLUSION episodes -- so the record names which.
+
+The kind is never painted by the caller: :class:`CognitiveEpisode.kind` derives it
+from which conclusion-model the episode actually held (a :class:`HypothesisSet`
+deliberates, anything else concludes), so the label cannot drift from the episode.
 """
 
 from __future__ import annotations

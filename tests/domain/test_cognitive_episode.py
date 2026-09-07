@@ -8,6 +8,7 @@ from jarvis.domain.aggregates.cognitive_episode import (
     CognitiveEpisode,
     InvalidStateTransition,
 )
+from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.events.belief_events import BeliefStrengthened
@@ -18,6 +19,7 @@ from jarvis.domain.events.episode_events import (
     EpisodeStarted,
 )
 from jarvis.domain.events.evidence_events import EvidenceAdded
+from jarvis.domain.events.hypothesis_events import HypothesisCreated
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 
@@ -207,3 +209,71 @@ class TestEventBuffer:
         kinds = [type(e) for e in episode.pull_events()]
         assert EvidenceAdded in kinds
         assert BeliefStrengthened in kinds
+
+
+class TestDeliberationShape:
+    """Deliberations ride the same episode: one conclusion slot, one boundary."""
+
+    def test_has_no_hypothesis_set_until_formed(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        assert episode.hypothesis_set is None
+
+    def test_form_hypotheses_attaches_and_returns_it(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        hypothesis_set = episode.form_hypotheses("why did it happen")
+        assert episode.hypothesis_set is hypothesis_set
+
+    def test_working_belief_is_none_for_a_deliberation(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.form_hypotheses("why did it happen")
+        assert episode.working_belief is None
+
+    def test_explain_is_none_for_a_deliberation(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.form_hypotheses("why did it happen")
+        assert episode.explain() is None
+
+    def test_kind_is_derived_from_the_conclusion_shape(self) -> None:
+        deliberation = CognitiveEpisode(trigger="t")
+        deliberation.begin_reasoning()
+        deliberation.form_hypotheses("why did it happen")
+        assert deliberation.kind is EpisodeKind.DELIBERATION
+
+        conclusion = CognitiveEpisode(trigger="t")
+        conclusion.begin_reasoning()
+        conclusion.form_working_belief("a conclusion")
+        assert conclusion.kind is EpisodeKind.CONCLUSION
+
+        undecided = CognitiveEpisode(trigger="t")
+        assert undecided.kind is EpisodeKind.CONCLUSION
+
+    def test_observe_rejects_evidence_on_a_deliberation(self) -> None:
+        # Single evidence cannot name a hypothesis; it must go through the set.
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.form_hypotheses("why did it happen")
+        with pytest.raises(ValueError):
+            episode.observe(_ev())
+
+    def test_pull_events_includes_hypothesis_events(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.pull_events()  # discard EpisodeStarted
+        hypothesis_set = episode.form_hypotheses("why did it happen")
+        hypothesis = hypothesis_set.propose("a", correlation_id=episode.id)
+        hypothesis_set.add_evidence(hypothesis.id, _ev(), correlation_id=episode.id)
+        kinds = {type(e) for e in episode.pull_events()}
+        assert HypothesisCreated in kinds
+        assert EvidenceAdded in kinds
+
+    def test_cannot_form_hypotheses_after_completion(self) -> None:
+        episode = CognitiveEpisode(trigger="t")
+        episode.begin_reasoning()
+        episode.begin_reflecting()
+        episode.begin_deciding()
+        episode.complete("done")
+        with pytest.raises(InvalidStateTransition):
+            episode.form_hypotheses("too late")

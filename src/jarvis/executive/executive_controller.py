@@ -18,14 +18,12 @@ from collections.abc import Iterable, Mapping, Sequence
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
-from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.entities.belief import (
     LOW_STABILITY_THRESHOLD,
     Belief,
 )
 from jarvis.domain.enums.attention import Attention
-from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.events.domain_event import CognitiveEvent
@@ -332,28 +330,28 @@ class ExecutiveController:
     ) -> Deliberation:
         """Weigh competing explanations as a first-class episode (Vision §17).
 
-        Runs the episode lifecycle, routes each option's evidence to a
-        HypothesisSet (correlated to the episode so it is traceable), records the
-        episode in memory as a DELIBERATION, and returns the outcome.
+        Runs the episode lifecycle with a :class:`HypothesisSet` attached as the
+        episode's conclusion-model -- the same single shape a belief-conclusion
+        uses -- so deliberation events flow through the same episode boundary and
+        are recorded in memory as DELIBERATION (derived from that conclusion).
         """
         episode = CognitiveEpisode(trigger=observation)
         self._flush(episode)  # EpisodeStarted
 
         episode.begin_reasoning()
-        hypotheses = HypothesisSet(observation=observation)
+        hypothesis_set = episode.form_hypotheses(observation)
         for statement, evidences in options.items():
-            hypothesis = hypotheses.propose(statement, correlation_id=episode.id)
+            hypothesis = hypothesis_set.propose(statement, correlation_id=episode.id)
             for piece in evidences:
-                hypotheses.add_evidence(hypothesis.id, piece, correlation_id=episode.id)
-        self._dispatch(hypotheses.pull_events())
-        self._flush(episode)
+                hypothesis_set.add_evidence(hypothesis.id, piece, correlation_id=episode.id)
+        self._flush(episode)  # hypothesis + evidence events, correlated to the episode
 
         episode.begin_reflecting()
         self._flush(episode)
         episode.begin_deciding()
 
-        ranking = tuple((h.statement, h.confidence.value) for h in hypotheses.ranked())
-        leader = hypotheses.leading()
+        ranking = tuple((h.statement, h.confidence.value) for h in hypothesis_set.ranked())
+        leader = hypothesis_set.leading()
         if leader is None:
             decision = f"Competing explanations for: {observation} remain undecided."
             deliberation = Deliberation(
@@ -400,7 +398,7 @@ class ExecutiveController:
                 conclusion_confidence=deliberation.confidence,
                 conclusion_stability=TemporalStability.none(),
                 origin=episode.origin,
-                kind=EpisodeKind.DELIBERATION,
+                kind=episode.kind,
             )
         )
         return deliberation
@@ -692,7 +690,7 @@ class ExecutiveController:
                 conclusion_confidence=belief.confidence,
                 conclusion_stability=belief.stability,
                 origin=episode.origin,
-                kind=EpisodeKind.CONCLUSION,
+                kind=episode.kind,
                 goal=episode.goal.statement if episode.goal is not None else None,
             )
         )
