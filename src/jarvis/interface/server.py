@@ -43,6 +43,7 @@ from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_s
 from jarvis.infrastructure.perceiver_factory import (
     build_embedder,
     companion_perceiver_from_settings,
+    document_editor_from_settings,
     perceiver_from_settings,
     reasoner_from_settings,
     renderer_from_settings,
@@ -127,6 +128,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     perception: PerceptionSource = perceiver_from_settings(settings)
     companion_perception = companion_perceiver_from_settings(settings)
     reasoner = reasoner_from_settings(settings)
+    document_editor = document_editor_from_settings(settings)
     external_source, research_source, model_compare, mail_source, task_agent, notes_store = (
         _build_edge(settings)
     )
@@ -139,6 +141,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             companion_perception=companion_perception,
             enable_recall=True,
             reasoner=reasoner,
+            document_editor=document_editor,
             external_source=external_source,
             research_source=research_source,
             model_compare=model_compare,
@@ -165,6 +168,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             companion_perception=companion_perception,
             enable_recall=True,
             reasoner=reasoner,
+            document_editor=document_editor,
             external_source=external_source,
             research_source=research_source,
             model_compare=model_compare,

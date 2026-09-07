@@ -7,6 +7,7 @@ subscribe to cognitive events *before* thinking begins.
 
 from __future__ import annotations
 
+import difflib
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +36,7 @@ from jarvis.domain.repositories.capability_repository import CapabilityRepositor
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
 from jarvis.domain.retrieval.calendar_store import CalendarStore
+from jarvis.domain.retrieval.document_editor import DocumentEditor
 from jarvis.domain.retrieval.document_store import DocumentStore
 from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
 from jarvis.domain.retrieval.mail_source import MailBox
@@ -81,6 +83,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.deliberation import Deliberation
+from jarvis.domain.value_objects.document_edit import DocumentEdit
 from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.email_message import EmailMessage
@@ -164,6 +167,24 @@ def _is_silent_reasoner(reasoner: Reasoner | None) -> bool:
     return isinstance(reasoner, SilentReasoner)
 
 
+def _describe_document_change(before: str, after: str) -> str:
+    """Frame what actually changed between two texts, derived not guessed.
+
+    The note a surface shows for a rewrite comes from the real diff (Vision §26,
+    §38), never from what the editing model claims it did.
+    """
+    added = removed = 0
+    for line in difflib.unified_diff(before.splitlines(), after.splitlines(), lineterm=""):
+        if line.startswith("+") and not line.startswith("+++"):
+            added += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    if added == 0 and removed == 0:
+        return "no change"
+    changed = f"{removed} line(s) removed, {added} added"
+    return changed
+
+
 # Provider names that mean "no real model": they must never back a live web-search
 # capability (a scripted/stub model does not actually search the web).
 _OFFLINE_PROVIDERS: frozenset[str] = frozenset({"", "scripted", "stub", "keyword"})
@@ -208,6 +229,7 @@ class Jarvis:
         documents_store: DocumentStore | None = None,
         cognitive_knobs: CognitiveKnobs | None = None,
         default_belief_policy: EvidenceWeightingPolicy | None = None,
+        document_editor: DocumentEditor | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         # The per-belief default source policy for every belief Jarvis creates
@@ -291,6 +313,13 @@ class Jarvis:
         # documents stays in the core (D6), and mutating them is a reversible
         # action gated in the caller.
         self._documents_store: DocumentStore | None = documents_store
+        # The document-rewrite seam (Vision §38): an editor *proposes* the revised
+        # text of a document from the companion's free-form instruction; Jarvis
+        # applies it through the documents capability and derives what changed from
+        # the real diff. None by default -> offline, so a bare Jarvis proposes no
+        # rewrites (the honest default is silence, §37). Mirrors the reasoner: the
+        # model only proposes candidate text, it never decides to write.
+        self._document_editor: DocumentEditor | None = document_editor
         # Calendar (Odysseus #6): a local calendar that lists/searches/creates/updates
         # and deletes events on request. None by default -> offline. It only keeps
         # and returns plain calendar-event content with provenance; reasoning over
@@ -1000,6 +1029,57 @@ class Jarvis:
         if self._documents_store is None:
             raise RuntimeError("no documents capability configured; set_documents_store")
         return self._documents_store.search_documents(query, limit=limit)
+
+    @property
+    def document_editor(self) -> DocumentEditor | None:
+        """The document-rewrite seam (Vision §38), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis can propose rewrites.
+        An editor only *proposes* candidate text from an instruction; deciding,
+        applying and diffing stay here in the core (D6).
+        """
+        return self._document_editor
+
+    def set_document_editor(self, editor: DocumentEditor | None) -> None:
+        """Wire (or clear) the document-rewrite seam at runtime.
+
+        ``None`` disables it: Jarvis honestly says it has no grounded rewrite to
+        propose. Passing a silent editor is the same as offline -- it declines
+        every rewrite (Vision §37).
+        """
+        self._document_editor = editor
+
+    def edit_document(self, name: str, instruction: str) -> DocumentEdit | None:
+        """Rewrite ``name`` from a free-form instruction, or None when declined.
+
+        The editor *proposes* the complete revised text (Vision §38); Jarvis
+        applies it through the documents capability, preserving the recorded
+        attribution, and derives ``DocumentEdit.note`` from the real before/after
+        diff -- never from what the model claims. A rewrite identical to the
+        current text is reported honestly without touching the file. Returns None
+        when the editor could not propose a concrete rewrite (honest decline,
+        §37). Raises when offline (no store or no editor) or when ``name`` is not
+        text (binary files are kept intact, never rewritten).
+        """
+        if self._documents_store is None:
+            raise RuntimeError("no documents capability configured; set_documents_store")
+        if self._document_editor is None:
+            raise RuntimeError("no document editor configured; set_document_editor")
+        raw = self._documents_store.read_document(name)
+        try:
+            source = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise ValueError(f"{name} is not text; documents stay intact as bytes") from None
+        proposal = self._document_editor.propose(source, instruction)
+        if not proposal or not proposal.strip():
+            return None
+        proposal = proposal.strip()
+        if proposal == source.strip():
+            return DocumentEdit(content=source, note="unchanged -- already as you asked")
+        meta = self._documents_store.document_meta(name)
+        owner = meta.owner if meta is not None else DocumentOwner.COMPANION
+        self._documents_store.write_document(name, proposal.encode("utf-8"), owner=owner)
+        return DocumentEdit(content=proposal, note=_describe_document_change(source, proposal))
 
     def set_project_files(self, available: bool) -> None:
         """Flip whether project folders are wired for file editing right now.

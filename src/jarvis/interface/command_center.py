@@ -54,6 +54,7 @@ from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.perceiver_factory import (
     available_providers,
     build_companion_perceiver,
+    build_document_editor,
     build_perceiver,
     build_reasoner,
     build_renderer,
@@ -746,6 +747,9 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     # And reason provisional answers through the same model, so a novel question gets
     # a hedged answer instead of a refusal when a provider is active (Vision §37).
     jarvis.set_reasoner(build_reasoner(provider, model, base_url))
+    # And edit documents through the same model, so "hazle este cambio" to a shared
+    # file gets a concrete rewrite proposal to apply (Vision §38).
+    jarvis.set_document_editor(build_document_editor(provider, model, base_url))
     # Persist on every switch so the choice (and model fixes) survive a restart; the key
     # line is only written when a key was provided, and is never read back into a reply.
     llm_config_store.persist(staged)
@@ -1730,23 +1734,26 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
 def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
     """Manage the files the companion shares (work-with-files capability).
 
-    Actions: ``list``, ``read``, ``info``, ``save``, ``search``, ``remove``.
+    Actions: ``list``, ``read``, ``info``, ``save``, ``edit``, ``search``, ``remove``.
     ``list`` names each document with its owner (companion-shared vs generated).
     ``info`` answers "whose is that, and when did I get it?" from the recorded
     provenance (Vision §26). ``save`` takes ``name`` and ``content`` with
     ``encoding`` ``"text"`` (default) or ``"b64"`` (binary kept intact), an
     optional ``path`` folder to file the document under (``"docs/api.md"``,
     relative and sandbox-safe), and an optional ``owner`` ``"companion"``
-    (default) or ``"jarvis"``. ``read`` returns the content as text (truncated
-    for the surface) or base64. ``search`` takes ``query`` and returns the
-    documents whose name or text match, each with a snippet and match strength --
-    candidates, never a verdict.
+    (default) or ``"jarvis"``. ``edit`` rewrites an existing document from a
+    free-form ``instruction``: the live model *proposes* the revised text (Vision
+    §38) and Jarvis applies it, keeping the recorded attribution and reporting
+    what actually changed; offline there is no grounded proposal to apply. ``read``
+    returns the content as text (truncated for the surface) or base64. ``search``
+    takes ``query`` and returns the documents whose name or text match, each with a
+    snippet and match strength -- candidates, never a verdict.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
         return {
             "reply": "Use documents with action 'list', 'read', 'info', 'save', "
-            "'search', or 'remove'.",
+            "'edit', 'search', or 'remove'.",
             "speak": False,
         }
     if jarvis.documents_store is None:
@@ -1812,6 +1819,42 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
                 "reply": f"Kept {name} ({nbytes} bytes{note}).",
                 "speak": False,
                 "name": name,
+            }
+        if action == "edit":
+            name = _document_name(payload.get("name"))
+            if not name:
+                return {"reply": "Provide a document name to edit.", "speak": False}
+            instruction = str(payload.get("instruction", "")).strip()
+            if not instruction:
+                return {
+                    "reply": "Tell me what to change (instruction).",
+                    "speak": False,
+                }
+            if jarvis.document_editor is None:
+                return {
+                    "reply": "Editing needs a live model to propose the rewrite — "
+                    "share the corrected content via save instead.",
+                    "speak": False,
+                }
+            try:
+                edit = jarvis.edit_document(name, instruction)
+            except ValueError:
+                return {
+                    "reply": "That document isn't text, so I can't rewrite it.",
+                    "speak": False,
+                }
+            if edit is None:
+                return {
+                    "reply": "I couldn't come up with a concrete rewrite for that — "
+                    "share the corrected content via save instead.",
+                    "speak": False,
+                }
+            return {
+                "reply": f"Rewrote {name}: {edit.note} "
+                f"({len(edit.content.encode('utf-8'))} bytes).",
+                "speak": False,
+                "name": name,
+                "note": edit.note,
             }
         if action == "search":
             query = str(payload.get("query", "")).strip()

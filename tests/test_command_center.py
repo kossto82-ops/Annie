@@ -1568,6 +1568,104 @@ class TestDocumentProvenanceCommand:
         assert "documents capability" in result["reply"]
 
 
+class _FakeDocumentEditor:
+    """An editor that scripts its rewrite proposal (no network, deterministic)."""
+
+    def __init__(self, proposal: str | None = "Revised complete text.\n") -> None:
+        self._proposal = proposal
+
+    def propose(self, source_text: str, instruction: str) -> str | None:
+        return self._proposal
+
+
+class TestDocumentsEditCommand:
+    """Rewriting a document from a free-form chat instruction (Vision §38)."""
+
+    def test_edit_requires_a_name_and_instruction(self) -> None:
+        jarvis = _editing_able_jarvis()
+        result = handle(jarvis, "documents", {"action": "edit"})
+        assert isinstance(result["reply"], str)
+        assert "name" in result["reply"]
+        result = handle(jarvis, "documents", {"action": "edit", "name": "plan.md"})
+        assert isinstance(result["reply"], str)
+        assert "instruction" in result["reply"].lower()
+
+    def test_edit_without_an_editor_is_honestly_offline(self) -> None:
+        jarvis = _documents_able_jarvis()
+        jarvis.write_document("plan.md", b"old")
+        result = handle(jarvis, "documents", {
+            "action": "edit", "name": "plan.md", "instruction": "reword it",
+        })
+        assert isinstance(result["reply"], str)
+        assert "live model" in result["reply"]
+        assert jarvis.read_document("plan.md") == b"old"
+
+    def test_edit_reports_a_declining_editor_honestly(self) -> None:
+        jarvis = _editing_able_jarvis(proposal=None)
+        jarvis.write_document("plan.md", b"old")
+        result = handle(jarvis, "documents", {
+            "action": "edit", "name": "plan.md", "instruction": "reword it",
+        })
+        assert isinstance(result["reply"], str)
+        assert "couldn't" in result["reply"]
+        assert jarvis.read_document("plan.md") == b"old"
+
+    def test_edit_applies_the_rewrite_and_reports_the_note(self) -> None:
+        jarvis = _editing_able_jarvis()
+        jarvis.write_document("plan.md", b"old one line\n")
+        result = handle(jarvis, "documents", {
+            "action": "edit", "name": "plan.md", "instruction": "rewrite",
+        })
+        assert isinstance(result["reply"], str)
+        assert "Rewrote plan.md" in result["reply"]
+        assert "Revised complete text." in jarvis.read_document("plan.md").decode()
+        assert isinstance(result["note"], str)
+
+    def test_edit_keeps_the_recorded_attribution(self) -> None:
+        jarvis = _editing_able_jarvis()
+        jarvis.write_document("plan.md", b"old", owner=DocumentOwner.JARVIS)
+        handle(jarvis, "documents", {
+            "action": "edit", "name": "plan.md", "instruction": "rewrite",
+        })
+        meta = jarvis.document_meta("plan.md")
+        assert meta is not None
+        assert meta.owner is DocumentOwner.JARVIS
+
+    def test_edit_refuses_binary_documents(self) -> None:
+        jarvis = _editing_able_jarvis()
+        jarvis.write_document("data.bin", b"\x00\xff\x01")
+        result = handle(jarvis, "documents", {
+            "action": "edit", "name": "data.bin", "instruction": "fix it",
+        })
+        assert isinstance(result["reply"], str)
+        assert "isn't text" in result["reply"]
+        assert jarvis.read_document("data.bin") == b"\x00\xff\x01"
+
+    def test_edit_surfaces_unknown_actions(self) -> None:
+        jarvis = _editing_able_jarvis()
+        result = handle(jarvis, "documents", {"action": "not-an-action"})
+        assert isinstance(result["reply"], str)
+        assert "Unknown documents action" in result["reply"]
+
+
+def _editing_able_jarvis(proposal: str | None = "Revised complete text.\n") -> Jarvis:
+    """A Jarvis with documents wired AND a scripted rewrite editor."""
+    jarvis = Jarvis(
+        documents_store=_FakeDocumentStore(),  # type: ignore[arg-type]
+        document_editor=_FakeDocumentEditor(proposal=proposal),  # type: ignore[arg-type]
+    )
+    jarvis.remember_capability(
+        Capability(
+            name="work with files",
+            description="accept and keep files, and read their contents",
+            requirement="a bounded documents store",
+            provenance="test harness",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )
+    return jarvis
+
+
 class TestDocumentChipInSay:
     """Stored documents ride chat recall as honest chips, never as 'remembered facts'."""
 

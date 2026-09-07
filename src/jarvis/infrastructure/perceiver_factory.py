@@ -23,10 +23,12 @@ from typing import cast
 from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.reasoning.reasoner import Reasoner
+from jarvis.domain.retrieval.document_editor import DocumentEditor
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.language_model_registry import available, build_language_model
 from jarvis.infrastructure.llm_companion_perception import LlmCompanionPerception
 from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_model
+from jarvis.infrastructure.llm_document_editor import LlmDocumentEditor
 from jarvis.infrastructure.llm_perception import LlmPerception
 from jarvis.infrastructure.llm_reasoner import LlmReasoner
 from jarvis.infrastructure.llm_response_renderer import LlmResponseRenderer
@@ -34,6 +36,7 @@ from jarvis.infrastructure.openai_compatible_embedder import OpenAiCompatibleEmb
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
+from jarvis.infrastructure.silent_document_editor import SilentDocumentEditor
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
 from jarvis.infrastructure.text_embedder import TextEmbedder
 
@@ -140,6 +143,18 @@ def reasoner_from_settings(settings: ProviderSettings) -> Reasoner:
     if settings.provider in _OFFLINE or not settings.model:
         return SilentReasoner()
     return LlmReasoner(build_language_model(settings))
+
+
+def document_editor_from_settings(settings: ProviderSettings) -> DocumentEditor:
+    """The document editor (Vision §38) for fully-formed settings.
+
+    Offline -> the silent editor (no rewrite proposal; a chat edit honestly says
+    it has no grounded rewrite); a real provider -> an LLM editor over the same
+    model, so "hazle este cambio" to a document gets a concrete proposal to apply.
+    """
+    if settings.provider in _OFFLINE or not settings.model:
+        return SilentDocumentEditor()
+    return LlmDocumentEditor(build_language_model(settings))
 
 
 def build_embedder(environ: Mapping[str, str] | None = None) -> TextEmbedder | None:
@@ -250,3 +265,23 @@ def build_reasoner(
     if name in _OFFLINE:
         return SilentReasoner()
     return reasoner_from_settings(_settings_from_ui(provider, model, base_url, environ))
+
+
+def build_document_editor(
+    provider: str,
+    model: str = "",
+    base_url: str | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> DocumentEditor:
+    """Build the document editor from the UI's non-secret choice (Vision §38).
+
+    Offline -> silent (no rewrite proposal); a real provider -> an LLM editor over
+    the same model, keyed from the environment only, so a chat edit of a document
+    rides the same model that perceives and reasons.
+    """
+    name = provider.strip().lower()
+    if name in _OFFLINE:
+        return SilentDocumentEditor()
+    return document_editor_from_settings(
+        _settings_from_ui(provider, model, base_url, environ)
+    )
