@@ -150,7 +150,14 @@ conversation turn  OR  perceive (world + companion) → recall (memory + documen
 ```
 
 Since Increment 138 the reasoner receives the short-term `ConversationContext` (recent turns) in this
-flow and in episode reasoning (`think(…, conversation=…)` → executive run → `_reason_into`). Replies that
+flow and in episode reasoning (`think(…, conversation=…)` → executive run → `_reason_into`). Since
+**Increment 145** it also receives the session `ReasoningSpan` (`domain/reasoning/reasoning_span.py`,
+`Jarvis.reasoning_span()` / `reset_reasoning()`): each answered question is a step in a bounded,
+session-scoped thread span, so a follow-up continues the discussion instead of being a fresh stateless
+call. The span's thread lifecycle is deterministic — answering a new query opens/revises a thread and
+moves the previous one on; `confirm()` seals a thread (grounded by the belief loop, it leaves the span) or
+flags it disputed (the prompt names corrected proposals so they are never asserted again). The LLM
+proposes answer content; it never decides thread state (§38). Replies that
 recalled a matching document carry a `documents` chip list (name + snippet) in the stream meta and the
 fallback JSON.
 

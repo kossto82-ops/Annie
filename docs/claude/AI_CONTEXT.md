@@ -160,14 +160,18 @@ Increments 111–112).
   `set_belief_policy(...)` override the source policy every fresh belief is born with (goals, actions,
   companion traits, self-observed habits); the swap reaches subsequent creations only and is inherited by
   `Jarvis.persistent()` (Increment 144).
+- Deep multi-turn reasoning: a session `ReasoningSpan` (`domain/reasoning/reasoning_span.py`) carries the
+  reasoning threads across turns; the thread lifecycle is deterministic (open/revise, move-on, seal on
+  confirmation, dispute on correction), the model only proposes content, and `LlmReasoner` renders the
+  threads into the prompt (Increment 145).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
 
 - Reset the audit gates at HEAD: 5 ruff errors + 44 pyright errors (all in newer tests; see STATUS.md). *(DONE — Increment 135: ruff clean · pyright strict 0 errors.)*
-- Deep multi-turn reasoning: the reasoner receives the short-term `ConversationContext` in both paths
-  (Increment 138) but each message is still a fresh model call; an incremental reasoning span over several
-  turns is not built.
+- Deep multi-turn reasoning: a session `ReasoningSpan` (Increment 145) now continues the discussion
+  across turns in the conversational path, with a deterministic thread lifecycle. Still open: carrying
+  the span into the *episode* path or extending it to a live voice session.
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
 - A real DB behind the repository contracts (D10); `TemporalStability` for hypotheses; more §15 energy

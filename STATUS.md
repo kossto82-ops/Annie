@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-07 (Increment 144)
+Last updated: 2026-09-07 (Increment 145)
 
 ---
 
@@ -1745,6 +1745,23 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
 - Closes the Track-D "per-belief default not overridable at the root" gap; the knobs family (thresholds +
   source policy) is now fully injectable and runtime-swappable.
 
+### Increment 145 — deep multi-turn reasoning: the session reasoning span ✅ (2026-09-07)
+- Each answered question is now a *step* in a bounded, session-scoped `ReasoningSpan`
+  (`src/jarvis/domain/reasoning/reasoning_span.py`, `9db5ddc`): the reasoner carries the span's
+  threads across turns, so a follow-up continues the discussion instead of being a fresh stateless call.
+  The thread lifecycle is driven by **deterministic domain signals only** — a new answered query opens or
+  revises a thread and moves the previous one on; `confirm()` seals (grounded by the belief loop, the
+  thread then leaves the span) or flags as disputed (never carried as an active proposal again). The LLM
+  proposes content; it never decides thread state (Vision §38, D6).
+- `LlmReasoner` renders the span into the prompt (`<current_thread>`, `<earlier_threads>`,
+  `<corrected_proposals>`) so deep references resolve beyond the recent-dialogue window, and the
+  instructions tell it never to repeat a corrected proposal as fact. The `Reasoner` Protocol grew an
+  optional `span=` kw (offline/`SilentReasoner` unchanged in behaviour).
+- The span is explicitly weaker than a belief: bounded (capacity-evicted), session-scoped, never
+  persisted, never evidence, holding no confidence. The command-center snapshot exposes the threads
+  (`reasoning`), and replies never leak them.
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1112 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1997,16 +2014,18 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 **The command center has voice, a synced face, live state, tuning, a reasoning panel, a capability
 catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), files/documents as a
 first-class surface, and a real LLM path (Increments 89–142); cognition thresholds are live-tunable (141),
-documents are folder-aware (142) and the per-belief weighting policy is root-injectable (144).** The
-audit-gate reset (135), the reasoner-consuming-ConversationContext work (138), live knobs (141), the
-deterministic event guard (143) and the weighting-policy seam (144) have all landed. The mechanical debt
-is gone; the remaining choices are capability. Natural next moves — pick one:
-- **Deep multi-turn reasoning:** the reasoner receives recent turns (Increment 138) but each message is
-  still a fresh model call; an incremental reasoning span over many turns remains open (the biggest, most
-  design-heavy option).
-- **Or a remaining honest gap:** `TemporalStability` for hypotheses (beliefs-only today), document depth
-  (ownership, per-file ranking, editing via chat), the live STT backer behind the speech seam, or the real
-  database behind the repository contracts (D10).
+documents are folder-aware (142), the per-belief weighting policy is root-injectable (144) and deep
+multi-turn reasoning rides a session span (145).** The audit-gate reset (135), the reasoner-consuming-
+ConversationContext work (138), live knobs (141), the deterministic event guard (143), the
+weighting-policy seam (144) and the reasoning span (145) have all landed. The mechanical debt is gone; the
+remaining choices are capability. Natural next moves — pick one:
+- **`TemporalStability` for hypotheses:** today it is span-based and derived for beliefs only; extending
+  the honest, revisable lifecycle to candidate hypotheses (count/recency weighting, no premature
+  collapse) is a contained, high-value Track-D closure.
+- **Unify the two `CognitiveEpisode` shapes** (deliberations reuse the episode as a lifecycle shell
+  rather than one belief+hypothesis model) — a design-debt clean-up.
+- **Or a remaining honest gap:** document depth (ownership, per-file ranking, editing via chat), the
+  real database behind the repository contracts (D10), or the live STT backer behind the speech seam.
 - Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
   constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
   §38 boundary intact (the LLM extracts candidate evidence, it never decides).
@@ -2022,19 +2041,21 @@ weighting, Increment 113). The remaining directions:
 - **Capability depth beyond the seams:** the calendar/tasks/notes/mail/speech/agent edges exist as seams +
   adapters; each can be deepened (CalDAV sync, scheduling execution, STT integration, richer delegation
   scopes). Each must stay behind its domain Protocol (D39), earned (D37), and offline-testable (D8).
-- **Conversation context for reasoning (landed, Increment 138);** the open edge is now *deep multi-turn*:
-  the reasoner receives the short-term turns in both paths (`say`/`reason` and episodes) but still makes a
-  fresh model call per message — an incremental reasoning span over several turns is not built.
+- **Conversation context for reasoning (landed, Increment 138);** the deep multi-turn edge is now landed
+  too: the session `ReasoningSpan` (Increment 145) carries the discussion across turns. The span is
+  conversation-scoped; extending it into the *episode* path or a live voice session stays open.
 - **Track C/D leftovers (opportunistic).** More §15 energy modelling (charge deliberations; energy recovery
   over time); unify the two `CognitiveEpisode` shapes; `TemporalStability` for hypotheses; injectable
-  weighting policy at the `Jarvis(...)` level (partial: decay policy is injectable, Increment 113, the
-  per-belief default is not); pin ruff/pyright in a lockfile; consider a real DB behind the repository
+  weighting policy at the `Jarvis(...)` level (done — decay at Increment 113, per-belief root default at
+  144); pin ruff/pyright in a lockfile; consider a real DB behind the repository
   contracts (D10).
 
 *Recommendation: the mechanical gates debt is gone (Increment 135), the reasoner reads recent turns
-(Increment 138), cognition thresholds are live-tunable (Increment 141), and documents are folder-aware
-(Increment 142). The least-risk next choice is the root-injectable per-belief weighting policy (finishes
-the knobs family); the biggest-value one is deep multi-turn reasoning.*
+(Increment 138), cognition thresholds are live-tunable (Increment 141), documents are folder-aware
+(Increment 142), the per-belief weighting policy is root-injectable (144) and deep multi-turn reasoning
+rides a session span (145). The least-risk next choice is `TemporalStability` for hypotheses or unifying
+the two `CognitiveEpisode` shapes; the biggest-value one remains a real database (D10) behind the
+repository contracts.*
 
 *(Deferred, natural follow-ups: excessive-complexity self-observation tendency; semantic trigger↔trait
 matching now that embeddings exist; recurring-goals/working-patterns facets; live STT wiring for the speech
@@ -2042,7 +2063,7 @@ seam.)*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-09-07, Increment 144)
+## Known limitations / not built yet  (refreshed 2026-09-07, Increment 145)
 
 **Landed since the last refresh (do not re-plan):**
 - The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
@@ -2072,6 +2093,10 @@ seam.)*
   `tunables` action + sliders in the settings panel.
 - **A deterministic event-registration guard** kills a collection-order flake and keeps every new event type
   firmly registered (Increment 143).
+- **Deep multi-turn reasoning** (Increment 145): a session `ReasoningSpan` carries the reasoning threads
+  across turns so a follow-up continues the discussion instead of restarting it, with a deterministic
+  thread lifecycle (open/revise, move-on, seal on confirmation, dispute on correction) and zero model
+  say over thread state.
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
@@ -2085,8 +2110,10 @@ seam.)*
   (embeddings) but not for belief/connection identity.
 - Deliberations reuse `CognitiveEpisode` as a lifecycle shell (two episode shapes gated by `EpisodeKind`)
   rather than one unified belief+hypothesis model.
-- *Deep multi-turn* reasoning: the reasoner receives recent turns (Increment 138) but each message is a
-  fresh model call; an incremental reasoning span over several turns is not built.
+- *Deep multi-turn* reasoning: an incremental reasoning span over several turns is now built — the
+  session `ReasoningSpan` (Increment 145) continues the discussion across turns with a deterministic
+  thread lifecycle. The span is conversation-scoped and bounded; it is not yet carried into the
+  *episode* path or connected to a live-STT voice session.
 - Documents are folder-aware (Increment 142) but still name/text-keyed: no ownership, per-file search
   ranking, or editing via the chat itself.
 - Speech has a perception seam but no live STT backer; real instruction execution is unimplemented

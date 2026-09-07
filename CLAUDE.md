@@ -51,9 +51,10 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 144 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is around Increment 145 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
-consumes the short-term `ConversationContext`), memory decay, and the capability edges
+consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
+deep multi-turn reasoning), memory decay, and the capability edges
 (web/research/compare/tools/notes/mail/calendar/tasks/agent/speech seam) are implemented. Files/documents
 are a first-class surface (accept, recall, search, chip in chat, read, folder-aware nesting). The command
 center exists with voice, a sphere/face, streaming, a reasoning panel, live-tunable cognition thresholds,
@@ -61,11 +62,9 @@ a root-injectable per-belief weighting policy, and a capability/tool surface; a 
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 
-The most useful next increments currently identified are a deep multi-turn reasoning span (the reasoner
-receives recent turns but each message is still a fresh model call), `TemporalStability` for hypotheses,
-or document depth (ownership, per-file ranking, editing via chat). However, **do not assume this
-is mandatory**: follow the user's
-current task.
+The most useful next increments currently identified are `TemporalStability` for hypotheses (beliefs-only
+today), unifying the two `CognitiveEpisode` shapes, or document depth (ownership, per-file ranking,
+editing via chat). However, **do not assume this is mandatory**: follow the user's current task.
 
 ## How to work
 
