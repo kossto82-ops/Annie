@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-07 (Increment 145)
+Last updated: 2026-09-07 (Increment 146)
 
 ---
 
@@ -1762,6 +1762,19 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   (`reasoning`), and replies never leak them.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1112 passed, 3 skipped.
 
+### Increment 146 — temporal stability for hypotheses ✅ (2026-09-07)
+- Hypotheses now derive the *same* span-based `TemporalStability` estimator beliefs use
+  (`derive_stability`, `2cfacdf`): how steadily the supporting evidence is spread over time, zero for a
+  single support or one moment. Closed the "derived for beliefs, not hypotheses" gap.
+- The axis stays separate (Vision §10): stability never re-ranks the `HypothesisSet`, never breaks a
+  tie, never alters derived confidence. Its job is the anti-overfit narration — the `Challenge` now
+  carries the leading hypothesis's derived `confidence` and `stability` and `describe()` flags a
+  narrow-time-window leader as possible overfitting, mirroring the grounded-belief conclusion's caution
+  (Vision §11).
+- `LOW_STABILITY_THRESHOLD` is centralized in the domain (`belief.py`); the executive and
+  self-observation import it instead of three mirrored literals.
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1122 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2014,18 +2027,18 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 **The command center has voice, a synced face, live state, tuning, a reasoning panel, a capability
 catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), files/documents as a
 first-class surface, and a real LLM path (Increments 89–142); cognition thresholds are live-tunable (141),
-documents are folder-aware (142), the per-belief weighting policy is root-injectable (144) and deep
-multi-turn reasoning rides a session span (145).** The audit-gate reset (135), the reasoner-consuming-
+documents are folder-aware (142), the per-belief weighting policy is root-injectable (144), deep
+multi-turn reasoning rides a session span (145) and hypotheses narrate their own temporal stability
+(146).** The audit-gate reset (135), the reasoner-consuming-
 ConversationContext work (138), live knobs (141), the deterministic event guard (143), the
-weighting-policy seam (144) and the reasoning span (145) have all landed. The mechanical debt is gone; the
+weighting-policy seam (144), the reasoning span (145) and the hypothesis-stability narration (146) have
+all landed. The mechanical debt is gone; the
 remaining choices are capability. Natural next moves — pick one:
-- **`TemporalStability` for hypotheses:** today it is span-based and derived for beliefs only; extending
-  the honest, revisable lifecycle to candidate hypotheses (count/recency weighting, no premature
-  collapse) is a contained, high-value Track-D closure.
 - **Unify the two `CognitiveEpisode` shapes** (deliberations reuse the episode as a lifecycle shell
   rather than one belief+hypothesis model) — a design-debt clean-up.
-- **Or a remaining honest gap:** document depth (ownership, per-file ranking, editing via chat), the
-  real database behind the repository contracts (D10), or the live STT backer behind the speech seam.
+- **Document depth:** ownership, per-file search ranking, or editing documents via the chat itself.
+- **Or a remaining honest gap:** the real database behind the repository contracts (D10), the live STT
+  backer behind the speech seam, or more §15 energy modelling (charge deliberations).
 - Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
   constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
   §38 boundary intact (the LLM extracts candidate evidence, it never decides).
@@ -2045,16 +2058,18 @@ weighting, Increment 113). The remaining directions:
   too: the session `ReasoningSpan` (Increment 145) carries the discussion across turns. The span is
   conversation-scoped; extending it into the *episode* path or a live voice session stays open.
 - **Track C/D leftovers (opportunistic).** More §15 energy modelling (charge deliberations; energy recovery
-  over time); unify the two `CognitiveEpisode` shapes; `TemporalStability` for hypotheses; injectable
+  over time); unify the two `CognitiveEpisode` shapes; count/recency weighting in `TemporalStability`
+  beyond the opt-in decay policy; injectable
   weighting policy at the `Jarvis(...)` level (done — decay at Increment 113, per-belief root default at
   144); pin ruff/pyright in a lockfile; consider a real DB behind the repository
   contracts (D10).
 
 *Recommendation: the mechanical gates debt is gone (Increment 135), the reasoner reads recent turns
 (Increment 138), cognition thresholds are live-tunable (Increment 141), documents are folder-aware
-(Increment 142), the per-belief weighting policy is root-injectable (144) and deep multi-turn reasoning
-rides a session span (145). The least-risk next choice is `TemporalStability` for hypotheses or unifying
-the two `CognitiveEpisode` shapes; the biggest-value one remains a real database (D10) behind the
+(Increment 142), the per-belief weighting policy is root-injectable (144), deep multi-turn reasoning
+rides a session span (145) and hypotheses narrate their temporal stability (146). The least-risk next
+choice is unifying the two `CognitiveEpisode` shapes; the biggest-value one remains a real database (D10)
+behind the
 repository contracts.*
 
 *(Deferred, natural follow-ups: excessive-complexity self-observation tendency; semantic trigger↔trait
@@ -2063,7 +2078,7 @@ seam.)*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-09-07, Increment 145)
+## Known limitations / not built yet  (refreshed 2026-09-07, Increment 146)
 
 **Landed since the last refresh (do not re-plan):**
 - The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
@@ -2097,6 +2112,9 @@ seam.)*
   across turns so a follow-up continues the discussion instead of restarting it, with a deterministic
   thread lifecycle (open/revise, move-on, seal on confirmation, dispute on correction) and zero model
   say over thread state.
+- **Temporal stability for hypotheses** (Increment 146): hypotheses derive the same span-based
+  `TemporalStability` estimator as beliefs; the `Challenge` narration flags a narrow-time-window leader
+  as possible overfitting (anti-overfit, Vision §11) without touching its strength, ranking or ties.
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
@@ -2104,8 +2122,9 @@ seam.)*
 
 **Still open / honest gaps:**
 - A real database behind the repository contracts (D10) — persistence is per-store JSON (now crash-safe).
-- `TemporalStability` is span-based (no count/recency weighting beyond the opt-in decay policy) and derived
-  for beliefs, not hypotheses.
+- `TemporalStability` is span-based for both beliefs *and* hypotheses now (Increment 146) — no
+  count/recency weighting beyond the opt-in decay policy; hypotheses narrate their narrowness without
+  it affecting ranking or ties.
 - Belief/connection identity still keys on exact strings (D17); semantic matching exists for *recall*
   (embeddings) but not for belief/connection identity.
 - Deliberations reuse `CognitiveEpisode` as a lifecycle shell (two episode shapes gated by `EpisodeKind`)

@@ -138,6 +138,11 @@ Learn
 Act / recommend verification
 ```
 
+The Challenge (stage four) carries the leading hypothesis's *derived* confidence and temporal stability
+(shared `derive_stability` estimator with beliefs); a leader resting on a narrow time window is narrated
+as possibly overfitting -- reported honestly, never altering its strength, the ranking, or a tie
+(Increment 146).
+
 The conversational flow (command center `say`, Increment 114) routes by intent first:
 
 ```text

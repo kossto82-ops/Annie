@@ -164,6 +164,9 @@ Increments 111–112).
   reasoning threads across turns; the thread lifecycle is deterministic (open/revise, move-on, seal on
   confirmation, dispute on correction), the model only proposes content, and `LlmReasoner` renders the
   threads into the prompt (Increment 145).
+- Temporal stability for hypotheses: hypotheses derive the same span-based `TemporalStability` as
+  beliefs; the `Challenge` narration flags a narrow-time-window leader as possible overfitting without
+  touching its strength, ranking or ties (Increment 146).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -174,8 +177,8 @@ Increments 111–112).
   the span into the *episode* path or extending it to a live voice session.
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
-- A real DB behind the repository contracts (D10); `TemporalStability` for hypotheses; more §15 energy
-  modelling (charge deliberations).
+- A real DB behind the repository contracts (D10); `TemporalStability` count/recency weighting beyond the
+  opt-in decay policy; more §15 energy modelling (charge deliberations).
 - Live STT backer for the speech seam; real instruction execution (earned agency).
 - Document depth: ownership, per-file search ranking, or editing via the chat itself (folder awareness landed).
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).
