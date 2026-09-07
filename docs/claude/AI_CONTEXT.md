@@ -153,8 +153,9 @@ Increments 111–112).
   Documentos panel with list/search/read/write/remove).
 - Documents in recall: `MemoryKind.DOCUMENT` + `DocumentHit`, lexical `search_documents`, wrapped recall
   (semantic + documents), and document chips in `say` replies (read-through on click); folder-aware names
-  (Increment 142) and recorded ownership per file — `DocumentOwner` attribution + stored/updated timing in
-  `DocumentMeta`, `documents info`, `[jarvis]` tags in list, `owner` on save (Increment 148).
+  (Increment 142), recorded ownership per file — `DocumentOwner` attribution + stored/updated timing in
+  `DocumentMeta`, `documents info`, `[jarvis]` tags in list, `owner` on save (Increment 148) — and
+  chat editing via `documents edit` behind a `DocumentEditor` proposal seam (Increment 149).
 - Cognition thresholds are live-tunable: one `CognitiveKnobs` VO (grounded/insight/max_goal_reflections)
   injectable at `Jarvis(...)`, runtime-swappable, exposed as a `tunables` action + sliders (Increment 141).
 - The per-belief weighting policy is root-injectable: `Jarvis(default_belief_policy=...)` /
@@ -176,6 +177,10 @@ Increments 111–112).
   index that `list`/`search` never surface; `write_document` takes `owner`, `document_meta()` is honest
   (`None` when a file predates provenance tracking), and the command center answers "whose is this?"
   via `documents info` while `list` tags generated files.
+- Chat editing of documents (Increment 149): a `DocumentEditor` seam (`domain/retrieval/document_editor.py`)
+  proposes a complete rewrite from a free-form instruction (`documents edit`); offline it declines honestly,
+  an LLM-backed editor rides the `LanguageModel` seam, and Jarvis applies the proposal preserving owner,
+  refuses binary, and frames the change from the real diff.
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -187,8 +192,7 @@ Increments 111–112).
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
 - A real DB behind the repository contracts (D10); `TemporalStability` count/recency weighting beyond the
-  opt-in decay policy; more §15 energy modelling (charge deliberations); document depth (editing via
-  chat — ownership landed in Increment 148).
+  opt-in decay policy; more §15 energy modelling (charge deliberations).
 - Live STT backer for the speech seam; real instruction execution (earned agency).
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).
 

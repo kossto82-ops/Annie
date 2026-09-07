@@ -209,7 +209,12 @@ under folders without ever escaping the sandbox (Increment 142). Every stored do
 recorded provenance: `DocumentMeta` (`DocumentOwner` attribution — companion vs jarvis-generated —
 plus stored/updated timing and size) persisted out-of-band in a reserved `_jarvis-meta.json` index that
 `list`/`search` never surface; `write_document` takes `owner`, and a file that predates provenance
-tracking reads honest `None` rather than a guess (Increment 148). Documents also
+tracking reads honest `None` rather than a guess (Increment 148). Documents are also editable from the
+chat itself through the same proposal-decided split as reasoning (Vision §38): a domain `DocumentEditor`
+seam (`SilentDocumentEditor` offline, `LlmDocumentEditor` over the `LanguageModel` seam otherwise)
+*proposes* the complete revised text for a free-form instruction; Jarvis applies it, preserves the
+recorded owner, refuses binary files, and frames what changed from the real diff (Increment 149).
+Documents also
 feed **recall**: `DocumentMemoryRetriever` wraps any base retriever and appends lexical `DocumentHit`s
 (`MemoryKind.DOCUMENT`, procedure `"document: <name>"`). The wrap is source-aware — the retriever keeps a
 callable to the current store, so swapping `set_documents_store` at runtime is honoured without rewiring.

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-07 (Increment 148)
+Last updated: 2026-09-07 (Increment 149)
 
 ---
 
@@ -1802,6 +1802,20 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   ``jarvis``). Per-file search ranking remains as-is (each hit is already a whole document, `a62df36`).
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1146 passed, 3 skipped.
 
+### Increment 149 — editing documents via the chat itself ✅ (2026-09-07)
+- "Hazle este cambio" to a shared file finally has a seam, built as the same proposal-decided split as
+  the reasoner (§38): a domain `DocumentEditor` Protocol *proposes the complete revised text* from a
+  free-form instruction; the offline `SilentDocumentEditor` declines honestly (§37); `LlmDocumentEditor`
+  backs it over the `LanguageModel` seam (fence-stripping, provider failure -> no proposal).
+- `jarvis.edit_document(name, instruction)` applies the proposal through the documents capability,
+  **preserving the recorded owner** and framing the change **from the real diff** — never from what the
+  model claims (`_describe_document_change`, Vision §26). Binary files are kept intact (refused, never
+  rewritten); a rewrite identical to the current text is reported without touching the file.
+- Command center: new ``documents edit`` action (needs ``name`` + ``instruction``; honest offline
+  message pointing to ``save`` when no live model); the runtime provider swap (`perceiver` action) wires
+  the editor alongside perceiver/companion-perceiver/voice/reasoner so edits ride the same model.
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1174 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2055,16 +2069,14 @@ catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech)
 first-class surface, and a real LLM path (Increments 89–142); cognition thresholds are live-tunable (141),
 documents are folder-aware (142), the per-belief weighting policy is root-injectable (144), deep
 multi-turn reasoning rides a session span (145), hypotheses narrate their own temporal stability
-(146), beliefs and hypothesis sets share one `CognitiveEpisode` shape (147) and documents carry
-recorded ownership (148).** The audit-gate reset (135), the reasoner-consuming-
+(146), beliefs and hypothesis sets share one `CognitiveEpisode` shape (147), documents carry
+recorded ownership (148) and documents are editable via the chat itself (149).** The audit-gate reset (135), the reasoner-consuming-
 ConversationContext work (138), live knobs (141), the deterministic event guard (143), the
 weighting-policy seam (144), the reasoning span (145), the hypothesis-stability narration (146), the
-episode-shape unification (147) and document provenance (148) have
+episode-shape unification (147), document provenance (148) and chat-based document editing (149) have
 all landed. The mechanical debt is gone; the
 remaining choices are capability. Natural next moves — pick one:
-- **Document depth:** editing documents via the chat itself (ownership and per-file ranking landed;
-  per-file search is already whole-document ranking).
-- **Or a remaining honest gap:** the real database behind the repository contracts (D10), the live STT
+- **A remaining honest gap:** the real database behind the repository contracts (D10), the live STT
   backer behind the speech seam, or more §15 energy modelling (charge deliberations).
 - Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
   constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
@@ -2095,9 +2107,9 @@ weighting, Increment 113). The remaining directions:
 (Increment 138), cognition thresholds are live-tunable (Increment 141), documents are folder-aware
 (Increment 142), the per-belief weighting policy is root-injectable (144), deep multi-turn reasoning
 rides a session span (145), hypotheses narrate their temporal stability (146), beliefs and hypothesis
-sets share one `CognitiveEpisode` shape (147) and documents carry recorded ownership (148). The
-least-risk next choice is editing documents via the chat itself; the biggest-value one remains a real
-database (D10) behind the
+sets share one `CognitiveEpisode` shape (147), documents carry recorded ownership (148) and documents
+are editable via the chat itself (149). Document depth is complete; the biggest-value remaining goal is
+a real database (D10) behind the
 repository contracts.*
 
 *(Deferred, natural follow-ups: excessive-complexity self-observation tendency; semantic trigger↔trait
@@ -2106,7 +2118,7 @@ seam.)*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-09-07, Increment 148)
+## Known limitations / not built yet  (refreshed 2026-09-07, Increment 149)
 
 **Landed since the last refresh (do not re-plan):**
 - The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
@@ -2149,6 +2161,9 @@ seam.)*
 - **Document ownership** (Increment 148): every stored document carries recorded provenance
   (`DocumentOwner` + stored/updated timing via `DocumentMeta`), persisted out-of-band from the bytes;
   `documents info` answers "whose is this and when did I get it?" and `list` tags generated files.
+- **Chat editing of documents** (Increment 149): a `DocumentEditor` seam proposes a complete rewrite
+  from a free-form `documents edit` instruction; Jarvis applies it, preserves attribution, and frames
+  the change from the real diff; binary files are never rewritten.
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
@@ -2167,8 +2182,9 @@ seam.)*
   session `ReasoningSpan` (Increment 145) continues the discussion across turns with a deterministic
   thread lifecycle. The span is conversation-scoped and bounded; it is not yet carried into the
   *episode* path or connected to a live-STT voice session.
-- Documents are folder-aware (Increment 142) and now carry recorded ownership (Increment 148: stored/updated timing + companion-vs-jarvis attribution per file), but are still name/text-keyed for
-  editing: no editing via the chat itself, and search ranks whole documents, not passages.
+- Documents are folder-aware (Increment 142), carry recorded ownership (Increment 148) and are
+  editable via the chat itself (Increment 149) — remaining gap: search ranks whole documents, not
+  passages.
 - Speech has a perception seam but no live STT backer; real instruction execution is unimplemented
   (instructions are acknowledged honestly, not acted on — earned agency).
 - Notes/tasks/calendar local adapters are file-backed (no CalDAV/ICS sync); email has a real IMAP/SMTP
