@@ -203,6 +203,16 @@ The grounded/insight attention gates and the goal-reflection cap are not module 
 `knobs()` / `set_knobs()`, threaded into the executive and the self-observation observers, and exposed
 live through the `tunables` command-center action and the settings-panel sliders (Increment 141).
 
+## Belief weighting policy
+
+Every belief is born with a `weighting_policy` — the source factors that turn evidence into its confidence.
+The historical default is `DEFAULT_WEIGHTING`, but the *fresh-belief* source policy is root-injectable:
+`Jarvis(default_belief_policy=...)` overrides it at construction (and `set_belief_policy(...)` at runtime),
+so goals, actions, companion traits and self-observed habits all inherit it; the swap reaches subsequent
+creations only, so nothing stored is silently re-weighted. `CompanionModel` and the self-observation
+observers accept the policy as their default, and `Jarvis.persistent()` forwards it at boot (Increment 144).
+The episode-path decay composition remains separately injectable per belief (Increment 113).
+
 ## Odysseus (capability acquisition)
 
 Odysseus is the mechanism by which Jarvis recognises and grows new *capabilities* --

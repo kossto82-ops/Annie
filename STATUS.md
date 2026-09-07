@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-07 (Increment 143)
+Last updated: 2026-09-07 (Increment 144)
 
 ---
 
@@ -1735,6 +1735,16 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   the collection-order flake seen during Increment 141's verification and keeps the "every new event type
   gets a registered sample" hazard loudly guarded.
 
+### Increment 144 — root-injectable per-belief default weighting policy ✅ (2026-09-07)
+- `Jarvis(default_belief_policy=...)` and `set_belief_policy(...)` override the *source* policy every
+  fresh belief is born with — goals, actions, companion traits, self-observed habits — instead of the
+  hard-coded `DEFAULT_WEIGHTING` (`a84c4c0`). The decay composition stays the episode path's injectable
+  (`weighting_policy`); `Jarvis.persistent()` forwards the root policy too.
+- The swap applies to subsequent creations only, so nothing stored is silently re-weighted; the
+  companion aggregate and the self-observation observers now take the policy as a default.
+- Closes the Track-D "per-belief default not overridable at the root" gap; the knobs family (thresholds +
+  source policy) is now fully injectable and runtime-swappable.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1986,19 +1996,17 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 **The command center has voice, a synced face, live state, tuning, a reasoning panel, a capability
 catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), files/documents as a
-first-class surface, and a real LLM path (Increments 89–142); cognition thresholds are live-tunable
-(Increment 141) and documents are folder-aware (Increment 142).** The audit-gate reset (135), the
-reasoner-consuming-ConversationContext work (138), live knobs (141) and the deterministic event guard
-(143) have all landed. The mechanical debt is gone; the remaining choices are capability. Natural next
-moves — pick one:
-- **Per-belief weighting policy at the root:** close the Track-D gap by letting `Jarvis(...)` override the
-  per-belief default source policy (not just the decay composition, Increment 113) — small, low-risk, pairs
-  with the Increment-141 knobs family.
+first-class surface, and a real LLM path (Increments 89–142); cognition thresholds are live-tunable (141),
+documents are folder-aware (142) and the per-belief weighting policy is root-injectable (144).** The
+audit-gate reset (135), the reasoner-consuming-ConversationContext work (138), live knobs (141), the
+deterministic event guard (143) and the weighting-policy seam (144) have all landed. The mechanical debt
+is gone; the remaining choices are capability. Natural next moves — pick one:
 - **Deep multi-turn reasoning:** the reasoner receives recent turns (Increment 138) but each message is
   still a fresh model call; an incremental reasoning span over many turns remains open (the biggest, most
   design-heavy option).
 - **Or a remaining honest gap:** `TemporalStability` for hypotheses (beliefs-only today), document depth
-  (ownership, per-file ranking, editing via chat), or the live STT backer behind the speech seam.
+  (ownership, per-file ranking, editing via chat), the live STT backer behind the speech seam, or the real
+  database behind the repository contracts (D10).
 - Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
   constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
   §38 boundary intact (the LLM extracts candidate evidence, it never decides).
@@ -2034,7 +2042,7 @@ seam.)*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-09-07, Increment 143)
+## Known limitations / not built yet  (refreshed 2026-09-07, Increment 144)
 
 **Landed since the last refresh (do not re-plan):**
 - The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
@@ -2064,13 +2072,15 @@ seam.)*
   `tunables` action + sliders in the settings panel.
 - **A deterministic event-registration guard** kills a collection-order flake and keeps every new event type
   firmly registered (Increment 143).
+- **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
+  `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
+  companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
+  `Jarvis.persistent()`.
 
 **Still open / honest gaps:**
 - A real database behind the repository contracts (D10) — persistence is per-store JSON (now crash-safe).
 - `TemporalStability` is span-based (no count/recency weighting beyond the opt-in decay policy) and derived
   for beliefs, not hypotheses.
-- Weighting policy is injectable at `Jarvis(...)` only as the decay composition (Increment 113); the
-  per-belief default source policy is not yet overridable at the root level.
 - Belief/connection identity still keys on exact strings (D17); semantic matching exists for *recall*
   (embeddings) but not for belief/connection identity.
 - Deliberations reuse `CognitiveEpisode` as a lifecycle shell (two episode shapes gated by `EpisodeKind`)
@@ -2091,7 +2101,7 @@ persistence across restart (crash-safe), perception seam + streams + contested-b
 connections, the full reflective cycle, trace persistence, decay forgetting, semantic recall, provisional
 reasoning + confirmation, the five edge capability seams + tool registry, and the command center
 dashboard/sphere/catalog surface, the files/documents surface (accept, recall, search, chip, read, folders),
-and live-tunable cognition thresholds.
+live-tunable cognition thresholds, and the root-injectable per-belief weighting policy.
 
 ---
 

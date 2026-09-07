@@ -156,6 +156,10 @@ Increments 111–112).
   (Increment 142).
 - Cognition thresholds are live-tunable: one `CognitiveKnobs` VO (grounded/insight/max_goal_reflections)
   injectable at `Jarvis(...)`, runtime-swappable, exposed as a `tunables` action + sliders (Increment 141).
+- The per-belief weighting policy is root-injectable: `Jarvis(default_belief_policy=...)` /
+  `set_belief_policy(...)` override the source policy every fresh belief is born with (goals, actions,
+  companion traits, self-observed habits); the swap reaches subsequent creations only and is inherited by
+  `Jarvis.persistent()` (Increment 144).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -166,8 +170,8 @@ Increments 111–112).
   turns is not built.
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
-- A real DB behind the repository contracts (D10); per-belief weighting not yet root-injectable;
-  `TemporalStability` for hypotheses; more §15 energy modelling (charge deliberations).
+- A real DB behind the repository contracts (D10); `TemporalStability` for hypotheses; more §15 energy
+  modelling (charge deliberations).
 - Live STT backer for the speech seam; real instruction execution (earned agency).
 - Document depth: ownership, per-file search ranking, or editing via the chat itself (folder awareness landed).
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).
