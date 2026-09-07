@@ -36,6 +36,7 @@ from jarvis.domain.services.self_observation import (
     observe_evidence_habit,
     observe_overconfidence,
 )
+from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
@@ -46,9 +47,8 @@ from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.nervous_system.nervous_system import NervousSystem
 
-# Below this evidence-derived confidence, a conclusion is not asserted as grounded
-# (D14). A defensible midpoint of [0, 1]; revisited when reflection/attention need it.
-GROUNDED_CONFIDENCE_THRESHOLD = 0.5
+# The grounded threshold (D14) now lives in ``CognitiveKnobs`` (default 0.5), the
+# single validated source shared with the domain services and the Jarvis surface.
 
 # A grounded conclusion resting on evidence with little temporal spread may be
 # overfitting to a recent burst (Vision §11); below this stability it is flagged.
@@ -135,13 +135,15 @@ def subject_of(statement: str) -> str:
     return statement.removeprefix(_WORKING_PREFIX)
 
 
-def _assess_attention(belief: Belief, *, given_new_evidence: bool) -> Attention:
+def _assess_attention(
+    belief: Belief, *, given_new_evidence: bool, grounded: float
+) -> Attention:
     """Decide how much reasoning a trigger warrants (Vision §14).
 
     A belief already held confidently, with no new evidence to integrate, is
     answered briefly; anything else gets full reasoning.
     """
-    already_known = belief.confidence.value >= GROUNDED_CONFIDENCE_THRESHOLD
+    already_known = belief.confidence.value >= grounded
     if already_known and not given_new_evidence:
         return Attention.BRIEF
     return Attention.FULL
@@ -160,11 +162,16 @@ class ExecutiveController:
         reasoner: Reasoner | None = None,
         weighting_policy: EvidenceWeightingPolicy | None = None,
         knowledge_source: KnowledgeSource | None = None,
+        knobs: CognitiveKnobs | None = None,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
         self._episodes = episodes
         self._companion = companion
+        # The runtime-tunable cognition thresholds (grounded/insight/goal gates).
+        # Absent -> the historical defaults (CognitiveKnobs()); a command center
+        # can swap them at runtime via :meth:`set_knobs` without rebuilding.
+        self._knobs = knobs or CognitiveKnobs()
         # Optional: how working beliefs weigh their evidence. Absent -> the default
         # (no decay). A decaying policy makes stale evidence fade (Vision §10, §22).
         self._weighting_policy = weighting_policy
@@ -198,6 +205,14 @@ class ExecutiveController:
         a live source stays a candidate, not a verdict (D6).
         """
         self._knowledge_source = source
+
+    def set_knobs(self, knobs: CognitiveKnobs) -> None:
+        """Swap the cognition thresholds at runtime (the command center's tune dials).
+
+        Values are validated by :class:`CognitiveKnobs` at the value level (D7),
+        so an out-of-range threshold is rejected before it ever reaches cognition.
+        """
+        self._knobs = knobs
 
     def reason(
         self,
@@ -271,7 +286,9 @@ class ExecutiveController:
 
         episode.begin_reasoning()
         belief = self._resolve_working_belief(episode)
-        attention = _assess_attention(belief, given_new_evidence=bool(pieces))
+        attention = _assess_attention(
+            belief, given_new_evidence=bool(pieces), grounded=self._knobs.grounded_confidence
+        )
         if conserve and attention is Attention.FULL and not pieces:
             attention = Attention.BRIEF
         episode.attend(attention)
@@ -571,7 +588,7 @@ class ExecutiveController:
         contested = bool(explanation.contradicting)
         if contested:
             note = "the conclusion rests on evidence that is partly contradicted"
-        elif belief.confidence.value >= GROUNDED_CONFIDENCE_THRESHOLD:
+        elif belief.confidence.value >= self._knobs.grounded_confidence:
             note = "the conclusion is well grounded in its evidence"
         else:
             note = "the conclusion is thinly grounded and may need more evidence"
@@ -597,7 +614,7 @@ class ExecutiveController:
                 f"Insufficient evidence to conclude about: {trigger} "
                 f"(confidence {confidence:.2f})."
             )
-        if confidence < GROUNDED_CONFIDENCE_THRESHOLD:
+        if confidence < self._knobs.grounded_confidence:
             return (
                 f"Tentative, low-confidence view about: {trigger} "
                 f"(confidence {confidence:.2f}); more evidence needed."
@@ -623,7 +640,7 @@ class ExecutiveController:
 
     def _maybe_request_evidence(self, episode: CognitiveEpisode, belief: Belief) -> None:
         """When a conclusion is not grounded, name the evidence it needs (Vision §37)."""
-        if belief.confidence.value >= GROUNDED_CONFIDENCE_THRESHOLD:
+        if belief.confidence.value >= self._knobs.grounded_confidence:
             return
         episode.attach_evidence_request(
             EvidenceRequest(
@@ -640,7 +657,7 @@ class ExecutiveController:
         Derived from prior episodes each time (Vision §20), so it fades as grounded
         conclusions become better spread over time.
         """
-        self_belief = observe_overconfidence(self._episodes.history())
+        self_belief = observe_overconfidence(self._episodes.history(), knobs=self._knobs)
         return (
             self_belief is not None
             and self_belief.confidence.value >= LEARNED_HABIT_THRESHOLD
@@ -652,7 +669,7 @@ class ExecutiveController:
         Derived from history each time, so it fades as the habit stops recurring.
         The current episode is not yet recorded, so this reflects only past cognition.
         """
-        self_belief = observe_evidence_habit(self._episodes.history())
+        self_belief = observe_evidence_habit(self._episodes.history(), knobs=self._knobs)
         return (
             self_belief is not None
             and self_belief.confidence.value >= LEARNED_HABIT_THRESHOLD

@@ -17,12 +17,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from jarvis.domain.enums.episode_kind import EpisodeKind
+from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 
-# Below this conclusion confidence an episode counts as "I could not answer".
-# Mirrors the executive's GROUNDED_CONFIDENCE_THRESHOLD (D14), like the
-# self-observation module which keeps the same constant at the same level.
-_GROUNDED_CONFIDENCE: float = 0.5
+# The grounded threshold is owned by ``CognitiveKnobs`` (single source, D14), so
+# gap detection gets it as an injectable knob -- the same dial the executive and
+# the self-observation services use, instead of a third mirroring constant.
 
 # A subject must fail more than once before it is a *recurring* gap worth naming.
 _MINIMUM_RECURRENCE: int = 2
@@ -91,18 +91,20 @@ def _singularize(word: str) -> str:
     return word
 
 
-def _failed(record: EpisodeRecord) -> bool:
+def _failed(record: EpisodeRecord, grounded: float) -> bool:
     """A conclusion Jarvis could not ground counts as a failed attempt, whether
     the question came from the companion or from its own curiosity -- either
     way it could not answer."""
     return (
         record.kind is EpisodeKind.CONCLUSION
-        and record.conclusion_confidence.value < _GROUNDED_CONFIDENCE
+        and record.conclusion_confidence.value < grounded
     )
 
 
 def detect_capability_gaps(
     history: Sequence[EpisodeRecord],
+    *,
+    knobs: CognitiveKnobs | None = None,
 ) -> tuple[CapabilityGap, ...]:
     """The recurring subjects in ``history`` that Jarvis kept failing to answer.
 
@@ -113,7 +115,8 @@ def detect_capability_gaps(
     are the failed records -- later turned into evidence by the caller. Gaps are
     returned strongest-first (most failed episodes, then subject).
     """
-    failed = [r for r in history if _failed(r)]
+    grounded = (knobs or CognitiveKnobs()).grounded_confidence
+    failed = [r for r in history if _failed(r, grounded)]
     if len(failed) < _MINIMUM_RECURRENCE:
         return ()
 

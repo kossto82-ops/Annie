@@ -25,6 +25,7 @@ from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.capability import Capability
+from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.evidence import Evidence
@@ -351,6 +352,42 @@ class TestTuning:
         jarvis.think("spend some energy")
         handle(jarvis, "rest", {})
         assert jarvis.energy_remaining() == 6
+
+
+class TestCognitiveKnobsTuning:
+    def test_reporting_the_thresholds_needs_no_payload(self) -> None:
+        result = handle(Jarvis(), "tunables", {})
+        assert isinstance(result["tunables"], dict)
+        tunables = cast("dict[str, object]", result["tunables"])
+        assert tunables["grounded_confidence"] == 0.5
+        assert tunables["insight_confidence"] == 0.5
+        assert tunables["max_goal_reflections"] == 3
+
+    def test_the_snapshot_carries_the_current_thresholds(self) -> None:
+        jarvis = Jarvis(cognitive_knobs=CognitiveKnobs(max_goal_reflections=6))
+        result = handle(jarvis, "state", {})
+        state = result["state"]
+        assert isinstance(state, dict)
+        tunables = cast("dict[str, object]", state["tunables"])
+        assert tunables["max_goal_reflections"] == 6
+
+    def test_tuning_one_knob_preserves_the_others(self) -> None:
+        jarvis = Jarvis()
+        result = handle(jarvis, "tunables", {"grounded_confidence": 0.7})
+        assert isinstance(result["tunables"], dict)
+        assert cast("float", result["tunables"]["grounded_confidence"]) == 0.7
+        assert jarvis.knobs().insight_confidence == 0.5  # untouched
+        assert jarvis.knobs().max_goal_reflections == 3
+
+    def test_an_out_of_range_knob_is_a_clear_error_not_a_crash(self) -> None:
+        jarvis = Jarvis()
+        result = handle(jarvis, "tunables", {"grounded_confidence": 1.5})
+        assert "error" in result
+        assert jarvis.knobs() == CognitiveKnobs()  # nothing silently changed
+
+    def test_an_unknown_knob_is_rejected(self) -> None:
+        result = handle(Jarvis(), "tunables", {"invented_knob": 2})
+        assert "error" in result
 
 
 class TestPerceiver:

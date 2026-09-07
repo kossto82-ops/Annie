@@ -20,14 +20,13 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 
-# Below this conclusion confidence an episode counts as "ungrounded". Mirrors the
-# executive's GROUNDED_CONFIDENCE_THRESHOLD (D14); kept here to avoid the domain
-# depending on the application layer.
-_GROUNDED_CONFIDENCE = 0.5
+# The grounded threshold is owned by ``CognitiveKnobs`` (single source, D14);
+# these observers take it as an injectable knob (default = the value above).
 
 # Too few episodes to judge a tendency honestly.
 _MINIMUM_HISTORY = 3
@@ -43,7 +42,9 @@ OVERCONFIDENCE_HABIT = "I tend to be overconfident on thin evidence"
 POOR_PREDICTION_HABIT = "My predictions about my actions tend to be wrong"
 
 
-def observe_evidence_habit(history: Sequence[EpisodeRecord]) -> Belief | None:
+def observe_evidence_habit(
+    history: Sequence[EpisodeRecord], *, knobs: CognitiveKnobs | None = None
+) -> Belief | None:
     """Form a belief about whether Jarvis concludes without enough evidence.
 
     Returns None when there is too little history to judge. Otherwise returns a
@@ -60,10 +61,11 @@ def observe_evidence_habit(history: Sequence[EpisodeRecord]) -> Belief | None:
     ]
     if len(relevant) < _MINIMUM_HISTORY:
         return None
+    grounded = (knobs or CognitiveKnobs()).grounded_confidence
 
     belief = Belief(statement=INSUFFICIENT_EVIDENCE_HABIT)
     for record in relevant:
-        ungrounded = record.conclusion_confidence.value < _GROUNDED_CONFIDENCE
+        ungrounded = record.conclusion_confidence.value < grounded
         belief.add_evidence(
             Evidence(
                 content=(
@@ -79,7 +81,9 @@ def observe_evidence_habit(history: Sequence[EpisodeRecord]) -> Belief | None:
     return belief
 
 
-def observe_overconfidence(history: Sequence[EpisodeRecord]) -> Belief | None:
+def observe_overconfidence(
+    history: Sequence[EpisodeRecord], *, knobs: CognitiveKnobs | None = None
+) -> Belief | None:
     """Form a belief about whether Jarvis is overconfident on thin evidence.
 
     Only *grounded* conclusions are candidates -- an ungrounded one is not
@@ -88,12 +92,13 @@ def observe_overconfidence(history: Sequence[EpisodeRecord]) -> Belief | None:
     evidence contradicts it (Vision §6, §11). Returns None with too little
     grounded history to judge.
     """
+    grounded_confidence = (knobs or CognitiveKnobs()).grounded_confidence
     grounded = [
         r
         for r in history
         if r.origin is TriggerOrigin.COMPANION
         and r.kind is EpisodeKind.CONCLUSION
-        and r.conclusion_confidence.value >= _GROUNDED_CONFIDENCE
+        and r.conclusion_confidence.value >= grounded_confidence
     ]
     if len(grounded) < _MINIMUM_HISTORY:
         return None
@@ -117,7 +122,9 @@ def observe_overconfidence(history: Sequence[EpisodeRecord]) -> Belief | None:
     return belief
 
 
-def observe_prediction_accuracy(action_beliefs: Sequence[Belief]) -> Belief | None:
+def observe_prediction_accuracy(
+    action_beliefs: Sequence[Belief], *, knobs: CognitiveKnobs | None = None
+) -> Belief | None:
     """Form a belief about whether Jarvis mispredicts its actions' outcomes.
 
     Reads the *action-outcome* beliefs (one per action kind, Increment 25). A kind
@@ -128,9 +135,10 @@ def observe_prediction_accuracy(action_beliefs: Sequence[Belief]) -> Belief | No
     distinct tendency from the episode-based ones.
     """
     judged: list[tuple[Belief, bool]] = []
+    grounded_confidence = (knobs or CognitiveKnobs()).grounded_confidence
     for action_belief in action_beliefs:
         confidence = action_belief.confidence.value
-        if confidence >= _GROUNDED_CONFIDENCE:
+        if confidence >= grounded_confidence:
             judged.append((action_belief, False))  # predictions held
         elif action_belief.explain().contradicting:
             judged.append((action_belief, True))  # predictions failed

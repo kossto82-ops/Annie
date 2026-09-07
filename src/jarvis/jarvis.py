@@ -71,6 +71,7 @@ from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.capability_recommendation import CapabilityRecommendation
 from jarvis.domain.value_objects.challenge import Challenge
+from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
@@ -135,18 +136,12 @@ from jarvis.infrastructure.text_embedder import TextEmbedder
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace, EpisodeTraceSink
 
-# Once Jarvis has turned an unreached goal over this many times without its
-# reachability improving, it stops wondering about it *for now* (Vision §16, §28):
-# an honest companion knows when to stop banging on a stuck door. This is "not
-# right now", not "never" -- reaching the goal or a fresh recurrence resurfaces it.
-_MAX_GOAL_REFLECTIONS = 3
+# The goal-reflection cap and the insight threshold now live in ``CognitiveKnobs``
+# (defaults 3 and 0.5, the historical constants), validated at the value level
+# (D7) and tunable at runtime from the command center.
 
 # The companion trait Jarvis learns about from help it received on a stuck goal.
 HELPFUL_COMPANION_TRAIT = "is helpful when I am stuck"
-
-# A reflective hypothesis is adopted as a belief only once it leads this confidently
-# (mirrors the grounded threshold, D14) and has survived challenge.
-_INSIGHT_CONFIDENCE = 0.5
 
 # The internal identity prefix for a capability need belief (Odysseus). It
 # distinguishes a need from other belief kinds and keeps retrieval deterministic
@@ -205,6 +200,7 @@ class Jarvis:
         capability_providers: CapabilityRegistry | None = None,
         tool_policy: ToolPolicy | None = None,
         documents_store: DocumentStore | None = None,
+        cognitive_knobs: CognitiveKnobs | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
@@ -388,6 +384,10 @@ class Jarvis:
         # conversation, kept separate from long-term memory so follow-ups and pronouns
         # resolve against what was just said, not against the belief store.
         self.conversation = ConversationContext()
+        # The runtime-tunable cognition thresholds (grounded / insight / goal
+        # gates). Absent -> the historical defaults; the command center swaps
+        # them at runtime via :meth:`set_knobs` without rebuilding Jarvis.
+        self._knobs = cognitive_knobs or CognitiveKnobs()
         self._executive = ExecutiveController(
             self.nervous_system,
             self.beliefs,
@@ -397,6 +397,7 @@ class Jarvis:
             reasoner,
             weighting_policy,
             knowledge_source=knowledge_source,
+            knobs=self._knobs,
         )
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
@@ -1509,7 +1510,7 @@ class Jarvis:
         caller's job (e.g. the surface records it via :meth:`recognise_need`), so
         this never writes state by itself.
         """
-        return detect_capability_gaps(self.episodes.history())
+        return detect_capability_gaps(self.episodes.history(), knobs=self._knobs)
 
     def unanswered_subjects(self) -> tuple[str, ...]:
         """The subjects Jarvis has noticed itself failing to answer about, as
@@ -1690,6 +1691,25 @@ class Jarvis:
         self._energy_budget = budget
         self._energy_available = budget if budget is not None else 0
 
+    def knobs(self) -> CognitiveKnobs:
+        """The current cognition thresholds (grounded / insight / goal gates).
+
+        A read-only view of the tuning dials: returns the frozen value object,
+        so the surface can render them without mutating shared state.
+        """
+        return self._knobs
+
+    def set_knobs(self, knobs: CognitiveKnobs) -> None:
+        """Swap the cognition thresholds at runtime (the command center's dials).
+
+        Values are validated by :class:`CognitiveKnobs` at the value level (D7);
+        an out-of-range threshold is rejected before it reaches cognition. The
+        executive (grounded gate) and Jarvis's own insight/goal gates read the
+        same object, so one swap tunes them all.
+        """
+        self._knobs = knobs
+        self._executive.set_knobs(knobs)
+
     def perceive(
         self, observation: str, trigger: str | None = None, goal: Goal | None = None
     ) -> CognitiveEpisode:
@@ -1745,19 +1765,19 @@ class Jarvis:
         The self-belief is grounded in the episode history and revisable like any
         other belief -- it is not a fixed personality trait.
         """
-        return observe_evidence_habit(self.episodes.history())
+        return observe_evidence_habit(self.episodes.history(), knobs=self._knobs)
 
     def observe_overconfidence(self) -> Belief | None:
         """A belief about whether Jarvis concludes confidently on thin evidence
         (Vision §6, §11), or None if there is too little grounded history.
         """
-        return observe_overconfidence(self.episodes.history())
+        return observe_overconfidence(self.episodes.history(), knobs=self._knobs)
 
     def observe_prediction_accuracy(self) -> Belief | None:
         """A belief about whether Jarvis mispredicts its actions' outcomes
         (Vision §31), or None if it has judged too few kinds of action.
         """
-        return observe_prediction_accuracy(self.actions.all_beliefs())
+        return observe_prediction_accuracy(self.actions.all_beliefs(), knobs=self._knobs)
 
     def recurring_goals(self) -> tuple[tuple[str, int], ...]:
         """The goals Jarvis keeps returning to, from its episodic memory
@@ -2043,7 +2063,7 @@ class Jarvis:
         # evaluator's SUGGEST stance already encodes "confidently needed, not yet
         # held", so this reuses the derived recommendation rather than re-deciding.
         for need_statement, confidence in self.capability_needs():
-            if confidence.value < _INSIGHT_CONFIDENCE:
+            if confidence.value < self._knobs.insight_confidence:
                 continue
             need = self._needs.get_by_statement(need_statement)
             for capability in self._capabilities.all_capabilities():
@@ -2243,7 +2263,7 @@ class Jarvis:
         if (
             leading is None
             or "common cause" not in leading.statement
-            or leading.confidence.value < _INSIGHT_CONFIDENCE
+            or leading.confidence.value < self._knobs.insight_confidence
         ):
             return None
         finding = self.reflect()[0]
@@ -2276,7 +2296,7 @@ class Jarvis:
         for finding in self.reflect():
             statement = working_statement(self._insight_trigger(finding.observation))
             belief = self.beliefs.get_by_statement(statement)
-            if belief is not None and belief.confidence.value >= _INSIGHT_CONFIDENCE:
+            if belief is not None and belief.confidence.value >= self._knobs.insight_confidence:
                 action = Action(
                     description=f'verify that "{finding.observation}" still holds',
                     expected="the observation is confirmed",
@@ -2653,14 +2673,14 @@ class Jarvis:
         """A stuck goal still worth wondering about: not yet turned over to exhaustion."""
         return (
             self._is_stuck_goal(goal_statement)
-            and self.reflection_effort(goal_statement) < _MAX_GOAL_REFLECTIONS
+            and self.reflection_effort(goal_statement) < self._knobs.max_goal_reflections
         )
 
     def _is_exhausted_stuck_goal(self, goal_statement: str) -> bool:
         """A stuck goal wondered about enough for now (suppressed until something changes)."""
         return (
             self._is_stuck_goal(goal_statement)
-            and self.reflection_effort(goal_statement) >= _MAX_GOAL_REFLECTIONS
+            and self.reflection_effort(goal_statement) >= self._knobs.max_goal_reflections
         )
 
     def _reachability_note(self, goal_statement: str) -> str:

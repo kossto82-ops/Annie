@@ -52,6 +52,8 @@ _PUBLIC_METHODS = (
     "is_conserving",
     "rest",
     "set_energy_budget",
+    "knobs",
+    "set_knobs",
     # Goals & relationship
     "recurring_goals",
     "reflection_effort",

@@ -142,6 +142,21 @@ def test_the_snapshot_surfaces_the_full_capability_catalog() -> None:
         assert status_ok, c["status"]
 
 
+def test_the_cognition_thresholds_are_tunable_from_the_settings_panel() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    # The thresholds card lives in the settings drawer and drives the tunables
+    # action; renderTunables syncs slider + label with every snapshot.
+    for marker in (
+        'id="groundedKnob"',
+        'id="insightKnob"',
+        'id="goalKnob"',
+        "grounded_confidence",
+        "renderTunables",
+        'api("tunables"',
+    ):
+        assert marker in html, f"thresholds tuning lost its {marker!r} wiring"
+
+
 def test_the_inline_script_has_no_broken_single_quoted_strings() -> None:
     """Tripwire against a JS syntax error that silently kills the whole page.
 

@@ -21,7 +21,7 @@ import os
 import re
 import urllib.parse
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import cast
@@ -117,6 +117,11 @@ def snapshot(jarvis: Jarvis) -> Reply:
             "spent": jarvis.energy_spent(),
             "remaining": jarvis.energy_remaining(),
             "conserving": jarvis.is_conserving(),
+        },
+        "tunables": {
+            "grounded_confidence": jarvis.knobs().grounded_confidence,
+            "insight_confidence": jarvis.knobs().insight_confidence,
+            "max_goal_reflections": jarvis.knobs().max_goal_reflections,
         },
         "self": [{"statement": s, "confidence": c} for s, c in summary.self_tendencies],
         "companion": [
@@ -649,6 +654,41 @@ def _energy_budget(jarvis: Jarvis, payload: Reply) -> Reply:
     budget = int(raw) if isinstance(raw, int | float | str) else 0
     jarvis.set_energy_budget(budget)
     return {"reply": f"Energy budget set to {budget}.", "speak": False}
+
+
+def _tunables(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Report or tune the cognition thresholds at runtime.
+
+    With no fields it just reports the current ``grounded_confidence``,
+    ``insight_confidence`` and ``max_goal_reflections``. With any of them it
+    builds the updated :class:`CognitiveKnobs` (``dataclasses.replace`` keeps the
+    untouched dials) and swaps it via :meth:`Jarvis.set_knobs` -- one value object,
+    the single source the executive and Jarvis's own gates read. An out-of-range
+    value is a clear error, rejected at the value level (D7), never a crash.
+    """
+    current = jarvis.knobs()
+    fields = {
+        "grounded_confidence": current.grounded_confidence,
+        "insight_confidence": current.insight_confidence,
+        "max_goal_reflections": current.max_goal_reflections,
+    }
+    unknown = sorted(set(payload) - set(fields))
+    if unknown:
+        return {"error": f"unknown tune knob: {unknown[0]}", "speak": False}
+    changes = {name: payload[name] for name in fields if name in payload}
+    if not changes:
+        return {"reply": "Cognition thresholds:", "tunables": fields, "speak": False}
+    try:
+        updated = replace(current, **changes)
+    except ValueError as error:
+        return {"error": str(error), "speak": False}
+    jarvis.set_knobs(updated)
+    reported = {name: getattr(updated, name) for name in fields}
+    return {
+        "reply": "Cognition thresholds updated.",
+        "tunables": reported,
+        "speak": False,
+    }
 
 
 def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -1839,6 +1879,7 @@ _COMMANDS: dict[str, Command] = {
     "wonder": _wonder,
     "rest": _rest,
     "energy_budget": _energy_budget,
+    "tunables": _tunables,
     "perceiver": _perceiver,
     "learn": _learn,
     "greeting": _greeting,
