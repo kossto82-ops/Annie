@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-07 (Increment 150)
+Last updated: 2026-09-07 (Increment 151)
 
 ---
 
@@ -1833,6 +1833,18 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   in-memory session (no `home`) is unchanged. The JSON stores and `persistent()` remain as-is and first-class.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1192 passed, 3 skipped.
 
+### Increment 151 — SQLite across the edge seams ✅ (2026-09-07)
+- The marginal capabilities that were still per-store JSON files now persist to a real database too:
+  `SqliteCalendarStore`, `SqliteNotesStore` and `SqliteTaskScheduler` (Odysseus #6/#7/#8) back the same
+  domain Protocols (`CalendarStore`/`NotesStore`/`TaskScheduler`) with transactional SQLite tables keyed by id,
+  mirroring the Local stores' semantics exactly (sorted listings, KeyError on unknown ids, blank-field-keeps-
+  current updates, `due_tasks`).
+- The builders adopted them: with `JARVIS_CALENDAR_ROOT`, `JARVIS_NOTES_ROOT` or `JARVIS_TASKS_ROOT` set, the
+  store now lives in a `jarvis.db` (SQLite) inside that root instead of `calendar.json`/`notes.json`/`tasks.json`
+  -- so the command-center wiring picks the DB automatically. The io-injectable `Local*` classes remain for
+  direct use and offline tests (D8), unmodified.
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1212 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2184,6 +2196,9 @@ seam.)*
 - **A real database behind the repository contracts** (Increment 150): `Sqlite*Store` implementations back the
   belief/episode/capability/refutation Protocols in a transactional `jarvis.db`, composed by `Jarvis.database()`
   — same rehydration semantics (evidence-derived confidence), one committed save per write.
+- **SQLite across the edge seams** (Increment 151): the calendar / notes / task-scheduler adapters
+  (`SqliteCalendarStore`, `SqliteNotesStore`, `SqliteTaskScheduler`) back the same Protocols in their
+  root's `jarvis.db`, and the env-root builders adopt them at the command center.
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
@@ -2208,8 +2223,8 @@ seam.)*
   passages.
 - Speech has a perception seam but no live STT backer; real instruction execution is unimplemented
   (instructions are acknowledged honestly, not acted on — earned agency).
-- Notes/tasks/calendar local adapters are file-backed (no CalDAV/ICS sync); email has a real IMAP/SMTP
-  adapter but no per-account UI management.
+- Notes/tasks/calendar local adapters now persist to SQLite in their own root (`jarvis.db`, Increment 151) but
+  have no CalDAV/ICS sync; email has a real IMAP/SMTP adapter but no per-account UI management.
 - NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
 
 **Already built (do not list as missing):** goals & decomposition, curiosity (incl. give-up/ask-for-help),
@@ -2219,7 +2234,7 @@ connections, the full reflective cycle, trace persistence, decay forgetting, sem
 reasoning + confirmation, the five edge capability seams + tool registry, and the command center
 dashboard/sphere/catalog surface, the files/documents surface (accept, recall, search, chip, read, folders),
 live-tunable cognition thresholds, the root-injectable per-belief weighting policy, and a real SQLite database
-behind the repository contracts (`Jarvis.database()`).
+behind the repository contracts (`Jarvis.database()`) extended across the calendar/notes/tasks edge seams.
 
 ---
 

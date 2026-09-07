@@ -382,6 +382,11 @@ contracts, not a new storage API.
 - The command center's composition root (`create_jarvis`) uses SQLite when a `home` is set (Increment 150),
   so a desktop assistant persists to one transactional database; `Jarvis.persistent()` remains the file-backed
   twin for the JSON stores.
+- The edge seams followed (Increment 151): `SqliteCalendarStore` / `SqliteNotesStore` /
+  `SqliteTaskScheduler` back the `CalendarStore` / `NotesStore` / `TaskScheduler` Protocols in a
+  `jarvis.db` inside their `JARVIS_*_ROOT`, and the environment builders (`build_calendar_store`,
+  `build_notes_store`, `build_task_scheduler`) serve them; the io-injectable `Local*` adapters remain
+  available for offline tests and direct use, unmodified (D8).
 
 ## UI boundary
 

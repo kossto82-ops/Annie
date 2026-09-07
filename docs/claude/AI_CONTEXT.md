@@ -186,6 +186,10 @@ Increments 111–112).
   transactional durability, composed by `build_sqlite_repositories`/`SqliteRepositories` into one `jarvis.db`
   and reached through `Jarvis.database(directory)`; the command center's composition root (`create_jarvis`)
   adopts it when a `home` is set. Same evidence-derived rehydration as the JSON stores.
+- SQLite across the edge seams (Increment 151): `SqliteCalendarStore` / `SqliteNotesStore` /
+  `SqliteTaskScheduler` back the calendar/notes/task-scheduler Protocols in their root's `jarvis.db`; the
+  `JARVIS_*_ROOT` builders (`calendar_store`/`notes_store`/`task_scheduler`) serve them, while the io-injectable
+  `Local*` adapters stay for offline tests and direct use (D8).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
