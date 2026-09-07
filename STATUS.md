@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-06 (Increment 140)
+Last updated: 2026-09-07 (Increment 143)
 
 ---
 
@@ -1712,6 +1712,29 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   chip double-check reads the file.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1066 passed, 3 skipped.
 
+### Increment 141 — live-tunable cognition thresholds ✅ (2026-09-07)
+- A single validated `CognitiveKnobs` value object (`grounded_confidence`, `insight_confidence`,
+  `max_goal_reflections`, defaults 0.5/0.5/3) replaces the module constants and their domain mirrors
+  (`8392af9`). Injectable at `Jarvis(cognitive_knobs=...)`, swappable at runtime via `knobs()` /
+  `set_knobs()`; observers and the capability-gap pass it as `knobs=...`.
+- Command center gains a `tunables` action (report/set, unknown knob and out-of-range are honest errors)
+  and a "Cognition — thresholds" card with sliders in the settings panel; snapshot exposes `tunables`.
+- Discipline: thresholds are now injectable/config-sourced, never a module constant (D7).
+
+### Increment 142 — folder-aware documents store ✅ (2026-09-07)
+- `LocalDocumentStore` accepts sandbox-safe nested names (`docs/api.md`) instead of flat-only ones
+  (`c7e5d51`): bounded relative paths, backslash normalisation, real-disk `rglob` listing and parent-dir
+  creation; every escape (absolute, drive, `.`/`..`, empty segments) stays rejected at the store and the
+  surface. The `DocumentStore` seam contract notes the bounded-relative naming.
+- `documents save` gains an optional `path` folder (`docs/v2`), and the Documentos panel a folder field;
+  upload-basename normalisation for browser paths is unchanged.
+
+### Increment 143 — deterministic cognitive-event registration guard ✅ (2026-09-07)
+- The serialisation guard no longer depends on which event modules happened to be imported during
+  collection: it enumerates the whole `jarvis.domain.events` package via `pkgutil` (`6443631`). Removes
+  the collection-order flake seen during Increment 141's verification and keeps the "every new event type
+  gets a registered sample" hazard loudly guarded.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -1940,9 +1963,10 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 - **Perceiver/provider switcher (Increment 92):** the header shows the live perceiver and a card switches it
   to any registered provider at runtime (`perceiver` command + `perceiver_factory`); the secret stays in the
   env. This closes former open items (1)/(4).
-- **Still open (refinements, opportunistic):** (a) expose more tunable knobs live — grounded/insight/
-  confidence thresholds, weighting policy, `_MAX_GOAL_REFLECTIONS` — each made injectable as we touch it;
-  (b) streaming replies. As we add each tunable, expose it via constructor/config, not a module constant.
+- **Still open (refinements, opportunistic):** (a) expose the remaining knob — the per-belief weighting
+  policy (decay is injectable, Increment 113; source policy at the root is not); grounded/insight/
+  `max_goal_reflections` thresholds are live (Increment 141); (b) streaming replies. As we add each
+  tunable, expose it via constructor/config, not a module constant.
 
 ### Track D — smaller finish-offs (fold in opportunistically, not their own phase)
 - Unify the two `CognitiveEpisode` shapes (conclusion vs deliberation) — or document the split as final.
@@ -1960,20 +1984,21 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (recommended, not yet started)
 
-**The command center now has voice, a synced face, live state, tuning, a reasoning panel, a capability
+**The command center has voice, a synced face, live state, tuning, a reasoning panel, a capability
 catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), files/documents as a
-first-class surface, and a real LLM path (Increments 89–140).** Since the last recommendation both the
-audit-gate reset (Increment 135) and the reasoner-consuming-ConversationContext work (Increment 138)
-have landed. Natural next moves — pick one:
-- **Live-tunable knobs:** make the remaining thresholds (`GROUNDED_CONFIDENCE_THRESHOLD`,
-  `_INSIGHT_CONFIDENCE`, weighting policy, `_MAX_GOAL_REFLECTIONS`) injectable and expose them in Tools —
-  each made injectable via constructor/config, never a module constant.
-- **Documents/files depth:** documents now recall + search + chip in chat (Increments 137–140); deepen
-  them (folder-aware `DocumentStore`, snippets per user files, a "read document" follow-up that consults
-  the file during reasoning rather than one-shot).
-- **Or a remaining honest gap:** true *deep multi-turn* reasoning — the reasoner receives recent turns
-  (Increment 138) but each message is still a fresh model call; an incremental reasoning span over many
-  turns remains open.
+first-class surface, and a real LLM path (Increments 89–142); cognition thresholds are live-tunable
+(Increment 141) and documents are folder-aware (Increment 142).** The audit-gate reset (135), the
+reasoner-consuming-ConversationContext work (138), live knobs (141) and the deterministic event guard
+(143) have all landed. The mechanical debt is gone; the remaining choices are capability. Natural next
+moves — pick one:
+- **Per-belief weighting policy at the root:** close the Track-D gap by letting `Jarvis(...)` override the
+  per-belief default source policy (not just the decay composition, Increment 113) — small, low-risk, pairs
+  with the Increment-141 knobs family.
+- **Deep multi-turn reasoning:** the reasoner receives recent turns (Increment 138) but each message is
+  still a fresh model call; an incremental reasoning span over many turns remains open (the biggest, most
+  design-heavy option).
+- **Or a remaining honest gap:** `TemporalStability` for hypotheses (beliefs-only today), document depth
+  (ownership, per-file ranking, editing via chat), or the live STT backer behind the speech seam.
 - Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
   constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
   §38 boundary intact (the LLM extracts candidate evidence, it never decides).
@@ -1998,9 +2023,10 @@ weighting, Increment 113). The remaining directions:
   per-belief default is not); pin ruff/pyright in a lockfile; consider a real DB behind the repository
   contracts (D10).
 
-*Recommendation: the mechanical gates debt is gone (Increment 135) and the reasoner now reads recent
-turns (Increment 138). The next choice is visible capability: live-tunable knobs (cheap, no design risk)
-or documents-depth (the newest surface).*
+*Recommendation: the mechanical gates debt is gone (Increment 135), the reasoner reads recent turns
+(Increment 138), cognition thresholds are live-tunable (Increment 141), and documents are folder-aware
+(Increment 142). The least-risk next choice is the root-injectable per-belief weighting policy (finishes
+the knobs family); the biggest-value one is deep multi-turn reasoning.*
 
 *(Deferred, natural follow-ups: excessive-complexity self-observation tendency; semantic trigger↔trait
 matching now that embeddings exist; recurring-goals/working-patterns facets; live STT wiring for the speech
@@ -2008,7 +2034,7 @@ seam.)*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-09-06, Increment 140)
+## Known limitations / not built yet  (refreshed 2026-09-07, Increment 143)
 
 **Landed since the last refresh (do not re-plan):**
 - The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
@@ -2033,6 +2059,11 @@ seam.)*
   replies — all behind offline, io-injectable adapters.
 - **Reasoner consumes the short-term `ConversationContext`** in both the conversational and episode paths
   (Increment 138).
+- **Cognition thresholds are live-tunable** (Increments 141): one validated `CognitiveKnobs` VO replaces the
+  module constants and domain mirrors; injectable at `Jarvis(...)`, runtime-swappable, and exposed as a
+  `tunables` action + sliders in the settings panel.
+- **A deterministic event-registration guard** kills a collection-order flake and keeps every new event type
+  firmly registered (Increment 143).
 
 **Still open / honest gaps:**
 - A real database behind the repository contracts (D10) — persistence is per-store JSON (now crash-safe).
@@ -2046,8 +2077,8 @@ seam.)*
   rather than one unified belief+hypothesis model.
 - *Deep multi-turn* reasoning: the reasoner receives recent turns (Increment 138) but each message is a
   fresh model call; an incremental reasoning span over several turns is not built.
-- Documents live in `LocalDocumentStore` (flat, name-keyed); no folder awareness, ownership, per-file
-  search ranking, or editing via the chat itself.
+- Documents are folder-aware (Increment 142) but still name/text-keyed: no ownership, per-file search
+  ranking, or editing via the chat itself.
 - Speech has a perception seam but no live STT backer; real instruction execution is unimplemented
   (instructions are acknowledged honestly, not acted on — earned agency).
 - Notes/tasks/calendar local adapters are file-backed (no CalDAV/ICS sync); email has a real IMAP/SMTP
@@ -2059,7 +2090,8 @@ episodic + belief + companion + action memory, self-model (3 tendencies), graded
 persistence across restart (crash-safe), perception seam + streams + contested-belief resolution, belief
 connections, the full reflective cycle, trace persistence, decay forgetting, semantic recall, provisional
 reasoning + confirmation, the five edge capability seams + tool registry, and the command center
-dashboard/sphere/catalog surface, plus the files/documents surface (accept, recall, search, chip, read).
+dashboard/sphere/catalog surface, the files/documents surface (accept, recall, search, chip, read, folders),
+and live-tunable cognition thresholds.
 
 ---
 

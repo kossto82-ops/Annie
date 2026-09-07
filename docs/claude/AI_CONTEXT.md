@@ -152,7 +152,10 @@ Increments 111–112).
 - Command Center: implemented (voice, sphere/face, streaming, reasoning panel, capability/tool panels,
   Documentos panel with list/search/read/write/remove).
 - Documents in recall: `MemoryKind.DOCUMENT` + `DocumentHit`, lexical `search_documents`, wrapped recall
-  (semantic + documents), and document chips in `say` replies (read-through on click).
+  (semantic + documents), and document chips in `say` replies (read-through on click); folder-aware names
+  (Increment 142).
+- Cognition thresholds are live-tunable: one `CognitiveKnobs` VO (grounded/insight/max_goal_reflections)
+  injectable at `Jarvis(...)`, runtime-swappable, exposed as a `tunables` action + sliders (Increment 141).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -166,6 +169,7 @@ Increments 111–112).
 - A real DB behind the repository contracts (D10); per-belief weighting not yet root-injectable;
   `TemporalStability` for hypotheses; more §15 energy modelling (charge deliberations).
 - Live STT backer for the speech seam; real instruction execution (earned agency).
-- More configurable runtime parameters (live-tunable knobs).
+- Document depth: ownership, per-file search ranking, or editing via the chat itself (folder awareness landed).
+- Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).
 
 Do not turn every future direction into immediate work. Follow the current user request.
