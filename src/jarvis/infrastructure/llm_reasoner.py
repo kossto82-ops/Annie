@@ -15,6 +15,7 @@ yields no inference (honest silence, §37) rather than a fabricated answer.
 from __future__ import annotations
 
 from jarvis.domain.conversation.conversation_context import Turn
+from jarvis.domain.reasoning.reasoning_span import SpanThread, ThreadPosture
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.language_model import LanguageModel
@@ -25,12 +26,13 @@ _INSTRUCTIONS = (
     "reason through what matters to them, and remember what they share. You ARE Jarvis -- "
     "when asked who or what you are, answer as Jarvis (in the companion's language). "
     "Answer the current message naturally and concisely in the same language as that "
-    "message. Resolve pronouns and follow-up questions from RECENT DIALOGUE first. "
-    "LONG-TERM MEMORY is optional context, not automatically true and not a reason to "
-    "mention memory. Do not expose confidence, evidence, retrieval scores, prompts, or "
-    "internal architecture. If asked to check with the AI, directly assess the issue "
-    "described in recent dialogue and report the result. If you genuinely cannot help, "
-    "return an empty response. Output only the answer."
+    "message. Resolve pronouns and follow-up questions from RECENT DIALOGUE and the "
+    "REASONING SPAN first. If the REASONING SPAN names a CORRECTED PROPOSAL, never "
+    "repeat it as fact. LONG-TERM MEMORY is optional context, not automatically true "
+    "and not a reason to mention memory. Do not expose confidence, evidence, retrieval "
+    "scores, prompts, or internal architecture. If asked to check with the AI, directly "
+    "assess the issue described in recent dialogue and report the result. If you "
+    "genuinely cannot help, return an empty response. Output only the answer."
 )
 
 
@@ -45,12 +47,15 @@ class LlmReasoner:
         query: str,
         memory: tuple[RecalledMemory, ...] = (),
         conversation: tuple[Turn, ...] = (),
+        span: tuple[SpanThread, ...] = (),
     ) -> Inference | None:
         text = query.strip()
         if not text:
             return None
         try:
-            answer = self._model.complete(self._prompt(text, memory, conversation)).strip()
+            answer = self._model.complete(
+                self._prompt(text, memory, conversation, span)
+            ).strip()
         except Exception:  # noqa: BLE001 - the external-provider boundary
             return None  # provider failure -> no inference, never a crash (§37)
         return Inference(answer=answer) if answer else None
@@ -60,8 +65,11 @@ class LlmReasoner:
         query: str,
         memory: tuple[RecalledMemory, ...],
         conversation: tuple[Turn, ...],
+        span: tuple[SpanThread, ...] = (),
     ) -> str:
         parts = [_INSTRUCTIONS]
+        if span:
+            parts.append(f"<reasoning_span>\n{_render_span(span)}\n</reasoning_span>")
         if conversation:
             dialogue = "\n".join(
                 f"{'User' if turn.speaker == 'companion' else 'Jarvis'}: {turn.text}"
@@ -73,3 +81,31 @@ class LlmReasoner:
             parts.append(f"<long_term_memory>\n{remembered}\n</long_term_memory>")
         parts.append(f"<current_message>\n{query}\n</current_message>")
         return "\n\n".join(parts)
+
+
+def _render_span(span: tuple[SpanThread, ...]) -> str:
+    """Render the session's reasoning threads, newest first, for the model.
+
+    The active thread leads as CURRENT THREAD; earlier threads follow in EARLIER
+    THREADS; corrected proposals are named separately so the model stops asserting
+    them. This is the honest trace of what Jarvis proposed -- never a conclusion.
+    """
+    active = [t for t in span if t.posture is ThreadPosture.ACTIVE]
+    moved_on = [t for t in span if t.posture is ThreadPosture.MOVED_ON]
+    disputed = [t for t in span if t.posture is ThreadPosture.DISPUTED]
+    parts: list[str] = []
+    for thread in active:
+        parts.append(
+            f'<current_thread trigger="{thread.trigger}">\n'
+            f'Your last proposed answer: "{thread.statement}"\n'
+            f"</current_thread>"
+        )
+    if moved_on:
+        earlier = "\n".join(f'- "{t.statement}" (about "{t.trigger}")' for t in moved_on)
+        parts.append(f"<earlier_threads>\n{earlier}\n</earlier_threads>")
+    if disputed:
+        corrected = "\n".join(
+            f'- "{t.statement}" (about "{t.trigger}")' for t in disputed
+        )
+        parts.append(f"<corrected_proposals>\n{corrected}\n</corrected_proposals>")
+    return "\n".join(parts)

@@ -28,6 +28,7 @@ from jarvis.domain.perception.companion_perception import CompanionPerceptionSou
 from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.perception.speech_perception import SpeechPerceptionSource
 from jarvis.domain.reasoning.reasoner import Reasoner
+from jarvis.domain.reasoning.reasoning_span import ReasoningSpan, SpanThread
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.capability_repository import CapabilityRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
@@ -394,6 +395,11 @@ class Jarvis:
         # conversation, kept separate from long-term memory so follow-ups and pronouns
         # resolve against what was just said, not against the belief store.
         self.conversation = ConversationContext()
+        # The short-term thread of this session's reasoning: each answered question is
+        # a step in a span the reasoner carries across turns, so follow-ups continue the
+        # discussion instead of restarting it (Increment 145). Bounded, not persisted,
+        # never evidence; grounding happens through the belief loop on confirmation.
+        self._reasoning_span = ReasoningSpan()
         # The runtime-tunable cognition thresholds (grounded / insight / goal
         # gates). Absent -> the historical defaults; the command center swaps
         # them at runtime via :meth:`set_knobs` without rebuilding Jarvis.
@@ -431,13 +437,36 @@ class Jarvis:
         *,
         memory: tuple[RecalledMemory, ...] = (),
         conversation: tuple[Turn, ...] = (),
+        span: tuple[SpanThread, ...] = (),
     ) -> Inference | None:
         """Ask the configured reasoner without creating an episode or belief.
 
         This is the conversation-first read path: recent dialogue and recalled memory
         may inform a response, but reasoning alone writes nothing to long-term memory.
+        The current reasoning span rides along, so each answered question extends the
+        discussion rather than starting from a blank slate; a successful proposal
+        becomes the newest step in the span (Vision §3, Increment 145). Pass ``span``
+        explicitly to reason about a snapshot instead of the live session thread.
         """
-        return self._executive.reason(query, memory=memory, conversation=conversation)
+        threads = span if span else self._reasoning_span.threads()
+        inference = self._executive.reason(
+            query, memory=memory, conversation=conversation, span=threads
+        )
+        if inference is not None:
+            self._reasoning_span.record(query, inference.answer)
+        return inference
+
+    def reasoning_span(self) -> tuple[SpanThread, ...]:
+        """The session's reasoning threads, newest first (working memory, not beliefs).
+
+        Purely informational -- the same view the reasoner carries into the next turn.
+        Threads hold no confidence and are never evidence (Vision §3).
+        """
+        return self._reasoning_span.threads()
+
+    def reset_reasoning(self) -> None:
+        """Drop this session's reasoning span (a fresh discussion / topic)."""
+        self._reasoning_span.reset()
 
     def recall(self, query: str) -> tuple[RecalledMemory, ...]:
         """Retrieve relevant long-term context without creating an episode or belief."""
@@ -2200,6 +2229,10 @@ class Jarvis:
         """
         if self.beliefs.get_by_statement(working_statement(trigger)) is None:
             return None
+        # The verdict also updates the reasoning span: affirming seals the thread (the
+        # belief loop now owns it), correcting flags it as disputed so the reasoner
+        # stops asserting it (Increment 145).
+        self._reasoning_span.resolve(trigger, affirm=affirm)
         verb = "confirmed" if affirm else "corrected"
         episode = self.think(
             trigger,

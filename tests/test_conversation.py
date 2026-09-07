@@ -38,7 +38,9 @@ class ContextReasoner:
         query: str,
         memory: tuple[RecalledMemory, ...] = (),
         conversation: tuple[Turn, ...] = (),
+        span: tuple[object, ...] = (),
     ) -> Inference | None:
+        _ = span
         self.calls.append((query, memory, conversation))
         return Inference(answer=next(self._answers))
 

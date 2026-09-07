@@ -27,6 +27,7 @@ from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.reasoning.reasoner import Reasoner
+from jarvis.domain.reasoning.reasoning_span import SpanThread
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
@@ -220,11 +221,12 @@ class ExecutiveController:
         *,
         memory: tuple[RecalledMemory, ...] = (),
         conversation: tuple[Turn, ...] = (),
+        span: tuple[SpanThread, ...] = (),
     ) -> Inference | None:
         """Propose a conversational answer without creating or persisting cognition."""
         if self._reasoner is None:
             return None
-        return self._reasoner.infer(query, memory, conversation)
+        return self._reasoner.infer(query, memory, conversation, span)
 
     def recall(self, query: str) -> tuple[RecalledMemory, ...]:
         """Return relevant long-term context without opening a cognitive episode."""

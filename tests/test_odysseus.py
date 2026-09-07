@@ -472,6 +472,7 @@ class TestCapabilityProviders:
                 query: str,
                 memory: tuple[RecalledMemory, ...] = (),
                 conversation: tuple[Turn, ...] = (),
+                span: tuple[object, ...] = (),
             ) -> Inference | None:
                 return None
 

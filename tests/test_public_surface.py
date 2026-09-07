@@ -56,6 +56,8 @@ _PUBLIC_METHODS = (
     "set_knobs",
     "default_belief_policy",
     "set_belief_policy",
+    "reasoning_span",
+    "reset_reasoning",
     # Goals & relationship
     "recurring_goals",
     "reflection_effort",

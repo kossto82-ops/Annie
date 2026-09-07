@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from jarvis.domain.conversation.conversation_context import Turn
+from jarvis.domain.reasoning.reasoning_span import SpanThread
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 
@@ -35,6 +36,10 @@ class Reasoner(Protocol):
         query: str,
         memory: tuple[RecalledMemory, ...] = (),
         conversation: tuple[Turn, ...] = (),
+        span: tuple[SpanThread, ...] = (),
     ) -> Inference | None:
-        """Answer ``query`` from optional memory and recent dialogue, or return None."""
+        """Answer ``query`` from optional memory, recent dialogue and the reasoning
+        span's threads, or return None. ``span`` is the short-term thread of this
+        session's reasoning, so a follow-up can continue, not restart, the discussion.
+        """
         ...

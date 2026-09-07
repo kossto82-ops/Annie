@@ -30,8 +30,9 @@ class CountingReasoner:
         query: str,
         memory: tuple[RecalledMemory, ...] = (),
         conversation: tuple[Turn, ...] = (),
+        span: tuple[object, ...] = (),
     ) -> Inference | None:
-        _ = (memory, conversation)
+        _ = (memory, conversation, span)
         self.calls += 1
         return Inference(answer=self.answer)
 

@@ -9,6 +9,7 @@ recalled memory is answered honestly with "I don't have enough", exactly as befo
 from __future__ import annotations
 
 from jarvis.domain.conversation.conversation_context import Turn
+from jarvis.domain.reasoning.reasoning_span import SpanThread
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 
@@ -21,6 +22,7 @@ class SilentReasoner:
         query: str,
         memory: tuple[RecalledMemory, ...] = (),
         conversation: tuple[Turn, ...] = (),
+        span: tuple[SpanThread, ...] = (),
     ) -> Inference | None:
-        _ = (query, memory, conversation)
+        _ = (query, memory, conversation, span)
         return None

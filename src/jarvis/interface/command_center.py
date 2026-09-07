@@ -146,6 +146,14 @@ def snapshot(jarvis: Jarvis) -> Reply:
             for spec in jarvis.tool_channels()
         ],
         "documents": _document_names(jarvis),
+        "reasoning": [
+            {
+                "trigger": thread.trigger,
+                "proposal": thread.statement,
+                "posture": thread.posture.name,
+            }
+            for thread in jarvis.reasoning_span()
+        ],
     }
 
 
