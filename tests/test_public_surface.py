@@ -54,6 +54,8 @@ _PUBLIC_METHODS = (
     "set_energy_budget",
     "knobs",
     "set_knobs",
+    "default_belief_policy",
+    "set_belief_policy",
     # Goals & relationship
     "recurring_goals",
     "reflection_effort",

@@ -18,6 +18,7 @@ from __future__ import annotations
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
+from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.value_objects.evidence import Evidence
 
 # A companion-belief only informs new cognition once it is at least this confident
@@ -33,15 +34,28 @@ class CompanionModel:
     (Vision §21) while the aggregate itself stays free of infrastructure.
     """
 
-    def __init__(self, beliefs: BeliefRepository) -> None:
+    def __init__(
+        self,
+        beliefs: BeliefRepository,
+        default_policy: EvidenceWeightingPolicy | None = None,
+    ) -> None:
         self._beliefs = beliefs
+        self._default_policy = default_policy
         self._pending_events: list[CognitiveEvent] = []
+
+    def set_default_policy(self, policy: EvidenceWeightingPolicy | None) -> None:
+        """Swap the default policy for companion traits created from now on."""
+        self._default_policy = policy
 
     def observe(self, trait: str, evidence: Evidence) -> Belief:
         """Record an observation about the companion, evolving the matching belief."""
         belief = self._beliefs.get_by_statement(trait)
         if belief is None:
-            belief = Belief(statement=trait)
+            belief = (
+                Belief(statement=trait, weighting_policy=self._default_policy)
+                if self._default_policy is not None
+                else Belief(statement=trait)
+            )
         belief.add_evidence(evidence)
         self._beliefs.save(belief)
         self._pending_events.extend(belief.pull_events())

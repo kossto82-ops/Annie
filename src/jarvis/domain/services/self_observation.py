@@ -20,6 +20,7 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
@@ -43,13 +44,18 @@ POOR_PREDICTION_HABIT = "My predictions about my actions tend to be wrong"
 
 
 def observe_evidence_habit(
-    history: Sequence[EpisodeRecord], *, knobs: CognitiveKnobs | None = None
+    history: Sequence[EpisodeRecord],
+    *,
+    knobs: CognitiveKnobs | None = None,
+    policy: EvidenceWeightingPolicy | None = None,
 ) -> Belief | None:
     """Form a belief about whether Jarvis concludes without enough evidence.
 
     Returns None when there is too little history to judge. Otherwise returns a
     belief about Jarvis, grounded in one piece of evidence per past episode, so
     its confidence reflects how often conclusions were actually ungrounded.
+    ``policy`` is the belief's default weighting policy (the root per-belief
+    default when Jarvis injects one).
     """
     # Judge only how Jarvis handled the companion's questions. Self-triggered
     # (curiosity) episodes must not inflate the very habit they respond to, and
@@ -63,7 +69,11 @@ def observe_evidence_habit(
         return None
     grounded = (knobs or CognitiveKnobs()).grounded_confidence
 
-    belief = Belief(statement=INSUFFICIENT_EVIDENCE_HABIT)
+    belief = (
+        Belief(statement=INSUFFICIENT_EVIDENCE_HABIT, weighting_policy=policy)
+        if policy is not None
+        else Belief(statement=INSUFFICIENT_EVIDENCE_HABIT)
+    )
     for record in relevant:
         ungrounded = record.conclusion_confidence.value < grounded
         belief.add_evidence(
@@ -82,7 +92,10 @@ def observe_evidence_habit(
 
 
 def observe_overconfidence(
-    history: Sequence[EpisodeRecord], *, knobs: CognitiveKnobs | None = None
+    history: Sequence[EpisodeRecord],
+    *,
+    knobs: CognitiveKnobs | None = None,
+    policy: EvidenceWeightingPolicy | None = None,
 ) -> Belief | None:
     """Form a belief about whether Jarvis is overconfident on thin evidence.
 
@@ -103,7 +116,11 @@ def observe_overconfidence(
     if len(grounded) < _MINIMUM_HISTORY:
         return None
 
-    belief = Belief(statement=OVERCONFIDENCE_HABIT)
+    belief = (
+        Belief(statement=OVERCONFIDENCE_HABIT, weighting_policy=policy)
+        if policy is not None
+        else Belief(statement=OVERCONFIDENCE_HABIT)
+    )
     for record in grounded:
         overconfident = record.conclusion_stability.value < _LOW_STABILITY
         belief.add_evidence(
@@ -123,7 +140,10 @@ def observe_overconfidence(
 
 
 def observe_prediction_accuracy(
-    action_beliefs: Sequence[Belief], *, knobs: CognitiveKnobs | None = None
+    action_beliefs: Sequence[Belief],
+    *,
+    knobs: CognitiveKnobs | None = None,
+    policy: EvidenceWeightingPolicy | None = None,
 ) -> Belief | None:
     """Form a belief about whether Jarvis mispredicts its actions' outcomes.
 
@@ -147,7 +167,11 @@ def observe_prediction_accuracy(
     if len(judged) < _MINIMUM_HISTORY:
         return None
 
-    belief = Belief(statement=POOR_PREDICTION_HABIT)
+    belief = (
+        Belief(statement=POOR_PREDICTION_HABIT, weighting_policy=policy)
+        if policy is not None
+        else Belief(statement=POOR_PREDICTION_HABIT)
+    )
     for action_belief, mispredicted in judged:
         belief.add_evidence(
             Evidence(

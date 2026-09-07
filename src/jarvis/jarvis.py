@@ -50,7 +50,10 @@ from jarvis.domain.services.capability_gap_observation import (
 )
 from jarvis.domain.services.capability_scout import catalog, scout
 from jarvis.domain.services.curiosity import wonder
-from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
+from jarvis.domain.services.evidence_weighting import (
+    DEFAULT_WEIGHTING,
+    EvidenceWeightingPolicy,
+)
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
 from jarvis.domain.services.hypothesis_generation import generate_hypotheses
 from jarvis.domain.services.knowledge_source import KnowledgeSource
@@ -201,11 +204,18 @@ class Jarvis:
         tool_policy: ToolPolicy | None = None,
         documents_store: DocumentStore | None = None,
         cognitive_knobs: CognitiveKnobs | None = None,
+        default_belief_policy: EvidenceWeightingPolicy | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
+        # The per-belief default source policy for every belief Jarvis creates
+        # (goals, actions, needs, companion traits, self-observed habits). None ->
+        # the historical default; ``set_belief_policy`` swaps it at runtime.
+        self._default_belief_policy = default_belief_policy or DEFAULT_WEIGHTING
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
         self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
-        self.companion = CompanionModel(companion_store or InMemoryBeliefStore())
+        self.companion = CompanionModel(
+            companion_store or InMemoryBeliefStore(), self._default_belief_policy
+        )
         self.actions: BeliefRepository = actions_store or InMemoryBeliefStore()
         self._reversibility: BeliefRepository = (
             reversibility_store or InMemoryBeliefStore()
@@ -1318,8 +1328,8 @@ class Jarvis:
         evidence.
         """
         need_statement = self._need_statement(statement)
-        belief = self._needs.get_by_statement(need_statement) or Belief(
-            statement=need_statement
+        belief = self._needs.get_by_statement(need_statement) or self._fresh_belief(
+            need_statement
         )
         for piece in evidence or ():
             belief.add_evidence(piece)
@@ -1567,6 +1577,7 @@ class Jarvis:
         cls,
         directory: str | Path,
         weighting_policy: EvidenceWeightingPolicy | None = None,
+        default_belief_policy: EvidenceWeightingPolicy | None = None,
     ) -> Jarvis:
         """A Jarvis whose whole memory lives on disk under one directory.
 
@@ -1605,6 +1616,7 @@ class Jarvis:
             refutations_store=JsonRefutationStore(base / "refutations.json"),
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
             weighting_policy=weighting_policy,
+            default_belief_policy=default_belief_policy,
             external_source=source,
             research_source=research,
             speech_perception=EchoSpeechPerception(),
@@ -1710,6 +1722,24 @@ class Jarvis:
         self._knobs = knobs
         self._executive.set_knobs(knobs)
 
+    def default_belief_policy(self) -> EvidenceWeightingPolicy:
+        """The per-belief default source policy for newly created beliefs."""
+        return self._default_belief_policy
+
+    def set_belief_policy(self, policy: EvidenceWeightingPolicy) -> None:
+        """Swap the per-belief default source policy at runtime.
+
+        Applies to every belief created *after* the swap (goals, actions, needs,
+        companion traits, self-observed habits); stored beliefs keep the policy
+        they were created with, so nothing is silently re-weighted.
+        """
+        self._default_belief_policy = policy
+        self.companion.set_default_policy(policy)
+
+    def _fresh_belief(self, statement: str) -> Belief:
+        """A belief born with Jarvis's configured default weighting policy."""
+        return Belief(statement=statement, weighting_policy=self._default_belief_policy)
+
     def perceive(
         self, observation: str, trigger: str | None = None, goal: Goal | None = None
     ) -> CognitiveEpisode:
@@ -1765,19 +1795,31 @@ class Jarvis:
         The self-belief is grounded in the episode history and revisable like any
         other belief -- it is not a fixed personality trait.
         """
-        return observe_evidence_habit(self.episodes.history(), knobs=self._knobs)
+        return observe_evidence_habit(
+            self.episodes.history(),
+            knobs=self._knobs,
+            policy=self._default_belief_policy,
+        )
 
     def observe_overconfidence(self) -> Belief | None:
         """A belief about whether Jarvis concludes confidently on thin evidence
         (Vision §6, §11), or None if there is too little grounded history.
         """
-        return observe_overconfidence(self.episodes.history(), knobs=self._knobs)
+        return observe_overconfidence(
+            self.episodes.history(),
+            knobs=self._knobs,
+            policy=self._default_belief_policy,
+        )
 
     def observe_prediction_accuracy(self) -> Belief | None:
         """A belief about whether Jarvis mispredicts its actions' outcomes
         (Vision §31), or None if it has judged too few kinds of action.
         """
-        return observe_prediction_accuracy(self.actions.all_beliefs(), knobs=self._knobs)
+        return observe_prediction_accuracy(
+            self.actions.all_beliefs(),
+            knobs=self._knobs,
+            policy=self._default_belief_policy,
+        )
 
     def recurring_goals(self) -> tuple[tuple[str, int], ...]:
         """The goals Jarvis keeps returning to, from its episodic memory
@@ -2437,7 +2479,7 @@ class Jarvis:
         repeated matches build confidence and repeated mismatches erode it.
         """
         statement = self._action_statement(action.description)
-        belief = self.actions.get_by_statement(statement) or Belief(statement=statement)
+        belief = self.actions.get_by_statement(statement) or self._fresh_belief(statement)
         belief.add_evidence(
             Evidence(
                 content=(
@@ -2478,7 +2520,7 @@ class Jarvis:
         as context.
         """
         statement = self._goal_statement(goal.statement)
-        belief = self._goals.get_by_statement(statement) or Belief(statement=statement)
+        belief = self._goals.get_by_statement(statement) or self._fresh_belief(statement)
         outcome = "reached" if reached else "not reached"
         belief.add_evidence(
             Evidence(
@@ -2504,7 +2546,7 @@ class Jarvis:
 
     def _credit_parent(self, parent: str, child: str, reached: bool) -> None:
         statement = self._goal_statement(parent)
-        belief = self._goals.get_by_statement(statement) or Belief(statement=statement)
+        belief = self._goals.get_by_statement(statement) or self._fresh_belief(statement)
         outcome = "reached" if reached else "not reached"
         belief.add_evidence(
             Evidence(
@@ -2526,7 +2568,7 @@ class Jarvis:
         known children and which have been reached at least once.
         """
         statement = self._subgoal_statement(parent, child)
-        belief = self._subgoals.get_by_statement(statement) or Belief(statement=statement)
+        belief = self._subgoals.get_by_statement(statement) or self._fresh_belief(statement)
         outcome = "reached" if reached else "not reached"
         belief.add_evidence(
             Evidence(
@@ -2593,7 +2635,7 @@ class Jarvis:
         derived, never set.
         """
         statement = self._goal_statement(goal.statement)
-        belief = self._goals.get_by_statement(statement) or Belief(statement=statement)
+        belief = self._goals.get_by_statement(statement) or self._fresh_belief(statement)
         outcome = "helped" if helpful else "did not help"
         belief.add_evidence(
             Evidence(
@@ -2636,7 +2678,7 @@ class Jarvis:
 
     def _credit_helped_part(self, parent: str, part: str) -> None:
         statement = self._goal_statement(part)
-        belief = self._goals.get_by_statement(statement) or Belief(statement=statement)
+        belief = self._goals.get_by_statement(statement) or self._fresh_belief(statement)
         belief.add_evidence(
             Evidence(
                 content=f"the companion's guidance helped reach the part '{part}'",
@@ -2724,8 +2766,8 @@ class Jarvis:
 
     def _remember_reversibility(self, action: Action) -> None:
         statement = self._reversibility_statement(action.description)
-        belief = self._reversibility.get_by_statement(statement) or Belief(
-            statement=statement
+        belief = self._reversibility.get_by_statement(statement) or self._fresh_belief(
+            statement
         )
         manner = "reversibly" if action.reversible else "irreversibly"
         belief.add_evidence(
