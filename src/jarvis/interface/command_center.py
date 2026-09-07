@@ -1723,10 +1723,11 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
 
     Actions: ``list``, ``read``, ``save``, ``search``, ``remove``. ``save`` takes
     ``name`` and ``content`` with ``encoding`` ``"text"`` (default) or ``"b64"``
-    (binary kept intact). ``read`` returns the content as text (truncated for the
-    surface) or base64. ``search`` takes ``query`` and returns the documents whose
-    name or text match, each with a snippet and match strength -- candidates, never
-    a verdict.
+    (binary kept intact), plus an optional ``path`` folder to file the document
+    under (``"docs/api.md"``, relative and sandbox-safe). ``read`` returns the
+    content as text (truncated for the surface) or base64. ``search`` takes
+    ``query`` and returns the documents whose name or text match, each with a
+    snippet and match strength -- candidates, never a verdict.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
@@ -1762,6 +1763,15 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
             name = _document_name(payload.get("name"))
             if not name:
                 return {"reply": "Provide a document name.", "speak": False}
+            try:
+                folder = _document_folder(payload.get("path"))
+            except ValueError:
+                return {
+                    "reply": "That document path escapes my sandbox.",
+                    "speak": False,
+                }
+            if folder:
+                name = f"{folder}/{name}"
             content = payload.get("content")
             if content is None:
                 return {"reply": "Provide the document content.", "speak": False}
@@ -1822,16 +1832,36 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
 
 
 def _document_name(raw: object) -> str:
-    """A flat, safe document name from arbitrary input (its basename only).
+    """A safe document name from arbitrary input (its basename only).
 
-    The store already enforces flat names; this normalises the inevitable
-    browser upload paths (``C:/Users/me/file.txt``, ``../file.txt``) so the
+    Browser upload paths (``C:/Users/me/file.txt``, ``../file.txt``) collapse to
+    the bare file name; a folder is filed separately through ``path`` so the
     sandbox boundary is never near a traversal.
     """
     text = str(raw or "").strip()
     if not text:
         return ""
     return Path(text.replace("\\", "/")).name
+
+
+def _document_folder(raw: object) -> str:
+    """A safe, relative folder to file documents under, or ``""`` when omitted.
+
+    Raises :class:`ValueError` when the folder would escape the sandbox
+    (absolute, or containing ``..``/``.`` or empty segments), mirroring the
+    store's own name gate.
+    """
+    text = str(raw or "").strip().replace("\\", "/")
+    if not text:
+        return ""
+    parts = text.split("/")
+    if (
+        text.startswith("/")
+        or any(part in ("", ".", "..") for part in parts)
+        or any(":" in part for part in parts)
+    ):
+        raise ValueError("document path escapes the sandbox")
+    return text
 
 
 def _looks_text(content: bytes) -> bool:

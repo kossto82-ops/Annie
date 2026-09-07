@@ -365,9 +365,10 @@
       <div id="panel-doc" class="pane">
         <div class="card2">
           <h3>Documentos — los archivos que compartes</h3>
-          <div class="hint">Adjunta un archivo en el chat (clip) y lo guardo entero. Los que son texto puedo
-            leerlos y buscarlos; los binarios los conservo intactos.</div>
+          <div class="hint">Adjunta un archivo en el chat (clip) y lo guardo entero. Si escribes una carpeta
+            arriba, lo archivo bajo ella (p.ej. docs/api.txt). Los binarios los conservo intactos.</div>
           <div class="docsearch">
+            <input id="docFolder" type="text" placeholder="Carpeta (opcional), p.ej. docs" autocomplete="off">
             <input id="docQuery" type="search" placeholder="Buscar en mis archivos…" autocomplete="off">
             <button type="button" class="switch" id="docSearchBtn">Buscar</button>
           </div>
@@ -720,17 +721,20 @@ function toBase64(bytes) {
 }
 async function attachFiles(files) {
   if (!files || !files.length) return;
+  const folder = ($("docFolder").value || "").trim();
   for (const file of Array.from(files)) {
     const raw = await file.arrayBuffer();
     const b64 = toBase64(new Uint8Array(raw));
     let data;
     try {
-      data = await api("documents", { action: "save", name: file.name, content: b64, encoding: "b64" });
+      const payload = { action: "save", name: file.name, content: b64, encoding: "b64" };
+      if (folder) payload.path = folder;
+      data = await api("documents", payload);
     } catch (e) {
       bubble("jarvis", "No pude guardar " + file.name + ": " + e);
       continue;
     }
-    bubble("you", "Archivo adjunto: " + file.name);
+    bubble("you", "Archivo adjunto: " + (folder ? folder + "/" : "") + file.name);
     bubble("jarvis", data.error ? "No pude guardar " + file.name + ": " + data.error : data.reply);
     renderState(data.state);
   }

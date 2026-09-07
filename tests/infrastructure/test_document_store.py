@@ -1,9 +1,10 @@
 """The local documents store, tested fully offline (D8) over an injectable io.
 
 The store keeps one file per document under a bounded root -- exactly the bytes
-of whatever the companion shares. Every test here drives a fake io driver so no
-real disk is touched: reading, writing binary text, listing, deleting, the
-flat-name sandbox, and the ``None`` offline factory are all exercised directly.
+of whatever the companion shares, flat or filed under a relative folder. Every
+test here drives a fake io driver so no real disk is touched: reading, writing
+binary text, listing, deleting, nested folders, the bounded-path sandbox, and
+the ``None`` offline factory are all exercised directly.
 """
 
 from __future__ import annotations
@@ -62,12 +63,44 @@ class TestLocalDocumentStore:
     def test_rejects_paths_that_escape_the_root(self) -> None:
         io = _FakeIO()
         store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
-        for evil in ("..\\secret.txt", "a\\..\\b.txt", "a/b.txt", "/etc/passwd"):
+        for evil in (
+            "..\\secret.txt",
+            "a\\..\\b.txt",
+            "a/../b.txt",
+            "/etc/passwd",
+            "C:\\important.txt",
+            "a//b.txt",
+            "a/./b.txt",
+            "a/",
+        ):
             try:
                 store.write_document(evil, b"x")
             except ValueError:
                 continue
-            raise AssertionError(f"flat-name sandbox let '{evil}' through")
+            raise AssertionError(f"bounded-path sandbox let '{evil}' through")
+
+    def test_files_under_a_relative_folder(self) -> None:
+        io = _FakeIO()
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        store.write_document("docs/api.md", b"# api")
+        assert store.read_document("docs/api.md") == b"# api"
+        assert store.read_document("docs\\api.md") == b"# api"  # backslashes normalise
+        assert store.list_documents() == ("docs/api.md",)
+
+    def test_nested_documents_search_by_content_snippet(self) -> None:
+        io = _FakeIO(
+            {"docs/v2/api.md": b"Jarvis api over websocket", "notes.md": b"grocery list"}
+        )
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        hits = store.search_documents("jarvis api")
+        assert [hit.name for hit in hits] == ["docs/v2/api.md"]
+        assert "Jarvis api over websocket" in hits[0].snippet
+
+    def test_removes_a_nested_document(self) -> None:
+        io = _FakeIO({"docs/gone.txt": b"x", "keep.txt": b"y"})
+        store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
+        store.remove_document("docs/gone.txt")
+        assert store.list_documents() == ("keep.txt",)
 
     def test_read_missing_document_raises(self) -> None:
         io = _FakeIO()
@@ -77,6 +110,25 @@ class TestLocalDocumentStore:
         except KeyError:
             return
         raise AssertionError("reading a missing document should raise")
+
+
+class TestLocalDocumentStoreOnRealDisk:
+    """The real ``_default_io`` driver, over a pytest tmp dir (still fully offline)."""
+
+    def test_nested_write_lists_and_reads_on_disk(self, tmp_path: Path) -> None:
+        store = LocalDocumentStore(tmp_path)
+        store.write_document("docs/v2/api.md", b"# api")
+        assert store.read_document("docs/v2/api.md") == b"# api"
+        assert store.list_documents() == ("docs/v2/api.md",)
+
+    def test_real_disk_rejects_escaping_names(self, tmp_path: Path) -> None:
+        store = LocalDocumentStore(tmp_path)
+        for evil in ("..\\secret.txt", "a/../b.txt", "/etc/passwd"):
+            try:
+                store.write_document(evil, b"x")
+            except ValueError:
+                continue
+            raise AssertionError(f"real-disk sandbox let '{evil}' through")
 
 
 class TestBuildDocumentStore:

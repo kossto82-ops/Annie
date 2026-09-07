@@ -1371,6 +1371,23 @@ class TestDocumentsCommand:
         assert isinstance(result["reply"], str)
         assert jarvis.read_document("plan.md") == b"x"
 
+    def test_save_files_under_an_optional_folder(self) -> None:
+        jarvis = _documents_able_jarvis()
+        result = handle(jarvis, "documents", {
+            "action": "save", "name": "api.md", "path": "docs/v2", "content": "# api",
+        })
+        assert isinstance(result["reply"], str)
+        assert jarvis.read_document("docs/v2/api.md") == b"# api"
+
+    def test_save_rejects_a_folder_that_escapes_the_sandbox(self) -> None:
+        jarvis = _documents_able_jarvis()
+        for evil in ("..\\docs", "a/../b", "/abs", "C:\\docs"):
+            result = handle(jarvis, "documents", {
+                "action": "save", "name": "api.md", "path": evil, "content": "x",
+            })
+            assert isinstance(result["reply"], str)
+            assert "escape" in result["reply"].lower()
+
     def test_save_requires_name_and_content(self) -> None:
         jarvis = _documents_able_jarvis()
         no_name = handle(jarvis, "documents", {"action": "save", "content": "x"})

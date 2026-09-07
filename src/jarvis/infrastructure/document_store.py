@@ -1,11 +1,13 @@
 """LocalDocumentStore: a file-backed DocumentStore at the edge (project files).
 
 The files store for classified documents: a bounded directory where each document
-is kept under its own name — any extension is allowed, so the companion can hand
-Jarvis logs, configs, exports, code or manuals. Disk access goes through an
+is kept under a sandbox-safe relative path — any extension is allowed, so the
+companion can hand Jarvis logs, configs, exports, code or manuals, filed as flat
+or nested names (``runbook.md`` or ``docs/api.md``). Disk access goes through an
 injectable ``io`` driver over raw bytes so offline tests run deterministically
 without touching the filesystem (D8). The store only keeps and returns bytes; it
-never reasons about them (D6) and never escapes its sandbox (flat names only).
+never reasons about them (D6) and never escapes its sandbox (names are relative,
+never absolute, never ``.``/``..``).
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from pathlib import Path
 from jarvis.domain.value_objects.document_hit import DocumentHit
 
 DocumentIO = Callable[[str, str, bytes], bytes]
-_SEPARATORS = ("/", "\\")
+_WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
 
 # Tokens shorter than this carry too little signal to rank on (mirrors the lexical
 # memory retriever's language-agnostic floor).
@@ -66,7 +68,9 @@ class LocalDocumentStore:
     def _default_io(self, operation: str, path: str, payload: bytes) -> bytes:
         if operation == "list":
             names = sorted(
-                child.name for child in self._root.iterdir() if child.is_file()
+                child.relative_to(self._root).as_posix()
+                for child in self._root.rglob("*")
+                if child.is_file()
             )
             return "\n".join(names).encode("utf-8")
         resolved = (self._root / path).resolve()
@@ -78,7 +82,7 @@ class LocalDocumentStore:
             if resolved.exists():
                 resolved.unlink()
             return b""
-        self._root.mkdir(parents=True, exist_ok=True)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_bytes(payload)
         return b""
 
@@ -91,16 +95,16 @@ class LocalDocumentStore:
         return tuple(part for part in raw.decode("utf-8").split("\n") if part)
 
     def read_document(self, name: str) -> bytes:
-        self._require_name(name)
-        return self._io("read", name, b"")
+        key = self._require_name(name)
+        return self._io("read", key, b"")
 
     def write_document(self, name: str, content: bytes) -> None:
-        self._require_name(name)
-        self._io("write", name, content)
+        key = self._require_name(name)
+        self._io("write", key, content)
 
     def remove_document(self, name: str) -> None:
-        self._require_name(name)
-        self._io("delete", name, b"")
+        key = self._require_name(name)
+        self._io("delete", key, b"")
 
     def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
         """Documents whose name or readable text matches ``query``, best first.
@@ -166,15 +170,20 @@ class LocalDocumentStore:
 
     @classmethod
     def _valid_name(cls, name: str) -> bool:
-        if not name or name in {".", ".."}:
+        if not name:
             return False
-        return not any(separator in name for separator in _SEPARATORS)
+        normalized = name.replace("\\", "/")
+        if normalized.startswith("/") or _WINDOWS_DRIVE.match(normalized):
+            return False
+        return not any(part in ("", ".", "..") for part in normalized.split("/"))
 
-    def _require_name(self, name: str) -> None:
+    def _require_name(self, name: str) -> str:
+        """Validate ``name`` and return its canonical sandbox-safe relative form."""
         if not self._valid_name(name):
             raise ValueError(
                 f"invalid document name {name!r}"
             )
+        return name.replace("\\", "/")
 
 
 def build_document_store(root: str | Path | None) -> LocalDocumentStore | None:
