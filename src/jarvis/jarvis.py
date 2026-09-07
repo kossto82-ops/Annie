@@ -2318,6 +2318,8 @@ class Jarvis:
             observation=finding.observation,
             falsifier=falsifier,
             beliefs=finding.beliefs,
+            confidence=leading.confidence,
+            stability=leading.stability,
         )
 
     def learn_from_reflection(self) -> Belief | None:

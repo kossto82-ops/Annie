@@ -18,11 +18,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from jarvis.domain.entities.belief import derive_confidence
+from jarvis.domain.entities.belief import derive_confidence, derive_stability
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 
 def _new_id() -> str:
@@ -55,6 +56,18 @@ class Hypothesis:
     @property
     def confidence(self) -> Confidence:
         return derive_confidence(tuple(self._evidence))
+
+    @property
+    def stability(self) -> TemporalStability:
+        """How steadily this hypothesis has been supported over time (Vision §10, §11).
+
+        The *shared* estimator with beliefs (``derive_stability``): the temporal
+        spread of the supporting evidence, zero when there is only one supporting
+        observation or a single moment. Independence from confidence holds here too
+        -- a burst of recent support can read confident but utterly unstable, and
+        the challenge narration flags exactly that (anti-overfit, Vision §11).
+        """
+        return derive_stability(tuple(self._evidence))
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:

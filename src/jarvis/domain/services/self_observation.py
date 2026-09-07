@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from jarvis.domain.entities.belief import Belief
+from jarvis.domain.entities.belief import LOW_STABILITY_THRESHOLD, Belief
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
@@ -33,10 +33,6 @@ from jarvis.domain.value_objects.evidence import Evidence
 _MINIMUM_HISTORY = 3
 
 _OBSERVATION_WEIGHT = Confidence(1.0)
-
-# A grounded conclusion resting on this little temporal spread is overconfident
-# (mirrors the executive's LOW_STABILITY_THRESHOLD).
-_LOW_STABILITY = 0.2
 
 INSUFFICIENT_EVIDENCE_HABIT = "I tend to conclude without sufficient evidence"
 OVERCONFIDENCE_HABIT = "I tend to be overconfident on thin evidence"
@@ -122,7 +118,7 @@ def observe_overconfidence(
         else Belief(statement=OVERCONFIDENCE_HABIT)
     )
     for record in grounded:
-        overconfident = record.conclusion_stability.value < _LOW_STABILITY
+        overconfident = record.conclusion_stability.value < LOW_STABILITY_THRESHOLD
         belief.add_evidence(
             Evidence(
                 content=(

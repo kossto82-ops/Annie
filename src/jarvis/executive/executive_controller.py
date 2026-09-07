@@ -20,7 +20,10 @@ from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.conversation.conversation_context import Turn
-from jarvis.domain.entities.belief import Belief
+from jarvis.domain.entities.belief import (
+    LOW_STABILITY_THRESHOLD,
+    Belief,
+)
 from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -51,9 +54,10 @@ from jarvis.nervous_system.nervous_system import NervousSystem
 # The grounded threshold (D14) now lives in ``CognitiveKnobs`` (default 0.5), the
 # single validated source shared with the domain services and the Jarvis surface.
 
-# A grounded conclusion resting on evidence with little temporal spread may be
-# overfitting to a recent burst (Vision §11); below this stability it is flagged.
-LOW_STABILITY_THRESHOLD = 0.2
+# The stability narration threshold lives in the domain alongside the estimator it
+# gates (``jarvis.domain.entities.belief``); a grounded conclusion resting on
+# evidence with little temporal spread may be overfitting to a recent burst
+# (Vision §11) and is flagged below it.
 
 # A recalled memory must share at least this fraction of the query's words to be
 # worth surfacing -- a deliberately conservative floor so a single common word

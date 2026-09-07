@@ -53,6 +53,11 @@ _PRIOR = 1.0
 # (D18). Stability is span / (span + reference), so span == reference -> 0.5.
 STABILITY_REFERENCE = timedelta(days=30)
 
+# A conclusion (a belief, or a proposed hypothesis) resting on evidence with less
+# temporal spread than this may be overfitting to a recent burst (Vision §11);
+# the narrations flag it, they never alter the derived strength.
+LOW_STABILITY_THRESHOLD = 0.2
+
 
 def derive_confidence(
     evidence: tuple[Evidence, ...],
