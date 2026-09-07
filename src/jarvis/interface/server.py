@@ -5,7 +5,8 @@ this module only binds a port, reads a request, calls :func:`route`, and writes 
 bytes back. No framework, no dependency — just :mod:`http.server`. Building the app
 picks the perceiver from the environment (a real language model when ``JARVIS_LLM_*``
 is configured, the keyword perceiver otherwise), and optionally gives Jarvis a
-persistent memory under a home directory so the companion remembers across restarts.
+persistent memory under a home directory (one SQLite ``jarvis.db``, D10) so the
+companion remembers across restarts.
 """
 
 from __future__ import annotations
@@ -29,10 +30,6 @@ from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.filesystem_tool import FileSystemTool
 from jarvis.infrastructure.google_calendar import build_google_calendar_store
-from jarvis.infrastructure.json_belief_store import JsonBeliefStore
-from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
-from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
-from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.llm_config_store import load_env_file
@@ -50,6 +47,7 @@ from jarvis.infrastructure.perceiver_factory import (
 )
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.speech_perception import EchoSpeechPerception
+from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
 from jarvis.infrastructure.task_agent_source import build_default_task_agent
 from jarvis.infrastructure.task_scheduler import build_task_scheduler
 from jarvis.interface.command_center import Response, parse_body, route, stream_say
@@ -112,8 +110,9 @@ _OFFLINE_PROVIDERS = frozenset({"", "scripted", "stub", "keyword"})
 def create_jarvis(home: str | Path | None = None) -> Jarvis:
     """Build the Jarvis the command center drives (Vision §3, §5, §32).
 
-    With ``home`` set, every store is wired to JSON files under that directory so the
-    companion remembers across restarts; otherwise memory is in-process. Both perceivers
+    With ``home`` set, every store is wired to one real SQLite database
+    (``jarvis.db``) under that directory so the companion remembers across restarts;
+    otherwise memory is in-process. Both perceivers
     — the world one and the relational one — come from ``JARVIS_LLM_*`` (an LLM pair for
     a real provider, the keyword rule + silent companion otherwise). Either can still be
     switched at runtime from the command center.
@@ -153,17 +152,18 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     else:
         base = Path(home)
         base.mkdir(parents=True, exist_ok=True)
+        repositories = build_sqlite_repositories(base / "jarvis.db")
         jarvis = Jarvis(
-            beliefs=JsonBeliefStore(base / "beliefs.json"),
-            episodes=JsonEpisodeStore(base / "episodes.json"),
-            companion_store=JsonBeliefStore(base / "companion.json"),
-            actions_store=JsonBeliefStore(base / "actions.json"),
-            reversibility_store=JsonBeliefStore(base / "reversibility.json"),
-            goals_store=JsonBeliefStore(base / "goals.json"),
-            subgoals_store=JsonBeliefStore(base / "subgoals.json"),
-            refutations_store=JsonRefutationStore(base / "refutations.json"),
-            capabilities_store=JsonCapabilityStore(base / "capabilities.json"),
-            needs_store=JsonBeliefStore(base / "needs.json"),
+            beliefs=repositories.beliefs,
+            episodes=repositories.episodes,
+            companion_store=repositories.companion,
+            actions_store=repositories.actions,
+            reversibility_store=repositories.reversibility,
+            goals_store=repositories.goals,
+            subgoals_store=repositories.subgoals,
+            refutations_store=repositories.refutations,
+            capabilities_store=repositories.capabilities,
+            needs_store=repositories.needs,
             perception=perception,
             companion_perception=companion_perception,
             enable_recall=True,

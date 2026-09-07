@@ -168,9 +168,8 @@ class TestPersistentFactory:
         from jarvis.interface.server import create_jarvis
 
         first = create_jarvis(home=tmp_path)
-        assert (tmp_path / "capabilities.json").exists()
+        assert (tmp_path / "jarvis.db").exists()
         first.recognise_need("I need fresh outside information", "to plan the day")
-        assert (tmp_path / "needs.json").exists()
         assert first.capability_needs()
 
         second = create_jarvis(home=tmp_path)
