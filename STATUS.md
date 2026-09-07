@@ -1828,8 +1828,9 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   name is validated against a fixed whitelist so a caller-chosen table can never shape SQL; each save is one
   committed upsert.
 - `Jarvis.database(directory)` mirrors `persistent()` exactly (same provider/ear/trace/documents wiring) but puts
-  the whole memory in one `jarvis.db` under `directory`. The JSON stores and `persistent()` are untouched; the
-  command-center composition root still defaults to JSON (adopting SQLite there is a deliberate one-call follow-up).
+  the whole memory in one `jarvis.db` under `directory`. The command-center composition root (`create_jarvis`)
+  now adopts it when a `home` is set, so a desktop assistant persists to one transactional database too; an
+  in-memory session (no `home`) is unchanged. The JSON stores and `persistent()` remain as-is and first-class.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1192 passed, 3 skipped.
 
 ---
@@ -2189,8 +2190,8 @@ seam.)*
   `Jarvis.persistent()`.
 
 **Still open / honest gaps:**
-- The command center's composition root still defaults to the JSON stores; adopting `Jarvis.database()` there
-  (real SQLite behind the same contracts, Increment 150) is a deliberate one-call follow-up.
+- The JSON stores and `Jarvis.persistent()` remain as the file-backed twin (unchanged, still first-class); the
+  command-center composition root now goes through SQLite when a `home` is set.
 - `TemporalStability` is span-based for both beliefs *and* hypotheses now (Increment 146) — no
   count/recency weighting beyond the opt-in decay policy; hypotheses narrate their narrowness without
   it affecting ranking or ties.

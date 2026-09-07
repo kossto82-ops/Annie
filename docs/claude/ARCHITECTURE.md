@@ -379,8 +379,9 @@ contracts, not a new storage API.
   `SqliteRefutationStore` (observation+belief key) behind the same Protocols. Both store families share the
   canonical serialisers, so rehydration is identical: confidence/stability are derived from stored evidence,
   never persisted as an assertion, and the weighting policy is not stored.
-- The command center's composition root still uses the JSON stores; switching it to SQLite is a one-call
-  change (deliberately not flipped in Increment 150).
+- The command center's composition root (`create_jarvis`) uses SQLite when a `home` is set (Increment 150),
+  so a desktop assistant persists to one transactional database; `Jarvis.persistent()` remains the file-backed
+  twin for the JSON stores.
 
 ## UI boundary
 

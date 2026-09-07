@@ -68,9 +68,9 @@ opt-in and must remain provider-swappable and offline-testable. Audit gates are 
 (ruff · pyright strict 0 errors).
 
 The most useful next increments currently identified are a live STT backer behind the speech seam,
-more §15 energy modelling (charge deliberations), or adopting the SQLite store for the command-center
-composition root (the DB behind the repository contracts landed in Increment 150) — document depth
-(ownership, whole-document ranking, chat editing) is complete. However, **do not assume
+more §15 energy modelling (charge deliberations), or extending the SQLite store across the seams
+(the DB behind the repository contracts landed in Increment 150 and the command-center composition root
+adopts it). However, **do not assume
 this is mandatory**: follow the user's current task.
 
 ## How to work

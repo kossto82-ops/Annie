@@ -184,7 +184,8 @@ Increments 111–112).
 - A real database behind the repository contracts (Increment 150, D10): `Sqlite*Store` implementations
   (`infrastructure/sqlite_*_store.py`) back the belief/episode/capability/refutation Protocols with SQLite's
   transactional durability, composed by `build_sqlite_repositories`/`SqliteRepositories` into one `jarvis.db`
-  and reached through `Jarvis.database(directory)` — same evidence-derived rehydration as the JSON stores.
+  and reached through `Jarvis.database(directory)`; the command center's composition root (`create_jarvis`)
+  adopts it when a `home` is set. Same evidence-derived rehydration as the JSON stores.
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -195,8 +196,8 @@ Increments 111–112).
   the span into the *episode* path or extending it to a live voice session.
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
-- A real SQLite DB now backs the repository contracts (`Jarvis.database()`, Increment 150), but the command
-  center's composition root still defaults to the JSON stores (adopting SQLite there is a one-call follow-up);
+- A real SQLite DB now backs the repository contracts (`Jarvis.database()`, Increment 150) and the command
+  center's composition root uses it. The JSON stores / `Jarvis.persistent()` remain as the file-backed twin;
   `TemporalStability` count/recency weighting beyond the
   opt-in decay policy; more §15 energy modelling (charge deliberations).
 - Live STT backer for the speech seam; real instruction execution (earned agency).
