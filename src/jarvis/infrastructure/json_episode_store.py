@@ -21,7 +21,7 @@ from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.infrastructure.atomic_write import atomic_write_text
 
 
-def _serialise_record(record: EpisodeRecord) -> dict[str, Any]:
+def serialise_record(record: EpisodeRecord) -> dict[str, Any]:
     return {
         "episode_id": record.episode_id,
         "trigger": record.trigger,
@@ -38,7 +38,7 @@ def _serialise_record(record: EpisodeRecord) -> dict[str, Any]:
     }
 
 
-def _deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
+def deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
     return EpisodeRecord(
         episode_id=data["episode_id"],
         trigger=data["trigger"],
@@ -74,8 +74,8 @@ class JsonEpisodeStore:
         if not self._path.exists():
             return
         raw: Any = json.loads(self._path.read_text(encoding="utf-8"))
-        self._records = [_deserialise_record(entry) for entry in raw]
+        self._records = [deserialise_record(entry) for entry in raw]
 
     def _flush(self) -> None:
-        payload = [_serialise_record(r) for r in self._records]
+        payload = [serialise_record(r) for r in self._records]
         atomic_write_text(self._path, json.dumps(payload, indent=2))

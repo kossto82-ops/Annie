@@ -52,7 +52,7 @@ def _deserialise_evidence(data: dict[str, Any]) -> Evidence:
     )
 
 
-def _serialise_belief(belief: Belief) -> dict[str, Any]:
+def serialise_belief(belief: Belief) -> dict[str, Any]:
     return {
         "statement": belief.statement,
         "id": belief.id,
@@ -61,7 +61,7 @@ def _serialise_belief(belief: Belief) -> dict[str, Any]:
     }
 
 
-def _deserialise_belief(
+def deserialise_belief(
     data: dict[str, Any], policy: EvidenceWeightingPolicy
 ) -> Belief:
     return Belief(
@@ -101,9 +101,9 @@ class JsonBeliefStore:
             return
         raw: Any = json.loads(self._path.read_text(encoding="utf-8"))
         for entry in raw:
-            belief = _deserialise_belief(entry, self._weighting_policy)
+            belief = deserialise_belief(entry, self._weighting_policy)
             self._by_statement[belief.statement] = belief
 
     def _flush(self) -> None:
-        payload = [_serialise_belief(b) for b in self._by_statement.values()]
+        payload = [serialise_belief(b) for b in self._by_statement.values()]
         atomic_write_text(self._path, json.dumps(payload, indent=2))

@@ -19,7 +19,7 @@ from jarvis.domain.value_objects.capability import Capability
 from jarvis.infrastructure.atomic_write import atomic_write_text
 
 
-def _serialise_capability(capability: Capability) -> dict[str, Any]:
+def serialise_capability(capability: Capability) -> dict[str, Any]:
     return {
         "name": capability.name,
         "description": capability.description,
@@ -31,7 +31,7 @@ def _serialise_capability(capability: Capability) -> dict[str, Any]:
     }
 
 
-def _deserialise_capability(data: dict[str, Any]) -> Capability:
+def deserialise_capability(data: dict[str, Any]) -> Capability:
     return Capability(
         name=data["name"],
         description=data["description"],
@@ -66,9 +66,9 @@ class JsonCapabilityStore:
             return
         raw: Any = json.loads(self._path.read_text(encoding="utf-8"))
         for entry in raw:
-            capability = _deserialise_capability(entry)
+            capability = deserialise_capability(entry)
             self._by_name[capability.name] = capability
 
     def _flush(self) -> None:
-        payload = [_serialise_capability(c) for c in self._by_name.values()]
+        payload = [serialise_capability(c) for c in self._by_name.values()]
         atomic_write_text(self._path, json.dumps(payload, indent=2))

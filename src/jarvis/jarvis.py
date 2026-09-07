@@ -141,6 +141,7 @@ from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRe
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
 from jarvis.infrastructure.speech_perception import EchoSpeechPerception
+from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
 from jarvis.infrastructure.text_embedder import TextEmbedder
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace, EpisodeTraceSink
@@ -1741,6 +1742,59 @@ class Jarvis:
             capabilities_store=JsonCapabilityStore(base / "capabilities.json"),
             needs_store=JsonBeliefStore(base / "needs.json"),
             refutations_store=JsonRefutationStore(base / "refutations.json"),
+            trace=JsonEpisodeTrace(base / "trace.jsonl"),
+            weighting_policy=weighting_policy,
+            default_belief_policy=default_belief_policy,
+            external_source=source,
+            research_source=research,
+            speech_perception=EchoSpeechPerception(),
+            documents_store=build_document_store(base / "docs"),
+        )
+
+    @classmethod
+    def database(
+        cls,
+        directory: str | Path,
+        weighting_policy: EvidenceWeightingPolicy | None = None,
+        default_belief_policy: EvidenceWeightingPolicy | None = None,
+    ) -> Jarvis:
+        """A Jarvis whose whole memory lives in one real SQLite database (D10).
+
+        The companion item to :meth:`persistent`: every store -- beliefs, episodes,
+        companion model, action learning, reversibility, goal reachability,
+        sub-goal links, capability acquisitions (Odysseus), recognised capability
+        needs and reflective-cycle refutations -- is committed to a single
+        transactional ``jarvis.db`` file under ``directory``, with the documents
+        kept next to it under ``docs`` and the decision-provenance trace as ever.
+        Storage is an actual database (SQLite's durable transactions) behind the
+        same repository contracts; confidence and stability are still re-derived
+        from stored evidence on every read, never persisted as assertions.
+        """
+        base = Path(directory)
+        base.mkdir(parents=True, exist_ok=True)
+        wide = base / "jarvis.db"
+        repositories = build_sqlite_repositories(wide, weighting_policy)
+        settings = settings_from_env()
+        search_model = (
+            build_language_model(settings)
+            if settings.model and settings.provider not in _OFFLINE_PROVIDERS
+            else None
+        )
+        source = build_web_source(
+            llm_search_from_model(search_model) if search_model is not None else None
+        )
+        research = build_odysseus_search_source()
+        return cls(
+            beliefs=repositories.beliefs,
+            episodes=repositories.episodes,
+            companion_store=repositories.companion,
+            actions_store=repositories.actions,
+            reversibility_store=repositories.reversibility,
+            goals_store=repositories.goals,
+            subgoals_store=repositories.subgoals,
+            capabilities_store=repositories.capabilities,
+            needs_store=repositories.needs,
+            refutations_store=repositories.refutations,
             trace=JsonEpisodeTrace(base / "trace.jsonl"),
             weighting_policy=weighting_policy,
             default_belief_policy=default_belief_policy,
