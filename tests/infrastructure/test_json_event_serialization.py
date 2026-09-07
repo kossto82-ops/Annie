@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
+import pkgutil
+
 import pytest
 
+import jarvis.domain.events as events_package
 from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.belief_events import (
@@ -30,11 +34,26 @@ from jarvis.infrastructure.json_event_serialization import (
 )
 
 
-def _concrete_subclasses(base: type) -> set[type]:
+def _production_event_classes() -> set[type]:
+    """Every CognitiveEvent subclass declared in ``jarvis.domain.events``.
+
+    Enumerated deterministically (importing the whole package) so the guard is
+    order-independent: it sees every production event type no matter which
+    modules happened to be imported earlier in the suite.
+    """
     found: set[type] = set()
-    for sub in base.__subclasses__():
-        found.add(sub)
-        found |= _concrete_subclasses(sub)
+    for _, module_name, _ in pkgutil.iter_modules(events_package.__path__):
+        module = importlib.import_module(
+            f"{events_package.__name__}.{module_name}"
+        )
+        for value in vars(module).values():
+            if (
+                isinstance(value, type)
+                and value is not CognitiveEvent
+                and value.__module__ == module.__name__
+                and issubclass(value, CognitiveEvent)
+            ):
+                found.add(value)
     return found
 
 
@@ -70,11 +89,7 @@ class TestRegistration:
         # Guards the maintenance hazard: a new event type must be registered or its
         # sample round-trip below (and real traces) would fail. Only production event
         # types count (test modules may define throwaway subclasses).
-        production = {
-            cls
-            for cls in _concrete_subclasses(CognitiveEvent)
-            if cls.__module__.startswith("jarvis.domain.events")
-        }
+        production = _production_event_classes()
         covered = {type(sample) for sample in _SAMPLES}
         assert production == covered
 
