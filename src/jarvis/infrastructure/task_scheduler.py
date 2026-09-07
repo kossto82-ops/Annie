@@ -9,15 +9,18 @@ it never reasons about the tasks (D6), and creating, updating, deleting,
 enabling and disabling are reversible material actions the surface requests.
 
 The store serialises its tasks to a single ``tasks.json`` document inside
-``root``, keyed by task id. ``build_task_scheduler()`` returns ``None``
-without the ``JARVIS_TASKS_ROOT`` directory, so a Jarvis built from it stays
-offline by default (D7/D8).
+``root``, keyed by task id. It remains available for direct, io-injectable use;
+``build_task_scheduler()`` serves the SQLite-backed :class:`SqliteTaskScheduler`
+instead (same root, ``jarvis.db``) and returns ``None`` without the
+``JARVIS_TASKS_ROOT`` directory, so a Jarvis built from it stays offline by
+default (D7/D8).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +28,7 @@ from typing import Any
 from uuid import uuid4
 
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
+from jarvis.infrastructure.sqlite_task_scheduler import SqliteTaskScheduler
 
 _IO = Callable[[str, str, str], str]
 _Record = dict[str, Any]
@@ -246,13 +250,19 @@ class LocalTaskScheduler:
         )
 
 
-def build_task_scheduler() -> LocalTaskScheduler | None:
-    """Build the default file-backed task scheduler, or ``None`` when not configured.
+def build_task_scheduler() -> SqliteTaskScheduler | None:
+    """Build the default task scheduler, or ``None`` when not configured.
 
-    Wireless when the ``JARVIS_TASKS_ROOT`` directory is unset, so a Jarvis
-    built from this factory stays offline by default (D7/D8).
+    When the ``JARVIS_TASKS_ROOT`` directory is set, tasks persist to a real
+    ``jarvis.db`` (SQLite) inside that root instead of a ``tasks.json`` file; the
+    store stays wireless and offline without it (D7/D8).
     """
     root = os.environ.get("JARVIS_TASKS_ROOT")
     if not root:
         return None
-    return LocalTaskScheduler(root)
+    database = Path(root)
+    database.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(
+        str(database / "jarvis.db"), check_same_thread=False
+    )
+    return SqliteTaskScheduler(connection)

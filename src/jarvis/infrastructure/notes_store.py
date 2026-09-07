@@ -8,7 +8,9 @@ returns note content -- it never reasons about the notes (D6), and creating,
 updating or deleting are reversible material actions the surface requests.
 
 The store serializes its notes to a single ``notes.json`` document inside
-``root``, keyed by note id. ``build_notes_store()`` returns ``None`` without the
+``root``, keyed by note id. It remains available for direct, io-injectable use;
+``build_notes_store()`` serves the SQLite-backed :class:`SqliteNotesStore`
+instead (same root, ``jarvis.db``) and returns ``None`` without the
 ``JARVIS_NOTES_ROOT`` directory, so a Jarvis built from it stays offline by
 default (D7/D8).
 """
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,6 +27,7 @@ from typing import Any
 from uuid import uuid4
 
 from jarvis.domain.value_objects.note import Note
+from jarvis.infrastructure.sqlite_notes_store import SqliteNotesStore
 
 _IO = Callable[[str, str, str], str]
 _Record = dict[str, Any]
@@ -188,13 +192,19 @@ class LocalNotesStore:
         )
 
 
-def build_notes_store() -> LocalNotesStore | None:
-    """Build the default file-backed notes store, or ``None`` when not configured.
+def build_notes_store() -> SqliteNotesStore | None:
+    """Build the default notes store, or ``None`` when not configured.
 
-    Wireless when the ``JARVIS_NOTES_ROOT`` directory is unset, so a Jarvis built
-    from this factory stays offline by default (D7/D8).
+    When the ``JARVIS_NOTES_ROOT`` directory is set, notes persist to a real
+    ``jarvis.db`` (SQLite) inside that root instead of a ``notes.json`` file; the
+    store stays wireless and offline without it (D7/D8).
     """
     root = os.environ.get("JARVIS_NOTES_ROOT")
     if not root:
         return None
-    return LocalNotesStore(root)
+    database = Path(root)
+    database.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(
+        str(database / "jarvis.db"), check_same_thread=False
+    )
+    return SqliteNotesStore(connection)

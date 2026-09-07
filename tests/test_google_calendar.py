@@ -380,13 +380,13 @@ class TestServerWiring:
         monkeypatch.delenv(gc.ENV_CLIENT_ID, raising=False)
         monkeypatch.setenv("JARVIS_CALENDAR_ROOT", str(tmp_path / "cal"))
         monkeypatch.setenv("JARVIS_TASKS_ROOT", str(tmp_path / "tasks"))
-        from jarvis.infrastructure.calendar_store import LocalCalendarStore
-        from jarvis.infrastructure.task_scheduler import LocalTaskScheduler
+        from jarvis.infrastructure.sqlite_calendar_store import SqliteCalendarStore
+        from jarvis.infrastructure.sqlite_task_scheduler import SqliteTaskScheduler
         from jarvis.interface.server import create_jarvis
 
         jarvis = create_jarvis()
-        assert isinstance(jarvis.calendar_store, LocalCalendarStore)
-        assert isinstance(jarvis.task_scheduler, LocalTaskScheduler)
+        assert isinstance(jarvis.calendar_store, SqliteCalendarStore)
+        assert isinstance(jarvis.task_scheduler, SqliteTaskScheduler)
 
     def test_google_takes_precedence_over_local(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

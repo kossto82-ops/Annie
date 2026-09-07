@@ -9,15 +9,18 @@ the events (D6), and creating, updating or deleting are reversible material
 actions the surface requests.
 
 The store serialises its events to a single ``calendar.json`` document inside
-``root``, keyed by event id. ``build_calendar_store()`` returns ``None``
-without the ``JARVIS_CALENDAR_ROOT`` directory, so a Jarvis built from it
-stays offline by default (D7/D8).
+``root``, keyed by event id. It remains available for direct, io-injectable use;
+``build_calendar_store()`` serves the SQLite-backed :class:`SqliteCalendarStore`
+instead (same root, ``jarvis.db``) and returns ``None`` without the
+``JARVIS_CALENDAR_ROOT`` directory, so a Jarvis built from it stays offline by
+default (D7/D8).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +28,7 @@ from typing import Any
 from uuid import uuid4
 
 from jarvis.domain.value_objects.calendar_event import CalendarEvent
+from jarvis.infrastructure.sqlite_calendar_store import SqliteCalendarStore
 
 _IO = Callable[[str, str, str], str]
 _Record = dict[str, Any]
@@ -211,13 +215,19 @@ class LocalCalendarStore:
         )
 
 
-def build_calendar_store() -> LocalCalendarStore | None:
-    """Build the default file-backed calendar store, or ``None`` when not configured.
+def build_calendar_store() -> SqliteCalendarStore | None:
+    """Build the default calendar store, or ``None`` when not configured.
 
-    Wireless when the ``JARVIS_CALENDAR_ROOT`` directory is unset, so a Jarvis
-    built from this factory stays offline by default (D7/D8).
+    When the ``JARVIS_CALENDAR_ROOT`` directory is set, events persist to a real
+    ``jarvis.db`` (SQLite) inside that root instead of a ``calendar.json`` file; the
+    store stays wireless and offline without it (D7/D8).
     """
     root = os.environ.get("JARVIS_CALENDAR_ROOT")
     if not root:
         return None
-    return LocalCalendarStore(root)
+    database = Path(root)
+    database.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(
+        str(database / "jarvis.db"), check_same_thread=False
+    )
+    return SqliteCalendarStore(connection)

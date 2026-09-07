@@ -13,6 +13,7 @@ import pytest
 
 from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.infrastructure.notes_store import LocalNotesStore, build_notes_store
+from jarvis.infrastructure.sqlite_notes_store import SqliteNotesStore
 
 
 def _memory_io(store: dict[str, str]) -> Callable[[str, str, str], str]:
@@ -106,4 +107,4 @@ class TestBuildNotesStore:
     ) -> None:
         monkeypatch.setenv("JARVIS_NOTES_ROOT", "/tmp/notes")
         store = build_notes_store()
-        assert isinstance(store, LocalNotesStore)
+        assert isinstance(store, SqliteNotesStore)
