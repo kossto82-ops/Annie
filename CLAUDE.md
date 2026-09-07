@@ -51,11 +51,12 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 147 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is around Increment 148 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
-beliefs and hypothesis sets sharing one `CognitiveEpisode` shape (Increment 147), and
+beliefs and hypothesis sets sharing one `CognitiveEpisode` shape (Increment 147), record documented
+document ownership (Increment 148), and
 the capability edges (web/research/compare/tools/notes/mail/calendar/tasks/agent/speech seam) are
 implemented. Files/documents
 are a first-class surface (accept, recall, search, chip in chat, read, folder-aware nesting). The command
@@ -64,8 +65,9 @@ a root-injectable per-belief weighting policy, and a capability/tool surface; a 
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 
-The most useful next increments currently identified are document depth (ownership, per-file ranking,
-editing via chat), or a real database behind the repository contracts (D10). However, **do not assume
+The most useful next increments currently identified are document depth (editing documents via the
+chat itself; ownership and whole-document ranking landed in Increment 148), or a real database behind
+the repository contracts (D10). However, **do not assume
 this is mandatory**: follow the user's current task.
 
 ## How to work

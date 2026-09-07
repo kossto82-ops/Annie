@@ -205,7 +205,11 @@ Material actions may be delegated to an edge agent behind these seams (revised D
 An extra storage seam (`DocumentStore`) treats companion files as bytes the core may list/read/write/
 remove (`LocalDocumentStore`, io-injectable, offline default `build_document_store`). Names are bounded
 relative paths (`runbook.md` or `docs/api.md`, both `/`-normalised), so the companion can file documents
-under folders without ever escaping the sandbox (Increment 142). Documents also
+under folders without ever escaping the sandbox (Increment 142). Every stored document carries
+recorded provenance: `DocumentMeta` (`DocumentOwner` attribution — companion vs jarvis-generated —
+plus stored/updated timing and size) persisted out-of-band in a reserved `_jarvis-meta.json` index that
+`list`/`search` never surface; `write_document` takes `owner`, and a file that predates provenance
+tracking reads honest `None` rather than a guess (Increment 148). Documents also
 feed **recall**: `DocumentMemoryRetriever` wraps any base retriever and appends lexical `DocumentHit`s
 (`MemoryKind.DOCUMENT`, procedure `"document: <name>"`). The wrap is source-aware — the retriever keeps a
 callable to the current store, so swapping `set_documents_store` at runtime is honoured without rewiring.

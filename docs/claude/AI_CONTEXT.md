@@ -153,7 +153,8 @@ Increments 111–112).
   Documentos panel with list/search/read/write/remove).
 - Documents in recall: `MemoryKind.DOCUMENT` + `DocumentHit`, lexical `search_documents`, wrapped recall
   (semantic + documents), and document chips in `say` replies (read-through on click); folder-aware names
-  (Increment 142).
+  (Increment 142) and recorded ownership per file — `DocumentOwner` attribution + stored/updated timing in
+  `DocumentMeta`, `documents info`, `[jarvis]` tags in list, `owner` on save (Increment 148).
 - Cognition thresholds are live-tunable: one `CognitiveKnobs` VO (grounded/insight/max_goal_reflections)
   injectable at `Jarvis(...)`, runtime-swappable, exposed as a `tunables` action + sliders (Increment 141).
 - The per-belief weighting policy is root-injectable: `Jarvis(default_belief_policy=...)` /
@@ -170,6 +171,11 @@ Increments 111–112).
 - One `CognitiveEpisode` shape (Increment 147): the episode holds ONE conclusion-model — a `Belief` or a
   `HypothesisSet` — in a single slot; both ride the same lifecycle, the same event boundary, and
   `kind` (CONCLUSION/DELIBERATION) is derived from that conclusion, never painted by the caller.
+- Document ownership (Increment 148): `DocumentOwner` (companion vs jarvis-generated) + stored/updated
+  timing live in a `DocumentMeta` snapshot per file, persisted out-of-band in a reserved `_jarvis-meta.json`
+  index that `list`/`search` never surface; `write_document` takes `owner`, `document_meta()` is honest
+  (`None` when a file predates provenance tracking), and the command center answers "whose is this?"
+  via `documents info` while `list` tags generated files.
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -181,10 +187,9 @@ Increments 111–112).
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
 - A real DB behind the repository contracts (D10); `TemporalStability` count/recency weighting beyond the
-  opt-in decay policy; more §15 energy modelling (charge deliberations); document depth (ownership,
-  per-file ranking, editing via chat).
+  opt-in decay policy; more §15 energy modelling (charge deliberations); document depth (editing via
+  chat — ownership landed in Increment 148).
 - Live STT backer for the speech seam; real instruction execution (earned agency).
-- Document depth: ownership, per-file search ranking, or editing via the chat itself (folder awareness landed).
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).
 
 Do not turn every future direction into immediate work. Follow the current user request.
