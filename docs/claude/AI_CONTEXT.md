@@ -181,6 +181,10 @@ Increments 111–112).
   proposes a complete rewrite from a free-form instruction (`documents edit`); offline it declines honestly,
   an LLM-backed editor rides the `LanguageModel` seam, and Jarvis applies the proposal preserving owner,
   refuses binary, and frames the change from the real diff.
+- A real database behind the repository contracts (Increment 150, D10): `Sqlite*Store` implementations
+  (`infrastructure/sqlite_*_store.py`) back the belief/episode/capability/refutation Protocols with SQLite's
+  transactional durability, composed by `build_sqlite_repositories`/`SqliteRepositories` into one `jarvis.db`
+  and reached through `Jarvis.database(directory)` — same evidence-derived rehydration as the JSON stores.
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -191,7 +195,9 @@ Increments 111–112).
   the span into the *episode* path or extending it to a live voice session.
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
-- A real DB behind the repository contracts (D10); `TemporalStability` count/recency weighting beyond the
+- A real SQLite DB now backs the repository contracts (`Jarvis.database()`, Increment 150), but the command
+  center's composition root still defaults to the JSON stores (adopting SQLite there is a one-call follow-up);
+  `TemporalStability` count/recency weighting beyond the
   opt-in decay policy; more §15 energy modelling (charge deliberations).
 - Live STT backer for the speech seam; real instruction execution (earned agency).
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).

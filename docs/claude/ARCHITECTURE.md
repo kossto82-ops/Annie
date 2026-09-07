@@ -365,10 +365,22 @@ executive still decides; confidence still derived
 
 ## Persistence boundary
 
-Repositories belong to the domain as protocols. JSON/in-memory stores (and the JSONL episode trace)
-belong to infrastructure. All writes are crash-safe (atomic temp+rename, Increment 111).
+Repositories belong to the domain as protocols. JSON/in-memory/SQLite stores (and the JSONL episode trace)
+belong to infrastructure. All writes are crash-safe (atomic temp+rename for files, Increment 111; SQLite
+transactions for the DB). No database concept leaks into the domain: the SQLite side implements the same
+contracts, not a new storage API.
 
-A future database should implement the same repository contracts rather than moving database concepts into the domain.
+- `Jarvis.persistent(directory)` composes the crash-safe JSON stores (`beliefs.json`, `episodes.json`, …)
+  plus the JSONL trace under one directory (Increment 111+); `Jarvis.database(directory)` is the real
+  database twin (Increment 150): `build_sqlite_repositories` opens one `jarvis.db` (single connection,
+  `check_same_thread=False` for the threaded server) and lines up `SqliteBeliefStore` (a validated whitelist
+  of belief tables: beliefs/companion/actions/reversibility/goals/subgoals/needs), `SqliteEpisodeStore`
+  (ordered by an autoincrement `seq`, `record_id` unique), `SqliteCapabilityStore` (name key) and
+  `SqliteRefutationStore` (observation+belief key) behind the same Protocols. Both store families share the
+  canonical serialisers, so rehydration is identical: confidence/stability are derived from stored evidence,
+  never persisted as an assertion, and the weighting policy is not stored.
+- The command center's composition root still uses the JSON stores; switching it to SQLite is a one-call
+  change (deliberately not flipped in Increment 150).
 
 ## UI boundary
 

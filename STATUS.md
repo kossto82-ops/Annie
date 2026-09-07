@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-07 (Increment 149)
+Last updated: 2026-09-07 (Increment 150)
 
 ---
 
@@ -1816,6 +1816,22 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   the editor alongside perceiver/companion-perceiver/voice/reasoner so edits ride the same model.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1174 passed, 3 skipped.
 
+### Increment 150 — a real database behind the repository contracts ✅ (2026-09-07)
+- Persistence behind the repository contracts is no longer JSON-only: `SqliteBeliefStore`, `SqliteEpisodeStore`,
+  `SqliteCapabilityStore` and `SqliteRefutationStore` back the same domain Protocols (the D10 gap) with SQLite's
+  real transactional durability. They reuse the canonical serialisers (made public on the JSON modules), so
+  rehydration is identical: confidence and stability are still derived from stored evidence on every read, never
+  persisted as assertions (Vision §22), and the weighting policy is not stored — exactly the file-store semantics.
+- `build_sqlite_repositories`/`SqliteRepositories` (infrastructure/sqlite_database.py) line up one `jarvis.db`:
+  a single connection (`check_same_thread=False` for the threaded server composition) owns every cognitive table;
+  keys are real PRIMARY KEY columns (statement / name / record_id / (observation, belief)); the belief table
+  name is validated against a fixed whitelist so a caller-chosen table can never shape SQL; each save is one
+  committed upsert.
+- `Jarvis.database(directory)` mirrors `persistent()` exactly (same provider/ear/trace/documents wiring) but puts
+  the whole memory in one `jarvis.db` under `directory`. The JSON stores and `persistent()` are untouched; the
+  command-center composition root still defaults to JSON (adopting SQLite there is a deliberate one-call follow-up).
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1192 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2164,13 +2180,17 @@ seam.)*
 - **Chat editing of documents** (Increment 149): a `DocumentEditor` seam proposes a complete rewrite
   from a free-form `documents edit` instruction; Jarvis applies it, preserves attribution, and frames
   the change from the real diff; binary files are never rewritten.
+- **A real database behind the repository contracts** (Increment 150): `Sqlite*Store` implementations back the
+  belief/episode/capability/refutation Protocols in a transactional `jarvis.db`, composed by `Jarvis.database()`
+  — same rehydration semantics (evidence-derived confidence), one committed save per write.
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
   `Jarvis.persistent()`.
 
 **Still open / honest gaps:**
-- A real database behind the repository contracts (D10) — persistence is per-store JSON (now crash-safe).
+- The command center's composition root still defaults to the JSON stores; adopting `Jarvis.database()` there
+  (real SQLite behind the same contracts, Increment 150) is a deliberate one-call follow-up.
 - `TemporalStability` is span-based for both beliefs *and* hypotheses now (Increment 146) — no
   count/recency weighting beyond the opt-in decay policy; hypotheses narrate their narrowness without
   it affecting ranking or ties.
@@ -2197,7 +2217,8 @@ persistence across restart (crash-safe), perception seam + streams + contested-b
 connections, the full reflective cycle, trace persistence, decay forgetting, semantic recall, provisional
 reasoning + confirmation, the five edge capability seams + tool registry, and the command center
 dashboard/sphere/catalog surface, the files/documents surface (accept, recall, search, chip, read, folders),
-live-tunable cognition thresholds, and the root-injectable per-belief weighting policy.
+live-tunable cognition thresholds, the root-injectable per-belief weighting policy, and a real SQLite database
+behind the repository contracts (`Jarvis.database()`).
 
 ---
 
