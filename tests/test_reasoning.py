@@ -8,6 +8,8 @@ ungrounded and no strong memory already answers the trigger.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 
 from jarvis import Jarvis
@@ -41,6 +43,25 @@ class _RecordingModel:
     def complete(self, prompt: str) -> str:
         self.prompt = prompt
         return self.answer
+
+
+class _StreamingModel:
+    """A LanguageModel whose `stream` yields answer deltas, then errors on demand."""
+
+    def __init__(
+        self, pieces: list[str], *, error_after: int | None = None
+    ) -> None:
+        self._pieces = pieces
+        self._error_after = error_after
+
+    def complete(self, prompt: str) -> str:
+        return "".join(self._pieces)
+
+    def stream(self, prompt: str) -> Iterator[str]:
+        del prompt
+        yield from self._pieces
+        if self._error_after is not None and len(self._pieces) >= self._error_after:
+            raise RuntimeError("stream exploded")
 
 
 def _reasoning_jarvis(answer: str = "Provisional answer.") -> Jarvis:
@@ -97,6 +118,32 @@ class TestReasoners:
 
     def test_a_provider_failure_yields_no_inference(self) -> None:
         assert LlmReasoner(_FailingModel()).infer("x?") is None
+
+    def test_the_llm_reasoner_streams_its_answer(self) -> None:
+        reasoner = LlmReasoner(_StreamingModel(["Recur", "sion calls ", "itself."]))
+        assert list(reasoner.infer_stream("what is recursion?")) == [
+            "Recur",
+            "sion calls ",
+            "itself.",
+        ]
+
+    def test_the_llm_reasoner_falls_back_to_a_single_piece_without_stream(self) -> None:
+        reasoner = LlmReasoner(ScriptedLanguageModel(default="Recursion calls itself."))
+        assert list(reasoner.infer_stream("what is recursion?")) == [
+            "Recursion calls itself."
+        ]
+
+    def test_a_failing_stream_propagates_after_yielded_pieces(self) -> None:
+        # Already-yielded pieces cannot be retracted; the failure surfaces so the
+        # caller must not treat the partial answer as a completed proposal.
+        reasoner = LlmReasoner(_StreamingModel(["Recursion "], error_after=1))
+        stream = iter(reasoner.infer_stream("what is recursion?"))
+        assert next(stream) == "Recursion "
+        with pytest.raises(RuntimeError):
+            next(stream)
+
+    def test_the_silent_reasoner_streams_nothing(self) -> None:
+        assert list(SilentReasoner().infer_stream("what is recursion?")) == []
 
     def test_the_offline_factory_builds_a_silent_reasoner(self) -> None:
         assert isinstance(build_reasoner("keyword"), SilentReasoner)
@@ -156,6 +203,36 @@ class TestReasoningWiring:
         jarvis = Jarvis(enable_recall=True)
         episode = jarvis.perceive("how do I build an HTML filter?", trigger="q")
         assert episode.inference is None
+
+
+class TestReasonStream:
+    def test_streams_the_reasoner_answer_and_advances_the_span(self) -> None:
+        jarvis = Jarvis(
+            enable_recall=True,
+            reasoner=LlmReasoner(_StreamingModel(["Prov", "isional ", "answer."])),
+        )
+
+        pieces = list(jarvis.reason_stream("what is recursion?"))
+
+        assert pieces == ["Prov", "isional ", "answer."]
+        threads = jarvis.reasoning_span()
+        assert len(threads) == 1
+        assert threads[0].statement == "Provisional answer."
+
+    def test_a_silent_reasoner_streams_nothing(self) -> None:
+        jarvis = Jarvis(enable_recall=True, reasoner=SilentReasoner())
+
+        assert list(jarvis.reason_stream("what is recursion?")) == []
+        assert jarvis.reasoning_span() == ()
+
+    def test_a_failed_stream_leaves_the_span_untouched(self) -> None:
+        jarvis = Jarvis(
+            enable_recall=True,
+            reasoner=LlmReasoner(_StreamingModel(["x"], error_after=1)),
+        )
+
+        assert list(jarvis.reason_stream("what is recursion?")) == ["x"]
+        assert jarvis.reasoning_span() == ()
 
 
 class TestSayReasons:

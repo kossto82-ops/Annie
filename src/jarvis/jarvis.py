@@ -8,9 +8,10 @@ subscribe to cognitive events *before* thinking begins.
 from __future__ import annotations
 
 import difflib
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
@@ -488,6 +489,42 @@ class Jarvis:
         if inference is not None:
             self._reasoning_span.record(query, inference.answer)
         return inference
+
+    def reason_stream(
+        self,
+        text: str,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
+        span: tuple[SpanThread, ...] = (),
+    ) -> Iterator[str]:
+        """Stream the active reasoner's candidate answer as it is produced (Phase 5).
+
+        Mirrors `reason` -- a candidate to be proposed, never concluded -- but yields
+        the answer's deltas as they arrive. The reasoning span is only advanced when
+        the stream completes; an interrupted, failed, or absent streaming seam yields
+        nothing at all (honest silence, §37), leaving a surface free to fall back to a
+        settled `reason` answer.
+        """
+        threads = span if span else self._reasoning_span.threads()
+        reasoner = self._executive.reasoner
+        if reasoner is None:
+            return
+        streamer = cast(
+            "Callable[..., Iterator[str]]", getattr(reasoner, "infer_stream", None)
+        )
+        if not callable(streamer):
+            return
+        parts: list[str] = []
+        try:
+            for piece in streamer(
+                text, memory=memory, conversation=conversation, span=threads
+            ):
+                parts.append(piece)
+                yield piece
+        except Exception:  # noqa: BLE001 - the external-provider boundary
+            return
+        if parts:
+            self._reasoning_span.record(text, "".join(parts))
 
     def reasoning_span(self) -> tuple[SpanThread, ...]:
         """The session's reasoning threads, newest first (working memory, not beliefs).

@@ -14,6 +14,9 @@ yields no inference (honest silence, §37) rather than a fabricated answer.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+from typing import cast
+
 from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.reasoning.reasoning_span import SpanThread, ThreadPosture
 from jarvis.domain.value_objects.inference import Inference
@@ -59,6 +62,35 @@ class LlmReasoner:
         except Exception:  # noqa: BLE001 - the external-provider boundary
             return None  # provider failure -> no inference, never a crash (§37)
         return Inference(answer=answer) if answer else None
+
+    def infer_stream(
+        self,
+        query: str,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
+        span: tuple[SpanThread, ...] = (),
+    ) -> Iterator[str]:
+        """Stream the model's answer as it is produced (Phase 5).
+
+        Same contract as `infer` -- a *candidate* that carries no conclusion -- but the
+        answer deltas arrive as they are generated instead of after a full completion.
+        A provider failure propagates so a caller may stop partway and must not advance
+        the reasoning span with a truncated answer; already-yielded pieces cannot be
+        retracted, so streaming trades that for immediacy at the surface. A model
+        without a ``stream`` seam yields the finished answer in one piece.
+        """
+        text = query.strip()
+        if not text:
+            return
+        stream_fn = cast("Callable[[str], Iterator[str]]", getattr(self._model, "stream", None))
+        if not callable(stream_fn):
+            inference = self.infer(query, memory, conversation, span)
+            if inference is not None:
+                yield inference.answer
+            return
+        for piece in stream_fn(self._prompt(text, memory, conversation, span)):
+            if piece:
+                yield piece
 
     @staticmethod
     def _prompt(

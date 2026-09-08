@@ -8,6 +8,8 @@ recalled memory is answered honestly with "I don't have enough", exactly as befo
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.reasoning.reasoning_span import SpanThread
 from jarvis.domain.value_objects.inference import Inference
@@ -26,3 +28,15 @@ class SilentReasoner:
     ) -> Inference | None:
         _ = (query, memory, conversation, span)
         return None
+
+    def infer_stream(
+        self,
+        query: str,
+        memory: tuple[RecalledMemory, ...] = (),
+        conversation: tuple[Turn, ...] = (),
+        span: tuple[SpanThread, ...] = (),
+    ) -> Iterator[str]:
+        """Never proposes anything, so there is nothing to stream (Vision §37)."""
+        _ = (query, memory, conversation, span)
+        return
+        yield  # pragma: no cover - unreachable; keeps this a generator
