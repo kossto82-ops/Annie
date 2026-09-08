@@ -14,9 +14,11 @@ import pytest
 from jarvis.domain.tools.tool_registry import ToolRegistry
 from jarvis.infrastructure.echo_tool import EchoTool
 from jarvis.infrastructure.filesystem_tool import FileSystemTool
+from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.task_agent_source import (
     ToolRegistryTaskAgent,
     build_default_task_agent,
+    build_task_agent,
 )
 
 
@@ -103,3 +105,58 @@ class TestBuildDefaultTaskAgent:
         assert isinstance(agent, ToolRegistryTaskAgent)
         result = agent.run_task("echo text=hi")
         assert result.success
+
+
+class TestBuildTaskAgent:
+    """The composition-root seam: executor choice for decided multi-step tasks."""
+
+    def _settings(self, provider: str, model: str = "") -> ProviderSettings:
+        return ProviderSettings(
+            provider=provider,
+            model=model,
+            base_url="http://localhost:11434/v1",
+        )
+
+    def test_returns_none_without_directory_configuration(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("JARVIS_AGENT_ROOT", raising=False)
+        assert (
+            build_task_agent(self._settings("pydantic", "qwen2.5:7b")) is None
+        )
+
+    def test_a_live_pydantic_provider_uses_the_model_driven_executor(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("JARVIS_AGENT_ROOT", "/tmp/root")
+        from jarvis.infrastructure.pydantic_ai_task_agent import (
+            PydanticAiTaskAgent,
+        )
+
+        agent = build_task_agent(self._settings("pydantic", "qwen2.5:7b"))
+        assert agent is not None
+        assert isinstance(agent, PydanticAiTaskAgent)
+
+    def test_pydantic_without_a_model_falls_back_to_the_decided_script(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("JARVIS_AGENT_ROOT", "/tmp/root")
+        agent = build_task_agent(self._settings("pydantic"))
+        assert isinstance(agent, ToolRegistryTaskAgent)
+
+    def test_any_other_provider_keeps_the_decided_script_agent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("JARVIS_AGENT_ROOT", "/tmp/root")
+        agent = build_task_agent(self._settings("openai", "gpt-4o"))
+        assert isinstance(agent, ToolRegistryTaskAgent)
+
+    def test_the_executor_still_rides_the_task_agent_seam(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from jarvis.domain.retrieval.task_agent_source import TaskAgent
+
+        monkeypatch.setenv("JARVIS_AGENT_ROOT", "/tmp/root")
+        agent = build_task_agent(self._settings("pydantic", "qwen2.5:7b"))
+        assert agent is not None
+        assert isinstance(agent, TaskAgent)

@@ -1,13 +1,21 @@
-"""ToolRegistryTaskAgent: a TaskAgent backed by Jarvis's own ToolRegistry.
+"""TaskAgent executors backed by Jarvis's own ToolRegistry.
 
 Delegation (revised D1) hands a *material* task to an edge agent -- never
 cognition. The most autonomous edge that stays *inside Jarvis* is its own
 :class:`ToolRegistry` (Vision §34, 06_TOOLS_AGENCY): an approved-only, observable
-runner of tools. This adapter makes that registry appear as a :class:`TaskAgent`
-so a surface can hand it a decided task and get a plain :class:`TaskResult`.
+runner of tools. This module adapts that registry into a :class:`TaskAgent` so a
+surface can hand it a decided task and get a plain :class:`TaskResult`, in two
+executor modes (chosen by :func:`build_task_agent`):
 
-Because the agent never reasons (D6), a task arrives in a small deterministic
-script of tool-calls, one per line, quote-aware ``key=value`` arguments:
+* :class:`ToolRegistryTaskAgent` -- a task arrives in a small deterministic script
+  of tool-calls, one per line, quote-aware ``key=value`` arguments (see below);
+* :class:`PydanticAiTaskAgent` -- with a live ``pydantic`` provider, the model
+  decides the multi-step sequence and adapts to each outcome, while the registry
+  still gates every call (Phase 3).
+
+Because the decided-script agent never reasons (D6), a task arrives in a small
+deterministic script of tool-calls, one per line, quote-aware ``key=value``
+arguments:
 
     filesystem write path="notes.txt" content="review the doc"
     echo text=done
@@ -27,10 +35,14 @@ still requires the tool's spec to permit it and the agent's upstream approval.
 
 from __future__ import annotations
 
+import importlib.util
 import shlex
+from typing import Any
 
+from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.tools.tool_registry import ToolRegistry
 from jarvis.domain.value_objects.task_result import TaskResult
+from jarvis.infrastructure.provider_settings import ProviderSettings
 
 
 class ToolRegistryTaskAgent:
@@ -111,14 +123,14 @@ class ToolRegistryTaskAgent:
         return arguments, None
 
 
-def build_default_task_agent() -> ToolRegistryTaskAgent | None:
-    """Build the default in-Jarvis task agent, or ``None`` when not configured.
+def build_sandboxed_registry() -> ToolRegistry | None:
+    """Build the default sandboxed :class:`ToolRegistry`, or ``None`` when not configured.
 
-    Wires a :class:`ToolRegistry` with a sandboxed :class:`FileSystemTool` under
-    the ``JARVIS_AGENT_ROOT`` directory (defaulting to the current directory when
-    set) plus the harmless :class:`EchoTool`, and wraps it as a
-    :class:`ToolRegistryTaskAgent`. ``None`` when directory configuration is
-    missing, so a Jarvis built from this keeps working offline.
+    Wires a :class:`FileSystemTool` under the ``JARVIS_AGENT_ROOT`` directory (defaulting
+    to the current directory when set) plus the harmless :class:`EchoTool`. ``None`` when
+    directory configuration is missing, so Jarvis keeps working offline. Shared by every
+    task-agent builder (decided-script and model-driven) so both act through the same,
+    sandboxed tool set.
     """
     import os
 
@@ -131,4 +143,52 @@ def build_default_task_agent() -> ToolRegistryTaskAgent | None:
     registry = ToolRegistry()
     registry.register(FileSystemTool(root))
     registry.register(EchoTool())
+    return registry
+
+
+def build_default_task_agent() -> ToolRegistryTaskAgent | None:
+    """Build the default in-Jarvis task agent, or ``None`` when not configured.
+
+    Wraps the sandboxed :class:`ToolRegistry` (see :func:`build_sandboxed_registry`) as a
+    deterministic, decided-script :class:`ToolRegistryTaskAgent`. ``None`` when directory
+    configuration is missing, so a Jarvis built from this keeps working offline.
+    """
+    registry = build_sandboxed_registry()
+    if registry is None:
+        return None
+    return ToolRegistryTaskAgent(registry)
+
+
+def build_task_agent(
+    settings: ProviderSettings, *, model: Any = None
+) -> TaskAgent | None:
+    """Build the delegation task agent for a composition root (Phase 3).
+
+    Decided multi-step actions run behind the one `TaskAgent` seam (`jarvis.delegate`);
+    here the *executor* is chosen:
+
+    * ``JARVIS_AGENT_ROOT`` unset -> ``None``, so Jarvis keeps working offline;
+    * a live ``pydantic`` provider (model set, package installed) -> the model-driven
+      executor `PydanticAiTaskAgent`, which decides the multi-step sequence and adapts
+      to each outcome -- while the registry still gates each call and the decision to
+      delegate stays in the core (revised D1); on a provider outage the decided-script
+      agent walks the task again (Phase 5 fallback);
+    * anything else -> the deterministic, decided-script
+      `ToolRegistryTaskAgent`, the previous default.
+
+    ``model=`` injects a pydantic-ai `Model` (a `FunctionModel`) for offline tests.
+    """
+    registry = build_sandboxed_registry()
+    if registry is None:
+        return None
+    if settings.provider == "pydantic" and settings.model:
+        from jarvis.infrastructure.pydantic_ai_task_agent import PydanticAiTaskAgent
+
+        if importlib.util.find_spec("pydantic_ai") is not None:
+            return PydanticAiTaskAgent(
+                registry,
+                settings=settings,
+                model=model,
+                fallback=ToolRegistryTaskAgent(registry),
+            )
     return ToolRegistryTaskAgent(registry)

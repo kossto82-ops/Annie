@@ -48,7 +48,7 @@ from jarvis.infrastructure.perceiver_factory import (
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.speech_perception import EchoSpeechPerception
 from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
-from jarvis.infrastructure.task_agent_source import build_default_task_agent
+from jarvis.infrastructure.task_agent_source import build_task_agent
 from jarvis.infrastructure.task_scheduler import build_task_scheduler
 from jarvis.interface.command_center import Response, parse_body, route, stream_say
 from jarvis.jarvis import Jarvis
@@ -92,7 +92,7 @@ def _build_edge(settings: ProviderSettings) -> EdgeSources:
             compare_models[name] = build_language_model(replace(settings, model=name))
     model_compare = build_model_compare_source(compare_models or None)
     mail_source = build_mail_source()
-    task_agent = build_default_task_agent()
+    task_agent = build_task_agent(settings)
     notes_store = build_notes_store()
     return (
         web_source,
