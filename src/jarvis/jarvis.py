@@ -142,6 +142,7 @@ from jarvis.infrastructure.silent_companion_perception import SilentCompanionPer
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
 from jarvis.infrastructure.speech_perception import EchoSpeechPerception
 from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
+from jarvis.infrastructure.sqlite_episode_trace import SqliteEpisodeTrace
 from jarvis.infrastructure.text_embedder import TextEmbedder
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace, EpisodeTraceSink
@@ -1763,12 +1764,12 @@ class Jarvis:
         The companion item to :meth:`persistent`: every store -- beliefs, episodes,
         companion model, action learning, reversibility, goal reachability,
         sub-goal links, capability acquisitions (Odysseus), recognised capability
-        needs and reflective-cycle refutations -- is committed to a single
-        transactional ``jarvis.db`` file under ``directory``, with the documents
-        kept next to it under ``docs`` and the decision-provenance trace as ever.
-        Storage is an actual database (SQLite's durable transactions) behind the
-        same repository contracts; confidence and stability are still re-derived
-        from stored evidence on every read, never persisted as assertions.
+        needs, reflective-cycle refutations and the decision-provenance trace are
+        committed to a single transactional ``jarvis.db`` file under ``directory``,
+        with the documents kept next to it under ``docs``. Storage is an actual
+        database (SQLite's durable transactions) behind the same repository
+        contracts; confidence and stability are still re-derived from stored
+        evidence on every read, never persisted as assertions.
         """
         base = Path(directory)
         base.mkdir(parents=True, exist_ok=True)
@@ -1795,7 +1796,7 @@ class Jarvis:
             capabilities_store=repositories.capabilities,
             needs_store=repositories.needs,
             refutations_store=repositories.refutations,
-            trace=JsonEpisodeTrace(base / "trace.jsonl"),
+            trace=SqliteEpisodeTrace(repositories.connection),
             weighting_policy=weighting_policy,
             default_belief_policy=default_belief_policy,
             external_source=source,

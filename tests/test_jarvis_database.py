@@ -50,6 +50,14 @@ class TestDatabaseFactory:
             "question two",
         ]
 
+    def test_the_trace_survives_a_restart(self, tmp_path: Path) -> None:
+        first_run = Jarvis.database(tmp_path)
+        episode = first_run.think("question one")
+        original = [type(e) for e in first_run.trace_of(episode)]
+
+        second_run = Jarvis.database(tmp_path)
+        assert [type(e) for e in second_run.trace(episode.id)] == original
+
     def test_self_model_survives_a_restart(self, tmp_path: Path) -> None:
         first_run = Jarvis.database(tmp_path)
         for topic in ("a", "b", "c"):
