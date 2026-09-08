@@ -207,6 +207,11 @@ Increments 111–112).
 - Decision provenance joined the database (Increment 152): `SqliteEpisodeTrace` keeps the trace in a seq-ordered
   `trace_events` table in the same `jarvis.db` as the memory, so `Jarvis.database()` leaves no memory surface
   file-backed (the user's `docs` bytes and the `.env` config are the only deliberate files).
+- A live STT backer (Increment 154): the ear seam (`SpeechPerceptionSource`) gains `transcribe_audio`;
+  `WhisperTranscriber` drives any OpenAI-compatible `/audio/transcriptions` endpoint (openai / groq / custom
+  base_url) with an injectable transport (D8), `Jarvis.transcribe(audio)` and `POST /api/speech/transcribe`
+  deliver raw audio, and the command center picks the ear from `JARVIS_STT_*` (`speech_perception_from_env`);
+  the browser Web Speech default and the pure `SpeechPerceptionSource` contract are untouched.
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
@@ -218,10 +223,11 @@ Increments 111–112).
 - Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
   but not yet for identity.
 - A real SQLite DB now backs the repository contracts (`Jarvis.database()`, Increment 150) and the command
-  center's composition root uses it. The JSON stores / `Jarvis.persistent()` remain as the file-backed twin;
+  center's composition root uses it; the JSON stores / `Jarvis.persistent()` remain as the file-backed twin;
   `TemporalStability` count/recency weighting beyond the
   opt-in decay policy; more §15 energy modelling (charge deliberations).
-- Live STT backer for the speech seam; real instruction execution (earned agency).
+- Speech: a live STT backer (Increment 154) is wired, but real instruction execution (earned agency) and
+  streaming/VAD mic delivery to the server ear remain open.
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).
 
 Do not turn every future direction into immediate work. Follow the current user request.

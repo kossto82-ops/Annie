@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-08 (Increment 153)
+Last updated: 2026-09-08 (Increment 154)
 
 ---
 
@@ -1889,6 +1889,23 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   note).
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1259 passed, 3 skipped.
 
+### Increment 154 — a live STT backer behind the speech seam (Whisper-compatible ear) ✅ (2026-09-08)
+- The ear seam grows a real speech-to-text path beside the browser's Web Speech default:
+  `WhisperTranscriber` (infrastructure/whisper_transcriber.py) posts raw audio to any OpenAI-compatible
+  `POST /audio/transcriptions` endpoint (OpenAI Whisper, Groq, or a custom base_url) as multipart, with the
+  HTTP send transport-injectable so tests never touch the network (D8) and failures stay loud, never a
+  silent guess (Vision §37).
+- `speech_perception_registry.py` is the STT mirror of the LLM registry: `SttSettings` (model/base_url/
+  api_key/timeout), a provider table (openai, groq, openai-compatible), `build_speech_perception(settings)`,
+  and `register_endpoint(name, url)`; offline providers (echo/stub/scripted) stay the pass-through ear.
+  The environment picks the ear via `JARVIS_STT_PROVIDER/MODEL/BASE_URL/API_KEY/TIMEOUT`; the command
+  center wires it (`speech_perception_from_env()`) so nothing changes until a developer opts in.
+- `SpeechPerceptionSource` gains `transcribe_audio(audio)`; `Jarvis.transcribe(audio)` is the public live
+  entry, and `POST /api/speech/transcribe` turns raw audio bytes into `{"text": …}` (400 without an ear,
+  structured 502 on provider failure). The browser push-to-talk keeps its Web Speech path; a client that
+  streams audio can now transcribe server-side.
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1279 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2245,6 +2262,10 @@ seam.)*
   root's `jarvis.db`, and the env-root builders adopt them at the command center.
 - **Decision provenance joins the database** (Increment 152): `SqliteEpisodeTrace` keeps the trace in the
   same `jarvis.db` as the memory, so `Jarvis.database()` leaves no memory surface file-backed.
+- **A live STT backer behind the speech seam** (Increment 154): the ear becomes real speech-to-text --
+  `WhisperTranscriber` drives any OpenAI-compatible `/audio/transcriptions` endpoint (openai/groq/custom
+  base_url), `Jarvis.transcribe(audio)` + `POST /api/speech/transcribe` deliver raw audio, and
+  `JARVIS_STT_*` chooses the provider at the command center; the browser Web Speech default is untouched.
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
@@ -2268,8 +2289,10 @@ seam.)*
 - Documents are folder-aware (Increment 142), carry recorded ownership (Increment 148) and are
   editable via the chat itself (Increment 149) — remaining gap: search ranks whole documents, not
   passages.
-- Speech has a perception seam but no live STT backer; real instruction execution is unimplemented
-  (instructions are acknowledged honestly, not acted on — earned agency).
+- Speech has an opt-in live STT backer (`JARVIS_STT_*` → a Whisper-compatible ear, Increment 154), but
+  the console mic still transcribes in-browser by default and no streaming/VAD mic path is wired; real
+  instruction execution is unimplemented (instructions are acknowledged honestly, not acted on — earned
+  agency).
 - Notes/tasks/calendar local adapters now persist to SQLite in their own root (`jarvis.db`, Increment 151) but
   have no CalDAV/ICS sync; email has a real IMAP/SMTP adapter but no per-account UI management.
 - NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
@@ -2280,9 +2303,10 @@ persistence across restart (crash-safe), perception seam + streams + contested-b
 connections, the full reflective cycle, trace persistence, decay forgetting, semantic recall, provisional
 reasoning + confirmation, the five edge capability seams + tool registry, and the command center
 dashboard/sphere/catalog surface, the files/documents surface (accept, recall, search, chip, read, folders),
-live-tunable cognition thresholds, the root-injectable per-belief weighting policy, and a real SQLite
+live-tunable cognition thresholds, the root-injectable per-belief weighting policy, a real SQLite
 database behind the repository contracts (`Jarvis.database()`) extended across the calendar/notes/tasks
-edge seams and the decision-provenance trace (Increments 150-152).
+edge seams and the decision-provenance trace (Increments 150-152), and an opt-in live STT backer behind
+the speech seam (Increment 154).
 
 ---
 

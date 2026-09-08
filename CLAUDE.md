@@ -51,7 +51,7 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 153 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is around Increment 154 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
@@ -64,7 +64,10 @@ fully opt-in pydantic-ai provider landed in Increment 153 behind the `LanguageMo
 reasoner seams — model adapter + structured perception, a model-driven task agent that runs decided
 tool loops (delegation behind the seam, cognition in the core), per-call usage accounting, a
 tool-registry fallback on provider failure, and reasoner-level streaming (`Jarvis.reason_stream`
-records the reasoning span only on a completed stream) — and
+records the reasoning span only on a completed stream) — a live speech-to-text backer
+landed behind the speech seam in Increment 154 (a Whisper-compatible ear chosen via `JARVIS_STT_*`,
+`Jarvis.transcribe(audio)`, and `POST /api/speech/transcribe`, beside the browser Web Speech default) —
+and
 the capability edges (web/research/compare/tools/notes/mail/calendar/tasks/agent/speech seam) are
 implemented. Files/documents
 are a first-class surface (accept, recall, search, chip in chat, read, folder-aware nesting). The command
@@ -73,14 +76,14 @@ a root-injectable per-belief weighting policy, and a capability/tool surface; a 
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 
-The most useful next increments currently identified are a live STT backer behind the speech seam or
-more §15 energy modelling (charge deliberations). The SQLite thread is complete: the DB behind the
-repository contracts landed in Increment 150, the command-center composition root adopts it, the
-calendar/notes/tasks edge seams followed in Increment 151, and the decision-provenance trace joined in
-Increment 152. The pydantic-ai provider thread is likewise complete: the opt-in implementation behind
-the LLM/agent/reasoner seams shipped in Increment 153 and stays gated — future live providers should
-implement the same seams, never a second bypass. However, **do not assume this is mandatory**: follow
-the user's current task.
+The most useful next increment currently identified is more §15 energy modelling (charge deliberations).
+The SQLite thread is complete: the DB behind the repository contracts landed in Increment 150, the
+command-center composition root adopts it, the calendar/notes/tasks edge seams followed in Increment 151,
+and the decision-provenance trace joined in Increment 152. The pydantic-ai provider thread is likewise
+complete: the opt-in implementation behind the LLM/agent/reasoner seams shipped in Increment 153 and stays
+gated — future live providers should implement the same seams, never a second bypass. The live-STT thread
+is complete too (Increment 154). However, **do not assume this is mandatory**: follow the user's current
+task.
 
 ## How to work
 

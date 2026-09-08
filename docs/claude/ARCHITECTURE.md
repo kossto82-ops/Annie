@@ -191,7 +191,7 @@ send/read email                    MailBox                              IMAPSMTP
 manage calendar                    CalendarStore                        LocalCalendarStore + Google
 manage tasks                       TaskScheduler                        LocalTaskScheduler
 delegate to an agent               TaskAgent                            ToolRegistryTaskAgent / PydanticAiTaskAgent (opt-in)
-perceive speech                    SpeechPerceptionSource               browser STT (seam, no backer yet)
+perceive speech                    SpeechPerceptionSource               browser STT (default) / Whisper-compatible ear (opt-in, JARVIS_STT_*)
 execute tools                      ToolRegistry + ToolPolicy            FileSystemTool / EchoTool
 work with files                    DocumentStore                        LocalDocumentStore
 edit project files                 ToolRegistry (project: roots)        FileSystemTool
@@ -247,7 +247,7 @@ extensions of its ability to act (Vision §34). Phase 1 delivered the core model
 and the surfaces; Phase 3 put the *live* capability at the edge behind a provider registry;
 Phase 4 added the self-initiated half: Jarvis noticing recurring subjects it failed to
 answer, as the seed of a need; Phase 5 backed the remaining seams -- reasoning and
-meaning-recall -- so every catalog capability except speech now reports live when its
+meaning-recall -- so every catalog capability reports live when its
 runtime provider is active; Phase 6 closed the loop -- the reflective cycle now
 auto-scouts capability gaps as part of its own pass; **Phase 7 (the Odysseus Fases 0–N
 sweep, Increments 115–134)** expanded the catalog to the concrete edge domains (web,
