@@ -190,7 +190,7 @@ manage notes                       NotesStore                           LocalNot
 send/read email                    MailBox                              IMAPSMTPMailBox
 manage calendar                    CalendarStore                        LocalCalendarStore + Google
 manage tasks                       TaskScheduler                        LocalTaskScheduler
-delegate to an agent               TaskAgent                            ToolRegistryTaskAgent (or edge)
+delegate to an agent               TaskAgent                            ToolRegistryTaskAgent / PydanticAiTaskAgent (opt-in)
 perceive speech                    SpeechPerceptionSource               browser STT (seam, no backer yet)
 execute tools                      ToolRegistry + ToolPolicy            FileSystemTool / EchoTool
 work with files                    DocumentStore                        LocalDocumentStore
@@ -341,6 +341,17 @@ Belief / hypothesis / decision
 
 The model must not directly set belief confidence or make the core decision.
 
+The `LanguageModel` seam is opt-in and provider-swappable (Increment 153): `PydanticAiModel`
+(`infrastructure/pydantic_ai_model.py`) implements it over pydantic-ai 2.40's `FunctionModel`, imported
+lazily so the SDK is only a dependency when a live provider is configured (`live` extra). It completes and
+streams, rewrites a question when the Proficiency flag says so, extracts structured `TextDatum` (markdown)
+from a reply, answers an absent claim with honest "I have no belief" (Vision §37), and accumulates per-call
+`Usage`. Next to it, `PydanticAiTaskAgent` (`infrastructure/pydantic_ai_task_agent.py`) is the opted-in
+executor behind the `TaskAgent` seam: it runs decided multi-step tool loops, bakes tool schemas via
+pydantic's `prepare` hook, refuses blocking instructions, recovers from failed steps, and falls back to
+the tool registry on provider failure. `build_task_agent` only selects it when the agent root is set, the
+provider is configured as `pydantic` with a model, and the package is installed.
+
 ## Recall / reasoning / consult boundary
 
 The three "answer the unknown" seams mirror each other and are strictly candidate-or-context
@@ -359,7 +370,10 @@ executive still decides; confidence still derived
 ```
 
 - Recall is opt-in (offline default lexical), edges are opt-in (un-wired Jarvis never consults), and
-  the reasoner is opt-in (`SilentReasoner` when no provider).
+  the reasoner is opt-in (`SilentReasoner` when no provider). When the provider exposes a stream seam the
+  reasoner streams its reply (`LlmReasoner.infer_stream`), and `Jarvis.reason_stream` records the
+  reasoning span only on a completed, non-empty stream — a mid-stream provider failure propagates and is
+  never span-recorded (Increment 153).
 - A reasoned answer is *remembered* as weak, clearly-sourced `INFERENCE` evidence (learning loop,
   Increment 110); it is grounded only by real evidence or a companion's `confirm()`.
 

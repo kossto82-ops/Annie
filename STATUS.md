@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-08 (Increment 152)
+Last updated: 2026-09-08 (Increment 153)
 
 ---
 
@@ -1855,6 +1855,39 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   on disk under the database twin are the user's documents (bytes under ``docs``) and the ``.env`` LLM
   config.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1219 passed, 3 skipped.
+
+### Increment 153 — an opt-in pydantic-ai provider: model-driven tools, usage, streaming ✅ (2026-09-08)
+- The LLM and agent seams gain a real SDK-backed implementation that is *opt-in* (`live` extra;
+  lazy `importlib` import, zero runtime dependency, zero behavior change by default):
+- `PydanticAiModel` (infrastructure/pydantic_ai_model.py) implements the `LanguageModel` Protocol over
+  pydantic-ai 2.40's `FunctionModel` — completes and streams, rewrites a question when the Proficiency
+  flag says so, extracts structured `TextDatum` (markdown) from a reply, answers an absent claim with
+  honest "I have no belief" (Vision §37), and accumulates per-call token usage.
+- `PydanticAiTaskAgent` (infrastructure/pydantic_ai_task_agent.py) runs a decided multi-step tool loop
+  behind the `TaskAgent` seam: tools are built from `ToolSpec`/`ToolRecord` and their schemas baked via
+  the pydantic `prepare` hook (the wrapper carries no `RunContext` — pydantic's `get_type_hints` cannot
+  resolve closure names), a blocking instruction is refused as "I will not" (§31), a failed step recovers,
+  upstream approval gates delegation, a provider error flows to an injected fallback
+  (`build_task_agent` wires the deterministic `ToolRegistryTaskAgent`) or an honest failure note, and
+  usage accumulates.
+- Composition (Phase 3 of the rollout): the model-driven executor is wired for decided actions behind
+  the seam via `build_task_agent(settings)` — it only picks `PydanticAiTaskAgent` when the agent root is
+  set, the provider is configured as `pydantic` with a model *and* the package is installed; otherwise
+  `ToolRegistryTaskAgent`. Cognition stays in the core (D1 revision).
+- Reasoning/usage (Phase 5): `LlmReasoner.infer_stream` / `SilentReasoner.infer_stream` stream the reply
+  when the model exposes the seam (single-piece fallback otherwise); `Jarvis.reason_stream` records the
+  reasoning span only on a completed, non-empty stream, so a truncated answer is never span-recorded —
+  mid-stream provider failures propagate and never advance the span. `Usage` (request/response/total)
+  and `read_run_usage` live in infrastructure/usage.py; `RunResult.usage` is a property returning
+  `RunUsage` in pydantic-ai 2.40.
+- Verdict (Phase 5): the live provider stays opt-in and gated — removable by deleting the
+  `pydantic_ai_*.py` modules and the factory branch; the deterministic offline path remains the baseline
+  default. Phase 4 of the rollout (guardrails/instrumentation, MCP adapter) remains parked on a concrete
+  need.
+- Commits: `09405af` (adapter + structured perception) · `d91743a` (model-driven task agent behind the
+  seam) · `ce60525` (usage accounting, delegation fallback, reasoner streaming) · `4ce338e` (AI_CONTEXT
+  note).
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1259 passed, 3 skipped.
 
 ---
 
