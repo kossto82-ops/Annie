@@ -6,7 +6,9 @@ module is the one place that maps a provider name to a `PerceptionSource` and, i
 other direction, describes a live perceiver for a surface to display.
 
 The epistemic boundary holds: whatever is built only *produces evidence*; confidence
-is still derived downstream and the executive still decides (Vision §38).
+is still derived downstream and the executive still decides (Vision §38). For the
+"pydantic" provider the perceiver asks for structured claims (PerceptionClaim) so the
+extraction lands in schema instead of drifting between text and JSON.
 
 The secret stays in the environment. `build_perceiver` (what the UI calls) takes only
 a provider, model, and optional endpoint from the page; the API key is read from
@@ -29,11 +31,16 @@ from jarvis.infrastructure.language_model_registry import available, build_langu
 from jarvis.infrastructure.llm_companion_perception import LlmCompanionPerception
 from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_model
 from jarvis.infrastructure.llm_document_editor import LlmDocumentEditor
-from jarvis.infrastructure.llm_perception import LlmPerception
+from jarvis.infrastructure.llm_perception import (
+    PERCEPTION_INSTRUCTIONS,
+    LlmPerception,
+    PerceptionClaim,
+)
 from jarvis.infrastructure.llm_reasoner import LlmReasoner
 from jarvis.infrastructure.llm_response_renderer import LlmResponseRenderer
 from jarvis.infrastructure.openai_compatible_embedder import OpenAiCompatibleEmbedder
 from jarvis.infrastructure.provider_settings import ProviderSettings
+from jarvis.infrastructure.pydantic_ai_model import PydanticAiModel
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.silent_document_editor import SilentDocumentEditor
@@ -49,6 +56,9 @@ _DEFAULT_EMBED_BASE_URL = "http://localhost:11434/v1"
 # Provider names that mean "no LLM in the judgment": use the keyword rule (Vision §38).
 KEYWORD = "keyword"
 _OFFLINE: frozenset[str] = frozenset({"", KEYWORD, "scripted", "stub"})
+# Provider whose perceiver asks for *structured* claims (Vision §38, D7): the Pydantic
+# AI adapter extracts candidate evidence in schema instead of plain text.
+_STRUCTURED_PERCEPTION = "pydantic"
 
 
 def available_providers() -> tuple[str, ...]:
@@ -100,7 +110,14 @@ def perceiver_from_settings(settings: ProviderSettings) -> PerceptionSource:
             f"a model id is required for provider {settings.provider!r} "
             "(e.g. llama-3.3-70b)"
         )
-    model = build_language_model(settings)
+    if settings.provider == _STRUCTURED_PERCEPTION:
+        model = PydanticAiModel(
+            settings,
+            instructions=PERCEPTION_INSTRUCTIONS,
+            output_type=list[PerceptionClaim],
+        )
+    else:
+        model = build_language_model(settings)
     return LlmPerception(model, provider=settings.provider, model_name=settings.model)
 
 

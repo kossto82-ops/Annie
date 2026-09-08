@@ -18,6 +18,7 @@ from jarvis.infrastructure.language_model_registry import (
 from jarvis.infrastructure.llm_perception import LlmPerception
 from jarvis.infrastructure.openai_compatible_model import OpenAiCompatibleModel
 from jarvis.infrastructure.provider_settings import ProviderSettings
+from jarvis.infrastructure.pydantic_ai_model import PydanticAiModel
 from jarvis.infrastructure.scripted_language_model import ScriptedLanguageModel
 
 
@@ -60,6 +61,21 @@ class TestRegistry:
     def test_a_local_slm_is_just_another_endpoint(self) -> None:
         model = build_language_model(ProviderSettings(provider="ollama", model="llama3"))
         assert isinstance(model, OpenAiCompatibleModel)
+
+    def test_the_pydantic_ai_provider_builds_its_adapter_offline_first(self) -> None:
+        # Building only constructs the adapter: no import of pydantic-ai, no network.
+        model = build_language_model(
+            ProviderSettings(
+                provider="pydantic",
+                model="qwen2.5:7b",
+                base_url="http://localhost:11434/v1",
+            )
+        )
+        assert isinstance(model, PydanticAiModel)
+        assert isinstance(model, LanguageModel)
+
+    def test_pydantic_is_known_out_of_the_box(self) -> None:
+        assert "pydantic" in available()
 
     def test_an_unknown_provider_is_a_clear_error(self) -> None:
         with pytest.raises(ValueError, match="unknown language-model provider"):

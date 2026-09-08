@@ -15,7 +15,7 @@ decides. A model that returns nothing usable yields no evidence (honest silence,
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
@@ -23,7 +23,21 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.json_extraction import extract_json_array
 from jarvis.infrastructure.language_model import LanguageModel
 
-_INSTRUCTIONS = (
+
+class PerceptionClaim(TypedDict, total=False):
+    """One candidate factual claim a text asserts (Vision §38).
+
+    Kept *optional* on purpose: a structured model output may omit a key, and the
+    downstream parser (`_claim_to_evidence`) drops exactly the incomplete claim and
+    keeps the rest -- the same tolerance the plain-text path has always had.
+    """
+
+    content: str
+    supports: bool
+    weight: float
+
+
+PERCEPTION_INSTRUCTIONS = (
     "Read the observation and extract the factual claims it makes. Respond with "
     "ONLY a JSON array. Each element is an object with keys: "
     '"content" (string: the claim), '
@@ -61,7 +75,7 @@ class LlmPerception:
         text = observation.strip()
         if not text:
             return ()
-        raw = self._model.complete(f"{_INSTRUCTIONS}\n\nObservation: {text}")
+        raw = self._model.complete(f"{PERCEPTION_INSTRUCTIONS}\n\nObservation: {text}")
         return self._to_evidence(raw)
 
     @staticmethod

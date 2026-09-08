@@ -10,6 +10,10 @@ Known out of the box (all via the generic OpenAI-compatible adapter):
 OpenAI, Groq, xAI/Grok, DeepSeek, Moonshot/Kimi, OpenRouter, Together, Mistral,
 Perplexity, NVIDIA (NIM), a local Ollama, a local LM Studio -- plus "openai-compatible"
 for any other endpoint by `base_url`, and "scripted" (the offline stub, the default).
+
+"pydantic" is the Pydantic AI adapter: it drives the same model id / endpoint through a
+Pydantic AI `Agent` (opt-in, dependency imported lazily), so structured output can back
+perception (Vision §38) while every other seam keeps its plain-text behaviour.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from dataclasses import replace
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.openai_compatible_model import OpenAiCompatibleModel
 from jarvis.infrastructure.provider_settings import ProviderSettings
+from jarvis.infrastructure.pydantic_ai_model import PydanticAiModel
 from jarvis.infrastructure.scripted_language_model import ScriptedLanguageModel
 
 # Provider name -> its default OpenAI-compatible endpoint. Extend freely; a user can
@@ -48,6 +53,7 @@ _FACTORIES: dict[str, ProviderFactory] = {
     "scripted": lambda settings: ScriptedLanguageModel(),
     "stub": lambda settings: ScriptedLanguageModel(),
     "openai-compatible": lambda settings: OpenAiCompatibleModel(settings),
+    "pydantic": lambda settings: PydanticAiModel(settings),
 }
 
 

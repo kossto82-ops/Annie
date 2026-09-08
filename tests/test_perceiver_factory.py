@@ -13,6 +13,7 @@ from jarvis.infrastructure.perceiver_factory import (
     build_perceiver,
     describe,
 )
+from jarvis.infrastructure.pydantic_ai_model import PydanticAiModel
 
 
 class TestAvailableProviders:
@@ -20,6 +21,7 @@ class TestAvailableProviders:
         providers = available_providers()
         assert providers[0] == "keyword"
         assert "groq" in providers  # a registered real provider
+        assert "pydantic" in providers  # the Pydantic AI adapter (opt-in, real)
         # the offline stubs are folded into "keyword", never offered separately
         assert "scripted" not in providers
         assert "stub" not in providers
@@ -39,6 +41,14 @@ class TestDescribe:
             "kind": "llm",
             "provider": "ollama",
             "model": "llama-3.3-70b",
+        }
+
+    def test_it_labels_the_pydantic_ai_perceiver(self) -> None:
+        source = build_perceiver("pydantic", "qwen2.5:7b", environ={})
+        assert describe(source) == {
+            "kind": "llm",
+            "provider": "pydantic",
+            "model": "qwen2.5:7b",
         }
 
     def test_a_bare_custom_source_is_labelled_generically(self) -> None:
@@ -71,3 +81,12 @@ class TestBuildPerceiver:
         except ValueError:
             return
         raise AssertionError("expected a ValueError for a real provider with no model")
+
+    def test_the_pydantic_provider_builds_a_structured_perceiver_offline(self) -> None:
+        # No network: building just wires the Pydantic AI adapter + claim schema.
+        source = build_perceiver("pydantic", "qwen2.5:7b", environ={})
+        assert isinstance(source, LlmPerception)
+        model = getattr(source, "_model", None)
+        assert isinstance(model, PydanticAiModel)
+        assert model is not None and model.instructions is not None
+        assert model.output_type is not None  # claims arrive in schema (Vision §38)
