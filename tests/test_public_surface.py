@@ -17,6 +17,7 @@ _PUBLIC_METHODS = (
     "perceive_all_about_companion",
     "ask_about",
     "resolve",
+    "transcribe",
     # Reason
     "think",
     "consider",

@@ -31,3 +31,14 @@ class ProviderSettings:
     # Sent only when set, so it stays provider-agnostic; "low" makes such models reliably
     # return content (not spend it all on hidden reasoning) and uses far fewer tokens.
     reasoning_effort: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SttSettings:
+    """Everything needed to build the ear for one speech-to-text provider."""
+
+    provider: str  # a registered name (e.g. "openai", "groq", "openai-compatible")
+    model: str  # the transcription model id (e.g. "whisper-1", "whisper-large-v3")
+    base_url: str | None = None  # overrides the provider's default endpoint
+    api_key: str | None = None  # bearer credential; omit for keyless local engines
+    timeout: float = 30.0

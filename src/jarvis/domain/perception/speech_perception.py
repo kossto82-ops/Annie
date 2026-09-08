@@ -5,7 +5,8 @@ its mirror on the input side -- the ear that turns a *spoken* utterance into tex
 Jarvis can treat as an observation (Vision §3, §32, §38). Where the browser already
 does speech-to-text (the Web Speech API), a provider can be an identity pass-through
 (``EchoSpeechPerception``) that simply returns the already-transcribed text; a richer
-provider could transcribe raw audio behind the same seam.
+provider can transcribe raw audio via :meth:`transcribe_audio` behind the same seam
+(e.g. a Whisper backer at the command center).
 
 Like every capability, this is a *producer*, not a decision-maker: it only delivers
 text into the core. It never decides what Jarvis believes (D6, Vision §38), and a
@@ -29,4 +30,8 @@ class SpeechPerceptionSource(Protocol):
 
     def transcribe(self, utterance: str) -> str:
         """Return the transcribed text of ``utterance`` -- '' when it cannot hear."""
+        ...
+
+    def transcribe_audio(self, audio: bytes) -> str:
+        """Transcribe raw audio bytes -- '' when this ear cannot hear raw audio."""
         ...

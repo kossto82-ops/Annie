@@ -2126,12 +2126,35 @@ def _google_oauth_callback(jarvis: Jarvis, path: str) -> Response:
     return Response(200, "text/html; charset=utf-8", body)
 
 
+def _transcribe(jarvis: Jarvis, audio: bytes) -> Response:
+    """Transcribe raw audio with the wired ear and answer as JSON.
+
+    A missing ear is a clean 400 (configuration, not a crash); a provider/network
+    failure is a structured 502 so the server survives and the client sees what
+    happened. Success returns ``{"text": …}``.
+    """
+    if jarvis.speech_perception is None:
+        return Response(
+            400,
+            "application/json; charset=utf-8",
+            _json({"error": "no speech capability configured; set_speech_perception"}),
+        )
+    try:
+        text = jarvis.transcribe(audio)
+    except Exception as error:  # noqa: BLE001 -- a loud, structured provider error
+        message = f"transcription failed: {error}"
+        return Response(502, "application/json; charset=utf-8", _json({"error": message}))
+    return Response(200, "application/json; charset=utf-8", _json({"text": text}))
+
+
 def route(jarvis: Jarvis, method: str, path: str, body: bytes) -> Response:
     """Decide the response for one HTTP request — pure, no socket (Vision §30).
 
     Serves the console page at ``/``, the live snapshot at ``GET /api/state``, and a
-    command at ``POST /api/<command>``. This is the whole HTTP contract, testable
-    without binding a port; :mod:`jarvis.interface.server` only moves the bytes.
+    command at ``POST /api/<command>``. ``POST /api/speech/transcribe`` takes raw
+    audio bytes (not JSON) and returns the transcription. This is the whole HTTP
+    contract, testable without binding a port; :mod:`jarvis.interface.server` only
+    moves the bytes.
     """
     clean = path.split("?", 1)[0]
     if method == "GET" and clean in ("/", "/index.html"):
@@ -2141,6 +2164,8 @@ def route(jarvis: Jarvis, method: str, path: str, body: bytes) -> Response:
     # console with a small page (this is a browser GET, not a JSON API call).
     if method == "GET" and clean == "/api/auth/google/callback":
         return _google_oauth_callback(jarvis, path)
+    if clean == "/api/speech/transcribe":
+        return _transcribe(jarvis, body)  # raw audio in, JSON out (live STT ear)
     if clean.startswith("/api/"):
         command = clean[len("/api/") :].strip("/") or "state"
         payload = _parse(body) if method == "POST" else {}

@@ -613,6 +613,20 @@ class Jarvis:
             )
         return self._speech_perception.transcribe(utterance)
 
+    def transcribe(self, audio: bytes) -> str:
+        """Transcribe raw audio into text through the ear seam (the live STT path).
+
+        The default ear passes already-transcribed text through (browser Web
+        Speech), so it returns '' for raw audio; wiring a live transcriber (e.g. a
+        Whisper backer) turns audio into text here -- an *observation* to feed
+        through the ordinary perceiver, never a belief or a decision (D6, §38).
+        """
+        if self._speech_perception is None:
+            raise RuntimeError(
+                "no speech capability configured; set_speech_perception"
+            )
+        return self._speech_perception.transcribe_audio(audio)
+
     @property
     def knowledge_source(self) -> KnowledgeSource | None:
         """The deliberate-consult seam (Vision §37, §38), or ``None`` when offline.

@@ -27,7 +27,10 @@ from jarvis.domain.services.model_compare import ModelComparator
 from jarvis.infrastructure.agent_reach_source import build_web_source, llm_search_from_model
 from jarvis.infrastructure.calendar_store import build_calendar_store
 from jarvis.infrastructure.document_store import build_document_store
-from jarvis.infrastructure.env_settings import settings_from_env
+from jarvis.infrastructure.env_settings import (
+    settings_from_env,
+    speech_perception_from_env,
+)
 from jarvis.infrastructure.filesystem_tool import FileSystemTool
 from jarvis.infrastructure.google_calendar import build_google_calendar_store
 from jarvis.infrastructure.language_model import LanguageModel
@@ -46,7 +49,6 @@ from jarvis.infrastructure.perceiver_factory import (
     renderer_from_settings,
 )
 from jarvis.infrastructure.provider_settings import ProviderSettings
-from jarvis.infrastructure.speech_perception import EchoSpeechPerception
 from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
 from jarvis.infrastructure.task_agent_source import build_task_agent
 from jarvis.infrastructure.task_scheduler import build_task_scheduler
@@ -179,10 +181,12 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
         )
     jarvis.set_voice(renderer_from_settings(settings))  # reply in the user's language
     # The ear (the input mirror of the mouth): the command center's browser does
-    # speech-to-text with the Web Speech API, so Jarvis's default ear passes the
-    # already-transcribed text straight through. This is what makes the "perceive
-    # speech" capability live and earned.
-    jarvis.set_speech_perception(EchoSpeechPerception())
+    # speech-to-text with the Web Speech API as the default, so Jarvis's ear passes
+    # the already-transcribed text straight through. When ``JARVIS_STT_*`` is
+    # configured, the ear becomes a live speech-to-text backer (e.g. Whisper) and
+    # ``POST /api/speech/transcribe`` turns raw audio into text. Either way the
+    # "perceive speech" capability is live and earned.
+    jarvis.set_speech_perception(speech_perception_from_env())
     # Upgrade recall to meaning-based when an embedder is configured (e.g. bge-m3 on a
     # local ollama), independent of the chat provider; otherwise recall stays lexical.
     embedder = build_embedder()

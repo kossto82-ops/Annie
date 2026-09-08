@@ -21,13 +21,17 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
+from jarvis.domain.perception.speech_perception import SpeechPerceptionSource
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_model
-from jarvis.infrastructure.provider_settings import ProviderSettings
+from jarvis.infrastructure.provider_settings import ProviderSettings, SttSettings
+from jarvis.infrastructure.speech_perception_registry import build_speech_perception
 
 _PREFIX = "JARVIS_LLM_"
 _OFFLINE_PROVIDERS = frozenset({"scripted", "stub"})
+_STT_PREFIX = "JARVIS_STT_"
+_STT_OFFLINE_PROVIDERS = frozenset({"echo", "stub", "scripted"})
 
 
 def settings_from_env(environ: Mapping[str, str] | None = None) -> ProviderSettings:
@@ -56,3 +60,29 @@ def language_model_from_env(environ: Mapping[str, str] | None = None) -> Languag
     when nothing is configured).
     """
     return build_language_model(settings_from_env(environ))
+
+
+def stt_settings_from_env(environ: Mapping[str, str] | None = None) -> SttSettings:
+    """Assemble `SttSettings` from `JARVIS_STT_*`. Defaults to the offline echo ear."""
+    env = environ if environ is not None else os.environ
+    provider = env.get(f"{_STT_PREFIX}PROVIDER", "echo").strip() or "echo"
+    model = (env.get(f"{_STT_PREFIX}MODEL") or "").strip()
+    if provider not in _STT_OFFLINE_PROVIDERS and not model:
+        raise ValueError(
+            f"{_STT_PREFIX}MODEL is required for provider {provider!r} "
+            f"(set it, e.g. {_STT_PREFIX}MODEL=whisper-1)"
+        )
+    return SttSettings(
+        provider=provider,
+        model=model,
+        base_url=(env.get(f"{_STT_PREFIX}BASE_URL") or None),
+        api_key=(env.get(f"{_STT_PREFIX}API_KEY") or None),
+        timeout=float(env.get(f"{_STT_PREFIX}TIMEOUT", "30")),
+    )
+
+
+def speech_perception_from_env(
+    environ: Mapping[str, str] | None = None,
+) -> SpeechPerceptionSource:
+    """Build the configured ear from the environment (the offline echo by default)."""
+    return build_speech_perception(stt_settings_from_env(environ))
