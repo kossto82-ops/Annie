@@ -190,6 +190,9 @@ Increments 111–112).
   `SqliteTaskScheduler` back the calendar/notes/task-scheduler Protocols in their root's `jarvis.db`; the
   `JARVIS_*_ROOT` builders (`calendar_store`/`notes_store`/`task_scheduler`) serve them, while the io-injectable
   `Local*` adapters stay for offline tests and direct use (D8).
+- Decision provenance joined the database (Increment 152): `SqliteEpisodeTrace` keeps the trace in a seq-ordered
+  `trace_events` table in the same `jarvis.db` as the memory, so `Jarvis.database()` leaves no memory surface
+  file-backed (the user's `docs` bytes and the `.env` config are the only deliberate files).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions

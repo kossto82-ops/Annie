@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-07 (Increment 151)
+Last updated: 2026-09-08 (Increment 152)
 
 ---
 
@@ -89,8 +89,9 @@ src/jarvis/
     value_objects/                          evidence/confidence/goal/action/… + recalled memory, inference,
                                            capability, note, email, calendar event, scheduled task, tool specs,
                                            retrieved document, research report, model run
-  (Jarvis.persistent wires JSON stores: beliefs, episodes, companion, actions, reversibility,
-   goals, subgoals, refutations, capabilities, needs + trace.jsonl + capability/edge config)
+(Jarvis.persistent wires JSON stores: beliefs, episodes, companion, actions, reversibility,
+    goals, subgoals, refutations, capabilities, needs + trace.jsonl + capability/edge config;
+    Jarvis.database wires the whole memory *and* the trace into one jarvis.db -- docs stay as bytes)
 examples/                                8 runnable tours (main_loop, goal_arc, goal_parts, perceiving,
                                          conversation, resolving, reflecting, command_center)
 tests/                                   75 test modules / 1002 tests mirroring the above
@@ -1845,6 +1846,16 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   direct use and offline tests (D8), unmodified.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1212 passed, 3 skipped.
 
+### Increment 152 — decision provenance joins the database ✅ (2026-09-08)
+- `SqliteEpisodeTrace` appends each cognitive event to a ``trace_events`` table (seq-ordered, keyed by
+  correlation) in the same ``jarvis.db``, replays it on startup, and stays tolerant like its JSONL twin
+  (corrupt rows and unknown event types are skipped). ``Jarvis.database()`` now keeps the whole memory
+  *and* its provenance in one database -- the last file-backed surface of the memory system. The durable
+  ``JsonEpisodeTrace`` remains the twin under ``Jarvis.persistent()``; the only files intentionally left
+  on disk under the database twin are the user's documents (bytes under ``docs``) and the ``.env`` LLM
+  config.
+- Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1219 passed, 3 skipped.
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2199,6 +2210,8 @@ seam.)*
 - **SQLite across the edge seams** (Increment 151): the calendar / notes / task-scheduler adapters
   (`SqliteCalendarStore`, `SqliteNotesStore`, `SqliteTaskScheduler`) back the same Protocols in their
   root's `jarvis.db`, and the env-root builders adopt them at the command center.
+- **Decision provenance joins the database** (Increment 152): `SqliteEpisodeTrace` keeps the trace in the
+  same `jarvis.db` as the memory, so `Jarvis.database()` leaves no memory surface file-backed.
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
@@ -2206,7 +2219,8 @@ seam.)*
 
 **Still open / honest gaps:**
 - The JSON stores and `Jarvis.persistent()` remain as the file-backed twin (unchanged, still first-class); the
-  command-center composition root now goes through SQLite when a `home` is set.
+  command-center composition root now goes through SQLite when a `home` is set, and under `Jarvis.database()`
+  the only files intentionally left on disk are the user's documents (`docs` bytes) and the `.env` LLM config.
 - `TemporalStability` is span-based for both beliefs *and* hypotheses now (Increment 146) — no
   count/recency weighting beyond the opt-in decay policy; hypotheses narrate their narrowness without
   it affecting ranking or ties.
@@ -2233,8 +2247,9 @@ persistence across restart (crash-safe), perception seam + streams + contested-b
 connections, the full reflective cycle, trace persistence, decay forgetting, semantic recall, provisional
 reasoning + confirmation, the five edge capability seams + tool registry, and the command center
 dashboard/sphere/catalog surface, the files/documents surface (accept, recall, search, chip, read, folders),
-live-tunable cognition thresholds, the root-injectable per-belief weighting policy, and a real SQLite database
-behind the repository contracts (`Jarvis.database()`) extended across the calendar/notes/tasks edge seams.
+live-tunable cognition thresholds, the root-injectable per-belief weighting policy, and a real SQLite
+database behind the repository contracts (`Jarvis.database()`) extended across the calendar/notes/tasks
+edge seams and the decision-provenance trace (Increments 150-152).
 
 ---
 

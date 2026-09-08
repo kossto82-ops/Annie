@@ -387,6 +387,11 @@ contracts, not a new storage API.
   `jarvis.db` inside their `JARVIS_*_ROOT`, and the environment builders (`build_calendar_store`,
   `build_notes_store`, `build_task_scheduler`) serve them; the io-injectable `Local*` adapters remain
   available for offline tests and direct use, unmodified (D8).
+- Decision provenance joined the same database (Increment 152): `SqliteEpisodeTrace` appends each
+  cognitive event to a seq-ordered `trace_events` table in the same `jarvis.db` and replays it on startup
+  (tolerant of corrupt rows and unknown event types, like the JSONL twin). Under `Jarvis.database()` the
+  only files intentionally left on disk are the user's documents (`docs` bytes) and the `.env` LLM config;
+  the durable JSONL `JsonEpisodeTrace` and the JSON stores remain the twins under `Jarvis.persistent()`.
 
 ## UI boundary
 

@@ -51,14 +51,15 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 151 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is around Increment 152 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
 beliefs and hypothesis sets sharing one `CognitiveEpisode` shape (Increment 147), record documented
 document ownership (Increment 148), chat editing of documents behind a `DocumentEditor` proposal seam
 (Increment 149), a real SQLite database behind the repository contracts via `Jarvis.database()` (D10,
-Increment 150) extended across the calendar/notes/tasks edge seams (Increment 151), and
+Increment 150) extended across the calendar/notes/tasks edge seams (Increment 151) and the
+decision-provenance trace (Increment 152; `Jarvis.database()` leaves no memory surface file-backed), and
 the capability edges (web/research/compare/tools/notes/mail/calendar/tasks/agent/speech seam) are
 implemented. Files/documents
 are a first-class surface (accept, recall, search, chip in chat, read, folder-aware nesting). The command
@@ -67,11 +68,11 @@ a root-injectable per-belief weighting policy, and a capability/tool surface; a 
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 
-The most useful next increments currently identified are a live STT backer behind the speech seam,
-more §15 energy modelling (charge deliberations), or extending the SQLite store further across persistence
-(the DB behind the repository contracts landed in Increment 150, the command-center composition root adopts
-it, and the calendar/notes/tasks edge seams followed in Increment 151). However, **do not assume
-this is mandatory**: follow the user's current task.
+The most useful next increments currently identified are a live STT backer behind the speech seam or
+more §15 energy modelling (charge deliberations). The SQLite thread is complete: the DB behind the
+repository contracts landed in Increment 150, the command-center composition root adopts it, the
+calendar/notes/tasks edge seams followed in Increment 151, and the decision-provenance trace joined in
+Increment 152. However, **do not assume this is mandatory**: follow the user's current task.
 
 ## How to work
 
