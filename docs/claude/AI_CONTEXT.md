@@ -91,7 +91,21 @@ nothing forgets unless a decaying policy is explicitly wired in (Increment 113).
 - `LanguageModel` is provider-agnostic; `LlmPerception` uses it to extract candidate evidence, not to
   decide beliefs. `OpenAiCompatibleModel` + the provider registry support many remote and local
   endpoints (OpenAI, Groq, Grok, DeepSeek, Kimi, Mistral, Perplexity, OpenRouter, Together, NVIDIA NIM,
-  local Ollama/LM Studio, `openai-compatible` by `base_url`).
+  local Ollama/LM Studio, `openai-compatible` by `base_url`). Provider `pydantic` (opt-in,
+  `pip install jarvis[live]`) drives the same model/endpoint through a Pydantic AI `Agent` behind the
+  same seam; its perceiver asks for structured `PerceptionClaim`s (Vision §38), reasoner/renderer stay
+  plain-text. The model-driven `PydanticAiTaskAgent` is a `TaskAgent` whose tool
+  sequence is chosen by a Pydantic AI `Agent` over the sandboxed `ToolRegistry`: the
+  registry still holds the gate (permission/approval) and the trace, and outcomes are
+  narrated from recorded calls, never the model's closing words (D6/Vision §37).
+  `build_task_agent` (Phase 3) uses this executor for decided multi-step tasks when a
+  live `pydantic` provider is configured at the composition root, and falls back to the
+  deterministic decided-script `ToolRegistryTaskAgent` otherwise (delegation stays
+  behind the `TaskAgent` seam; cognition stays in the core). Phase 5 added the
+  evaluation pieces: `Usage` token accounting on the pydantic adapters, a decided-script
+  delegation fallback on a provider outage, and reasoner-level streaming (`infer_stream`
+  / `Jarvis.reason_stream`, which advances the reasoning span only on a completed
+  stream).
 - `env_settings` resolves providers/keys from `JARVIS_LLM_*` (keys per provider `JARVIS_LLM_KEY_<PROVIDER>`,
   models per provider `JARVIS_LLM_MODEL_<PROVIDER>`); the command center can persist them to `.env`
   (write-only secret discipline). Embeddings use `JARVIS_EMBED_*` (independent of the chat provider).
