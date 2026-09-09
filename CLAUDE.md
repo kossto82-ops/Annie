@@ -51,7 +51,7 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 157 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is around Increment 158 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
@@ -80,7 +80,10 @@ stance); live-provider instrumentation (Increment 156: `InstrumentedLanguageMode
 and the command center's `provider` snapshot block — bookkeeping only); provider guardrails
 (Increment 157: a refusal — `finish_reason='content_filter'` or decline text, EN/ES — becomes honest
 silence `""` via `guardrail.py`, wired into both live adapters' `complete`/`stream`, §37's second
-enforcement point beside the failure path). A live LLM provider is
+enforcement point beside the failure path); the MCP client direction
+(Increment 158: a live MCP server's tools land in the same gated `ToolRegistry` as `EXTERNAL_ACTION`
+`ToolSpec`s via a sync `McpTransport` seam + lazy `PydanticAiMcpToolset`, wired from `JARVIS_MCP_CONFIG`
+inside `build_sandboxed_registry`). A live LLM provider is
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 
@@ -89,10 +92,11 @@ LLM/agent/reasoner
 seams shipped in Increment 153 and stays
 gated — future live providers should implement the same seams, never a second bypass. The live-STT thread
 is complete too (Increment 154). Instrumentation landed as Increment 156 (pydantic-ai Phase 4, part 1);
-provider guardrails as Increment 157 (Phase 4, part 2a). The remaining parked piece is the pydantic-ai
-Phase 4 part 2 MCP adapter (client direction — external toolsets into the `ToolRegistry` as `ToolSpec`s).
+provider guardrails as Increment 157 (Phase 4, part 2a); the MCP adapter (client direction — external
+toolsets into the `ToolRegistry` as `ToolSpec`s) as Increment 158 (Phase 4, part 2b). The pydantic-ai
+Phase 4 thread is therefore finished in both its shipped parts and its client direction.
 However,
-**do not assume this is mandatory**: follow the user's current
+**do not assume any thread is mandatory**: follow the user's current
 task.
 
 ## How to work

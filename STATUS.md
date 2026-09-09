@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-09 (Increment 157)
+Last updated: 2026-09-09 (Increment 158)
 
 ---
 
@@ -1970,6 +1970,37 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
 - **Remaining in Phase 4 part 2:** the MCP adapter (client direction — consume external toolsets into
   the `ToolRegistry` as `ToolSpec`s, registry stays the gate). Follows the same seams; the fastmcp
   *server* extra is not installed, which only matters if an in-process MCP server is ever needed.
+
+### Increment 158 — the MCP adapter, client direction: external toolsets as `ToolSpec`s ✅ (2026-09-09)
+- Phase 4 part 2b is in: a live MCP *server's* tools now land in Jarvis's own `ToolRegistry` as ordinary
+  `ToolSpec` entries. The registry still holds the gate — every MCP tool is declared
+  `PermissionLevel.EXTERNAL_ACTION`, so the controlled-autonomy policy demands explicit approval before
+  an externally-visible call runs, and every run is observed as a `ToolCall` like any other tool.
+- New `mcp_tools.py` (infrastructure, no new dependency):
+  - `McpToolInfo` + `McpTransport` — a **sync** seam (offline-fakeable, D8) over one live MCP session;
+    `list_tools` discovers the server's tool shape, `call` executes one op by wire name and raises on a
+    server or protocol error (honest failure, never a fabricated result).
+  - `PydanticAiMcpToolset` — the live backer, wrapping a pydantic-ai `MCPToolset` (imported lazily),
+    bridging the async world to the sync seam (fresh worker-thread loop when run inside an event loop).
+  - `McpTool` — a domain `Tool` that forwards `run` to the transport; `args_from_schema` /
+    `info_from_tool` / `extract_result_text` map MCP JSON-schema properties → arg descriptions and an
+    MCP `CallToolResult` → plain text (content blocks + structured payload).
+  - `register_mcp_tools` — registers each discovered tool as a namespaced spec (e.g. `repo.status`);
+    `build_mcp_toolset` / `register_mcp_config` read a pydantic-ai `mcpServers` config and wire one
+    server, returning `()`/`None` when `pydantic-ai` is not installed (offline Jarvis keeps working).
+- Composition wiring: `JARVIS_MCP_CONFIG` pointing at an `mcpServers` config adds that server's tools
+  alongside the sandboxed filesystem/echo tools inside `build_sandboxed_registry`, so both task-agent
+  executors (decided-script and model-driven) share the same gated tool set; a broken/unreachable MCP
+  edge is `contextlib.suppress`ed and never disables Jarvis's local tools.
+- Tests: new `tests/infrastructure/test_mcp_tools.py` (21 tests) covering spec/args mapping,
+  approval-gated runs, honest failures, the sync↔async bridge over a fake async toolset, config
+  wiring, and `pydantic-ai`-absent composition. All offline/deterministic (D8); the fastmcp *server*
+  extra is still not installed, so live-MCP tests remain out of scope by design.
+- Gates: ruff clean · pyright strict 0 errors · pytest 1339 passed, 3 skipped.
+- **Remaining in Phase 4 part 2:** nothing in the client direction — the adapter ships behind the live
+  seams. (The fastmcp *server* extra is still not installed, which only matters if an in-process MCP
+  server / round-trip test is ever wanted.) Next in the backlog after Phase 4: live STT nivel 2
+  (Whisper) refinements and real-instruction execution.
 
 ---
 

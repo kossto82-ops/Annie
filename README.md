@@ -97,6 +97,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `set_energy_budget(budget)` / `set_deliberation_value(value)` — tune how hard it thinks. `energy_spent()` / `energy_remaining()` / `is_conserving()` / `deliberation_value()` read it back.
 - `provider_stats()` — live-bookkeeping across the observable model/agent edges (calls, honest successes, wall-clock time, tokens); never influences a decision.
 - Provider guardrails — a live provider that *declines* (safety filter, "I can't help", "no puedo ayudarte") yields honest silence, not a refusal dressed up as an answer (Vision §37).
+- MCP client direction — tools from a live MCP server (`JARVIS_MCP_CONFIG`) join the gated `ToolRegistry` as `EXTERNAL_ACTION` specs, namespaced (`repo.status`) and approval-gated like any other tool.
 
 **Model of its companion**
 - `observe_companion(trait, evidence)` — evolve a belief about the companion.

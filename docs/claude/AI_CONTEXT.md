@@ -227,6 +227,13 @@ Increments 111–112).
   guards `complete` and `stream` (SSE `content_filter` ends the stream; already-flowed deltas are
   forward-only); `PydanticAiModel` guards the serialised reply and wires the ≥2.41
   `RaiseContentFilterError` capability when present (feature-detected, no dependency).
+- MCP client direction (Increment 158, pydantic-ai Phase 4 part 2b): `mcp_tools.py` consumes a live MCP
+  *server's* tools into Jarvis's own gated `ToolRegistry` — a sync `McpTransport` seam (offline-fakeable),
+  `PydanticAiMcpToolset` as the lazy live backer (async↔sync bridge), `McpTool` forwarding runs, and
+  `register_mcp_tools`/`register_mcp_config`/`build_mcp_toolset` wiring namespaced tools (`repo.status`).
+  Every MCP spec is `PermissionLevel.EXTERNAL_ACTION`, so approval is required and each call is an
+  observed `ToolCall`. `JARVIS_MCP_CONFIG` adds the server's tools inside `build_sandboxed_registry`;
+  absent `pydantic-ai` or a broken edge returns `()`/`None` (offline Jarvis untouched).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions
