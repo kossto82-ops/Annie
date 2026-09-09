@@ -140,6 +140,11 @@ from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
+from jarvis.infrastructure.provider_stats import (
+    InMemoryInstrumentation,
+    InstrumentationStore,
+    ProviderSnapshot,
+)
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
@@ -236,8 +241,16 @@ class Jarvis:
         cognitive_knobs: CognitiveKnobs | None = None,
         default_belief_policy: EvidenceWeightingPolicy | None = None,
         document_editor: DocumentEditor | None = None,
+        instrumentation: InstrumentationStore | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
+        # Live-provider instrumentation (Phase 4): a shared collector that recorded
+        # runs of the observable `LanguageModel` / `TaskAgent` edges report into. None
+        # by default -> a bare Jarvis stays offline-first; the command-center
+        # composition root wires one and surfaces it through `provider_stats()`.
+        self._instrumentation: InstrumentationStore = (
+            instrumentation or InMemoryInstrumentation()
+        )
         # The per-belief default source policy for every belief Jarvis creates
         # (goals, actions, needs, companion traits, self-observed habits). None ->
         # the historical default; ``set_belief_policy`` swaps it at runtime.
@@ -915,6 +928,16 @@ class Jarvis:
         self._task_agent = agent
         if self._external_providers_auto:
             self._refresh_providers()
+
+    def provider_stats(self) -> ProviderSnapshot:
+        """Live instrumentation across the observable model/agent edges (Phase 4).
+
+        A read-only aggregate of every run the shared collector has observed: how
+        many live calls, how many were honest successes, total and slowest wall-clock
+        time, and tokens consumed. It is bookkeeping only -- it never influences a
+        reply or a decision.
+        """
+        return self._instrumentation.snapshot()
 
     def delegate(self, task: str) -> TaskResult:
         """Run one delegated material task through the agent capability.

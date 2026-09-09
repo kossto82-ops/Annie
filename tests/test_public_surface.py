@@ -55,6 +55,7 @@ _PUBLIC_METHODS = (
     "set_energy_budget",
     "deliberation_value",
     "set_deliberation_value",
+    "provider_stats",
     "knobs",
     "set_knobs",
     "default_belief_policy",

@@ -35,6 +35,7 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
+from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.infrastructure.capability_registry import build_default_registry
@@ -74,6 +75,41 @@ class TestSnapshot:
         energy = snapshot(jarvis)["energy"]
         assert isinstance(energy, dict)
         assert energy["remaining"] == 10
+
+    def test_provider_stats_are_reported_all_zero_when_offline(self) -> None:
+        state = snapshot(Jarvis())
+        provider = cast("dict[str, object]", state["provider"])
+        assert provider["calls"] == 0
+        assert provider["successes"] == 0
+        assert provider["failures"] == 0
+        assert provider["tokens"] == 0
+
+    def test_provider_stats_follow_the_instrumented_delegation_edge(self) -> None:
+        from jarvis.infrastructure.instrumented_task_agent import (
+            InstrumentedTaskAgent,
+        )
+        from jarvis.infrastructure.provider_stats import InMemoryInstrumentation
+
+        class _ScriptedAgent:
+            def run_task(self, task: str) -> TaskResult:
+                return TaskResult(
+                    task=task,
+                    summary="done",
+                    success=task.strip() != "fail",
+                )
+
+        store = InMemoryInstrumentation()
+        agent = InstrumentedTaskAgent(_ScriptedAgent(), instrumentation=store)  # type: ignore[arg-type]
+        jarvis = Jarvis(task_agent=agent, instrumentation=store)
+        jarvis.delegate("write the report")
+        jarvis.delegate("fail")
+
+        provider = cast("dict[str, object]", snapshot(jarvis)["provider"])
+        assert provider["calls"] == 2
+        assert provider["successes"] == 1
+        assert provider["failures"] == 1
+        assert provider["agent_calls"] == 2
+        assert provider["chat_calls"] == 0
 
     def test_ready_lists_acquired_capabilities_that_are_live_backed(self) -> None:
         jarvis = _web_able_jarvis()

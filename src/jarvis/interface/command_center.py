@@ -101,6 +101,26 @@ class Response:
     body: bytes
 
 
+def _provider_stats(jarvis: Jarvis) -> dict[str, object]:
+    """Live-provider instrumentation (Phase 4): counts, time, tokens.
+
+    A read-only, deterministic view of the shared collector: how many observable
+    live calls, honest successes, wall-clock totals and consumed tokens. Zero when
+    no live edge has ever run (offline Jarvis stays all-zero, not surprising).
+    """
+    stats = jarvis.provider_stats()
+    return {
+        "calls": stats.calls,
+        "successes": stats.successes,
+        "failures": stats.failures,
+        "success_rate": round(stats.success_rate, 4),
+        "chat_calls": stats.chat_calls,
+        "agent_calls": stats.agent_calls,
+        "total_seconds": round(stats.total_seconds, 4),
+        "tokens": stats.usage.total_tokens,
+    }
+
+
 def snapshot(jarvis: Jarvis) -> Reply:
     """A JSON-ready snapshot of everything Jarvis currently holds (Vision §21, §30).
 
@@ -122,6 +142,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
             "conserving": jarvis.is_conserving(),
             "deliberation_value": jarvis.deliberation_value().value,
         },
+        "provider": _provider_stats(jarvis),
         "tunables": {
             "grounded_confidence": jarvis.knobs().grounded_confidence,
             "insight_confidence": jarvis.knobs().insight_confidence,

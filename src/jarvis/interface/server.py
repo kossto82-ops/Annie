@@ -33,6 +33,7 @@ from jarvis.infrastructure.env_settings import (
 )
 from jarvis.infrastructure.filesystem_tool import FileSystemTool
 from jarvis.infrastructure.google_calendar import build_google_calendar_store
+from jarvis.infrastructure.instrumented_task_agent import InstrumentedTaskAgent
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.llm_config_store import load_env_file
@@ -49,6 +50,7 @@ from jarvis.infrastructure.perceiver_factory import (
     renderer_from_settings,
 )
 from jarvis.infrastructure.provider_settings import ProviderSettings
+from jarvis.infrastructure.provider_stats import InMemoryInstrumentation
 from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
 from jarvis.infrastructure.task_agent_source import build_task_agent
 from jarvis.infrastructure.task_scheduler import build_task_scheduler
@@ -136,6 +138,14 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     documents_store = build_document_store(
         Path(home) / "docs" if home is not None else None
     )
+    # Live-provider instrumentation (Phase 4): one collector shared by the observable
+    # edges -- the delegated task agent -- is fed to Jarvis so `provider_stats()` can
+    # report what the live frontier has done. Offline edges record nothing at all.
+    instrumentation = InMemoryInstrumentation()
+    if task_agent is not None:
+        task_agent = InstrumentedTaskAgent(
+            task_agent, instrumentation=instrumentation
+        )
     if home is None:
         jarvis = Jarvis(
             perception=perception,
@@ -150,6 +160,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             task_agent=task_agent,
             notes_store=notes_store,
             documents_store=documents_store,
+            instrumentation=instrumentation,
         )
     else:
         base = Path(home)
@@ -178,6 +189,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             task_agent=task_agent,
             notes_store=notes_store,
             documents_store=documents_store,
+            instrumentation=instrumentation,
         )
     jarvis.set_voice(renderer_from_settings(settings))  # reply in the user's language
     # The ear (the input mirror of the mouth): the command center's browser does
