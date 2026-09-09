@@ -105,7 +105,10 @@ nothing forgets unless a decaying policy is explicitly wired in (Increment 113).
   evaluation pieces: `Usage` token accounting on the pydantic adapters, a decided-script
   delegation fallback on a provider outage, and reasoner-level streaming (`infer_stream`
   / `Jarvis.reason_stream`, which advances the reasoning span only on a completed
-  stream).
+  stream). Phase 4 (part 1) added live instrumentation: `InstrumentedLanguageModel` /
+  `InstrumentedTaskAgent` wrappers and a shared `InstrumentationStore` observe each
+  observable call (outcome, duration) behind the same seams, surfaced through
+  `Jarvis.provider_stats()` and the command center's `provider` snapshot block.
 - `env_settings` resolves providers/keys from `JARVIS_LLM_*` (keys per provider `JARVIS_LLM_KEY_<PROVIDER>`,
   models per provider `JARVIS_LLM_MODEL_<PROVIDER>`); the command center can persist them to `.env`
   (write-only secret discipline). Embeddings use `JARVIS_EMBED_*` (independent of the chat provider).
@@ -212,6 +215,12 @@ Increments 111–112).
   base_url) with an injectable transport (D8), `Jarvis.transcribe(audio)` and `POST /api/speech/transcribe`
   deliver raw audio, and the command center picks the ear from `JARVIS_STT_*` (`speech_perception_from_env`);
   the browser Web Speech default and the pure `SpeechPerceptionSource` contract are untouched.
+- Live-provider instrumentation (Increment 156, pydantic-ai Phase 4 part 1): `provider_stats`
+  (`provider_stats.py`) — `ProviderSnapshot`/`ProviderCall`/`InstrumentationStore` plus an in-memory
+  default collector — is fed by `InstrumentedLanguageModel` / `InstrumentedTaskAgent` wrappers over any
+  adapter (scripted/OpenAI-compatible/pydantic alike), wired only at the `create_jarvis` composition
+  root around the delegated task agent, and surfaced as `Jarvis.provider_stats()` and the command
+  center's `provider` snapshot block. Bookkeeping only; it never influences a reply or decision.
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions

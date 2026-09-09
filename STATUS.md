@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-09 (Increment 155)
+Last updated: 2026-09-09 (Increment 156)
 
 ---
 
@@ -1925,6 +1925,26 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   tripwire extended.
 - Gates: ruff clean · pyright strict 0 errors · pytest 1268 passed, 5 skipped (1 pre-existing pydantic-ai
   opt-in provider test fails in this environment — `pydantic_ai` not installed; identical at HEAD).
+
+### Increment 156 — provider instrumentation: live bookkeeping behind the seams (pydantic-ai Phase 4, part 1) ✅ (2026-09-09)
+- The live frontier became observable without becoming a decision-maker: a `provider_stats()` surface
+  reports how many calls the observable `LanguageModel` / model-driven `TaskAgent` edges made, how many
+  were honest successes, total/slowest wall-clock time, and tokens consumed — instrumentation only,
+  never influencing a reply or a choice (matches the Phase-5 `usage()` bookkeeping).
+- New `ProviderSnapshot` / `ProviderCall` / `InstrumentationStore` (frozen aggregate + protocol) with an
+  in-memory default collector in `provider_stats.py`; `InstrumentedLanguageModel` and
+  `InstrumentedTaskAgent` wrappers record one call per invocation (outcome, duration), sharing a store
+  so chat and delegated loops tally together per Jarvis. Both wrappers are universal: they work over the
+  scripted stub, OpenAI-compatible, and pydantic-ai adapters alike.
+- Wiring only at the composition root (`server.py`): one `InMemoryInstrumentation` wraps the delegated
+  task agent and feeds `Jarvis(instrumentation=...)`, so `create_jarvis` surfaces real live counts.
+  `Jarvis.provider_stats()` reads the shared store; absent it, a bare Jarvis still reports all-zero.
+- The command-center `snapshot` gained a `provider` block (calls/successes/failures/success_rate/
+  chat_calls/agent_calls/total_seconds/tokens); README Vocabulary and the public-surface tripwire
+  extended. `pydantic_ai` remains optional: the live integration test `importorskip`s it and skips
+  cleanly when absent (D7, D8).
+- Gates: ruff clean · pyright strict 0 errors · pytest 1302 passed, 3 skipped (pydantic-ai now installed,
+  so the previously-failing live-provider test passes; the 3 skips are the environment-only ones).
 
 ---
 
