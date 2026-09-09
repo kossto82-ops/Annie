@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-09 (Increment 156)
+Last updated: 2026-09-09 (Increment 157)
 
 ---
 
@@ -1945,6 +1945,31 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   cleanly when absent (D7, D8).
 - Gates: ruff clean · pyright strict 0 errors · pytest 1302 passed, 3 skipped (pydantic-ai now installed,
   so the previously-failing live-provider test passes; the 3 skips are the environment-only ones).
+
+### Increment 157 — provider guardrails: a refusal is honest silence (pydantic-ai Phase 4, part 2a) ✅ (2026-09-09)
+- §37 got its second enforcement point: not just a failure, also a *refusal* must never cross a seam
+  wearing the costume of an answer. When a live provider declines — a safety-layer
+  `finish_reason='content_filter'`, a "I can't help with that" (EN), a "no puedo ayudarte" (ES) — the
+  reply becomes `""` before it can enter perception, reasoning, recall, or voice.
+- New `guardrail.py`, a pure, dependency-free, offline-testable module: `is_refusal(text)` matches
+  conservative whole-phrase decline phrasings (never single words, so an ordinary answer only
+  *mentioning* "can't" is never silenced); `content_filtered(finish_reason)` recognises the OpenAI
+  structured signal; `guard_reply(reply, finish_reason)` returns `""` on either and the text otherwise.
+- `OpenAiCompatibleModel` now reads `finish_reason` from the response (`_extract_reply` returns both
+  text and reason) and routes `complete` and `stream` through the guardrail; an SSE line carrying
+  `content_filter` ends the stream (already-streamed deltas are acknowledged honestly as forward-only).
+- `PydanticAiModel` guards the serialised reply too, and — when the pydantic-ai ≥2.41 capability module
+  exists — wires `RaiseContentFilterError` into the `Agent` so a content-filtered response becomes a
+  run-ending error the honest-silence path absorbs; older 2.x installs simply skip the capability
+  (defensively wrapped, feature-detect via import, no new dependency).
+- Tests: new `tests/infrastructure/test_guardrail.py` (phrases EN/ES, content_filter, pass-through);
+  OpenAI path gains content-filter-complete, textual-refusal-complete, content-filter-stops-stream,
+  single-delta-refusal-silence and forward-only-refusal-fragment tests; pydantic path gains
+  refusal->silence and normal-pass tests. `importorskip`/D7/D8 hold: no dependency added.
+- Gates: ruff clean · pyright strict 0 errors · pytest 1318 passed, 3 skipped.
+- **Remaining in Phase 4 part 2:** the MCP adapter (client direction — consume external toolsets into
+  the `ToolRegistry` as `ToolSpec`s, registry stays the gate). Follows the same seams; the fastmcp
+  *server* extra is not installed, which only matters if an in-process MCP server is ever needed.
 
 ---
 

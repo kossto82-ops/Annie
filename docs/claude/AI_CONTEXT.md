@@ -221,6 +221,12 @@ Increments 111–112).
   adapter (scripted/OpenAI-compatible/pydantic alike), wired only at the `create_jarvis` composition
   root around the delegated task agent, and surfaced as `Jarvis.provider_stats()` and the command
   center's `provider` snapshot block. Bookkeeping only; it never influences a reply or decision.
+- Provider guardrails (Increment 157, pydantic-ai Phase 4 part 2a): `guardrail.py` turns a provider
+  *refusal* — `finish_reason='content_filter'` or a whole-phrase decline text, EN/ES — into honest
+  silence (`""`) at the seam (§37, second enforcement point beside the failure path). `OpenAiCompatibleModel`
+  guards `complete` and `stream` (SSE `content_filter` ends the stream; already-flowed deltas are
+  forward-only); `PydanticAiModel` guards the serialised reply and wires the ≥2.41
+  `RaiseContentFilterError` capability when present (feature-detected, no dependency).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions

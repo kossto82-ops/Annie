@@ -96,6 +96,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `state_summary()` — a compact, immutable snapshot of everything it currently holds.
 - `set_energy_budget(budget)` / `set_deliberation_value(value)` — tune how hard it thinks. `energy_spent()` / `energy_remaining()` / `is_conserving()` / `deliberation_value()` read it back.
 - `provider_stats()` — live-bookkeeping across the observable model/agent edges (calls, honest successes, wall-clock time, tokens); never influences a decision.
+- Provider guardrails — a live provider that *declines* (safety filter, "I can't help", "no puedo ayudarte") yields honest silence, not a refusal dressed up as an answer (Vision §37).
 
 **Model of its companion**
 - `observe_companion(trait, evidence)` — evolve a belief about the companion.

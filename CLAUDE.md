@@ -51,7 +51,7 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 156 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is around Increment 157 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
@@ -77,7 +77,10 @@ router (Increment 155: `DeliberationValue` routes `think`/`consider` depth by ho
 worth, deliberations charge energy, and a `deliberation` command-center command sets the default
 stance); live-provider instrumentation (Increment 156: `InstrumentedLanguageModel`/
 `InstrumentedTaskAgent` wrappers feed a shared `InstrumentationStore`, surfaced as `Jarvis.provider_stats()`
-and the command center's `provider` snapshot block — bookkeeping only). A live LLM provider is
+and the command center's `provider` snapshot block — bookkeeping only); provider guardrails
+(Increment 157: a refusal — `finish_reason='content_filter'` or decline text, EN/ES — becomes honest
+silence `""` via `guardrail.py`, wired into both live adapters' `complete`/`stream`, §37's second
+enforcement point beside the failure path). A live LLM provider is
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 
@@ -85,9 +88,10 @@ The pydantic-ai provider thread is complete in its shipped parts: the opt-in imp
 LLM/agent/reasoner
 seams shipped in Increment 153 and stays
 gated — future live providers should implement the same seams, never a second bypass. The live-STT thread
-is complete too (Increment 154). Instrumentation landed as Increment 156 (pydantic-ai Phase 4, part 1).
-The remaining parked piece is pydantic-ai
-Phase 4 part 2 (provider guardrails and an MCP adapter) — still parked in Increment 153. However,
+is complete too (Increment 154). Instrumentation landed as Increment 156 (pydantic-ai Phase 4, part 1);
+provider guardrails as Increment 157 (Phase 4, part 2a). The remaining parked piece is the pydantic-ai
+Phase 4 part 2 MCP adapter (client direction — external toolsets into the `ToolRegistry` as `ToolSpec`s).
+However,
 **do not assume this is mandatory**: follow the user's current
 task.
 
