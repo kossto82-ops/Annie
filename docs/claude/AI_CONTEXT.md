@@ -224,8 +224,7 @@ Increments 111–112).
   but not yet for identity.
 - A real SQLite DB now backs the repository contracts (`Jarvis.database()`, Increment 150) and the command
   center's composition root uses it; the JSON stores / `Jarvis.persistent()` remain as the file-backed twin;
-  `TemporalStability` count/recency weighting beyond the
-  opt-in decay policy; more §15 energy modelling (charge deliberations).
+  `TemporalStability` count/recency weighting beyond the opt-in decay policy.
 - Speech: a live STT backer (Increment 154) is wired, but real instruction execution (earned agency) and
   streaming/VAD mic delivery to the server ear remain open.
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).

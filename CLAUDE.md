@@ -51,7 +51,7 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 154 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is around Increment 155 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
@@ -72,17 +72,19 @@ the capability edges (web/research/compare/tools/notes/mail/calendar/tasks/agent
 implemented. Files/documents
 are a first-class surface (accept, recall, search, chip in chat, read, folder-aware nesting). The command
 center exists with voice, a sphere/face, streaming, a reasoning panel, live-tunable cognition thresholds,
-a root-injectable per-belief weighting policy, and a capability/tool surface; a live LLM provider is
+a root-injectable per-belief weighting policy, a capability/tool surface, and a deliberate attention
+router (Increment 155: `DeliberationValue` routes `think`/`consider` depth by how much a problem is
+worth, deliberations charge energy, and a `deliberation` command-center command sets the default
+stance); a live LLM provider is
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 
-The most useful next increment currently identified is more §15 energy modelling (charge deliberations).
-The SQLite thread is complete: the DB behind the repository contracts landed in Increment 150, the
-command-center composition root adopts it, the calendar/notes/tasks edge seams followed in Increment 151,
-and the decision-provenance trace joined in Increment 152. The pydantic-ai provider thread is likewise
-complete: the opt-in implementation behind the LLM/agent/reasoner seams shipped in Increment 153 and stays
+The pydantic-ai provider thread is complete: the opt-in implementation behind the LLM/agent/reasoner
+seams shipped in Increment 153 and stays
 gated — future live providers should implement the same seams, never a second bypass. The live-STT thread
-is complete too (Increment 154). However, **do not assume this is mandatory**: follow the user's current
+is complete too (Increment 154). The most useful next increment currently identified is pydantic-ai
+Phase 4 (provider guardrails/instrumentation and an MCP adapter) — parked in Increment 153. However,
+**do not assume this is mandatory**: follow the user's current
 task.
 
 ## How to work

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-08 (Increment 154)
+Last updated: 2026-09-09 (Increment 155)
 
 ---
 
@@ -1906,6 +1906,26 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   streams audio can now transcribe server-side.
 - Gates (HEAD): ruff clean · pyright strict 0 errors · pytest 1279 passed, 3 skipped.
 
+### Increment 155 — charge deliberations: attention routed by value (Vision §15, §14) ✅ (2026-09-09)
+- The cost of a deliberation is now *deliberate*: a new `DeliberationValue` enum (`CHEAP` / `NORMAL` /
+  `HIGH`) says how much a problem is worth, and `think(..., value=)` / `consider(..., value=)` route the
+  episode's attention from it — exactly the §15 purpose ("a simple problem should not trigger an
+  unnecessarily expensive reasoning process; a high-value ambiguous problem may justify deeper reasoning").
+- Routing happens in the executive's attention selection and never drops input: `CHEAP` answers a problem
+  briefly when there is nothing new to integrate, `HIGH` keeps the full lifecycle even under conserve.
+  Conserve itself still only demotes when no new evidence is present (unchanged invariant), and now skips
+  demotion for `HIGH`.
+- Deliberations are now *charged*: `consider()` was bypassing the energy path (it never went through
+  `_run`), so weighing competing explanations cost zero energy. The `Deliberation` value object carries
+  the `attention` it was charged, and `Jarvis.consider` charges it like any episode.
+- A runtime stance: `Jarvis(deliberation_value=...)`, `set_deliberation_value(...)` / `deliberation_value()`
+  set the default when no per-call `value` is given; the command center gained a `deliberation` command
+  (`cheap`/`normal`/`high`), and the snapshot's `energy` block now reports `deliberation_value`.
+- README Vocabulary documents `value=` on `think`/`consider` and the stance read/write; public-surface
+  tripwire extended.
+- Gates: ruff clean · pyright strict 0 errors · pytest 1268 passed, 5 skipped (1 pre-existing pydantic-ai
+  opt-in provider test fails in this environment — `pydantic_ai` not installed; identical at HEAD).
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2266,6 +2286,11 @@ seam.)*
   `WhisperTranscriber` drives any OpenAI-compatible `/audio/transcriptions` endpoint (openai/groq/custom
   base_url), `Jarvis.transcribe(audio)` + `POST /api/speech/transcribe` deliver raw audio, and
   `JARVIS_STT_*` chooses the provider at the command center; the browser Web Speech default is untouched.
+- **Charge deliberations** (Increment 155): a `DeliberationValue` (`CHEAP`/`NORMAL`/`HIGH`) routes an
+  episode's attention by how much the problem is worth — `think(..., value=)` / `consider(..., value=)`,
+  a runtime stance (`set_deliberation_value`) behind a `deliberation` command-center command, and
+  deliberations now charge energy like any episode (the `Deliberation` carries the `attention` it was
+  charged).
 - **Per-belief weighting is root-injectable** (Increment 144): `Jarvis(default_belief_policy=...)` /
   `set_belief_policy(...)` override the source policy every fresh belief is born with — goals, actions,
   companion traits, self-observed habits — swap reaches subsequent creations only, inherited by
