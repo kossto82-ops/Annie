@@ -78,8 +78,8 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `Jarvis(perception=…)` — inject any `PerceptionSource` (a dumb keyword rule by default; an LLM-backed perceiver is a drop-in behind the same Protocol).
 
 **Reason**
-- `think(trigger, evidence=(), goal=None)` — run a cognitive episode toward one grounded conclusion, optionally *toward* a `Goal`; returns the episode.
-- `consider(observation, options)` — weigh competing explanations (`{statement: [evidence, ...]}`); returns a `Deliberation`.
+- `think(trigger, evidence=(), goal=None, value=NORMAL)` — run a cognitive episode toward one grounded conclusion, optionally *toward* a `Goal`; returns the episode. `value` (Vision §15) routes how much attention it warrants: `CHEAP` answers a simple problem briefly, `HIGH` keeps the full lifecycle even low on energy.
+- `consider(observation, options, value=NORMAL)` — weigh competing explanations (`{statement: [evidence, ...]}`); returns a `Deliberation` (the charged `attention` rides on it).
 
 **Act & learn**
 - `act(description, expected, *, confidence=None, reversible=True)` — declare an intention (no side effect).
@@ -94,6 +94,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - `pursue(impulse)` — run the self-triggered corrective episode.
 - `introspect()` — a plain-language account of who it is, from real state.
 - `state_summary()` — a compact, immutable snapshot of everything it currently holds.
+- `set_energy_budget(budget)` / `set_deliberation_value(value)` — tune how hard it thinks. `energy_spent()` / `energy_remaining()` / `is_conserving()` / `deliberation_value()` read it back.
 
 **Model of its companion**
 - `observe_companion(trait, evidence)` — evolve a belief about the companion.

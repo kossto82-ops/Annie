@@ -34,6 +34,7 @@ from jarvis.domain.conversation.intent import (
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
+from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
@@ -119,6 +120,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
             "spent": jarvis.energy_spent(),
             "remaining": jarvis.energy_remaining(),
             "conserving": jarvis.is_conserving(),
+            "deliberation_value": jarvis.deliberation_value().value,
         },
         "tunables": {
             "grounded_confidence": jarvis.knobs().grounded_confidence,
@@ -664,6 +666,30 @@ def _energy_budget(jarvis: Jarvis, payload: Reply) -> Reply:
     budget = int(raw) if isinstance(raw, int | float | str) else 0
     jarvis.set_energy_budget(budget)
     return {"reply": f"Energy budget set to {budget}.", "speak": False}
+
+
+def _deliberation(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Set how much a deliberation is worth by default (Vision §15, §40).
+
+    ``value`` is ``cheap`` (answer simple problems briefly), ``normal`` (the
+    default) or ``high`` (keep the full lifecycle even low on energy). With no
+    value the current stance is reported. This only tunes how hard Jarvis thinks
+    by default -- a per-call ``value`` still overrides it.
+    """
+    raw = str(payload.get("value", "")).strip().lower()
+    if not raw:
+        return {
+            "reply": f"Deliberation value is currently '{jarvis.deliberation_value().value}'.",
+            "speak": False,
+        }
+    try:
+        value = DeliberationValue(raw)
+    except ValueError:
+        valid = ", ".join(v.value for v in DeliberationValue)
+        message = f"unknown deliberation value '{raw}' — use one of: {valid}."
+        return {"error": message, "speak": False}
+    jarvis.set_deliberation_value(value)
+    return {"reply": f"Deliberation value set to '{value.value}'.", "speak": False}
 
 
 def _tunables(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -2037,6 +2063,7 @@ _COMMANDS: dict[str, Command] = {
     "wonder": _wonder,
     "rest": _rest,
     "energy_budget": _energy_budget,
+    "deliberation": _deliberation,
     "tunables": _tunables,
     "perceiver": _perceiver,
     "learn": _learn,

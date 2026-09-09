@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from jarvis.domain.enums.attention import Attention
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 
@@ -26,3 +27,4 @@ class Deliberation:
     ranking: tuple[tuple[str, float], ...]  # (statement, confidence) descending
     evidence_request: EvidenceRequest | None  # what would decide it, when undecided
     episode_id: str  # the episode this deliberation was carried out in
+    attention: Attention = Attention.FULL  # how much reasoning the weighing warranted

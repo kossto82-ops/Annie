@@ -18,8 +18,10 @@ from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.conversation.conversation_context import ConversationContext, Turn
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.capability_status import CapabilityStatus
+from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
@@ -213,6 +215,7 @@ class Jarvis:
         refutations_store: RefutationRepository | None = None,
         energy_costs: EnergyCosts | None = None,
         energy_budget: int | None = None,
+        deliberation_value: DeliberationValue = DeliberationValue.NORMAL,
         enable_recall: bool = False,
         reasoner: Reasoner | None = None,
         trace: EpisodeTraceSink | None = None,
@@ -386,6 +389,10 @@ class Jarvis:
         # behaviour is identical to before. Distinct from the cumulative tally above.
         self._energy_budget = energy_budget
         self._energy_available = energy_budget if energy_budget is not None else 0
+        # How much a deliberation is *worth* by default (Vision §15): if nothing
+        # else is said, Jarvis charges every episode this value. A caller can still
+        # override per-call with `think(..., value=...)`.
+        self._deliberation_value = deliberation_value
         # Decision provenance (Vision §26). In-memory by default; a durable JSON-backed
         # sink is injected by `persistent()` so the trace survives a restart.
         self._trace: EpisodeTraceSink = trace or EpisodeTrace()
@@ -1862,6 +1869,7 @@ class Jarvis:
         evidence: Iterable[Evidence] = (),
         goal: Goal | None = None,
         conversation: tuple[Turn, ...] = (),
+        value: DeliberationValue | None = None,
     ) -> CognitiveEpisode:
         """Run a cognitive episode for ``trigger``, grounded in ``evidence``.
 
@@ -1870,28 +1878,45 @@ class Jarvis:
         evidence" conclusion rather than a fabricated answer (Vision §37). Recent
         dialogue travels with the episode (Vision §3) so any reasoning it needs
         resolves against what was just said.
+
+        ``value`` (Vision §15) says how much this deliberation is worth: a ``CHEAP``
+        problem is answered briefly when there is nothing new to integrate (a
+        simple problem should not trigger the full lifecycle), and a ``HIGH`` value
+        one keeps the full lifecycle even when energy is low. Performance only
+        routes depth -- it never changes what Jarvis concludes. When ``None``, the
+        stance set last via :meth:`set_deliberation_value` applies (``NORMAL``).
         """
         episode = CognitiveEpisode(trigger=trigger, goal=goal)
-        return self._run(episode, evidence, conversation=conversation)
+        return self._run(episode, evidence, conversation=conversation, value=value)
 
     def _run(
         self,
         episode: CognitiveEpisode,
         evidence: Iterable[Evidence] = (),
         conversation: tuple[Turn, ...] = (),
+        value: DeliberationValue | None = None,
     ) -> CognitiveEpisode:
         """Run an episode through the executive and charge its cognitive cost
         (Vision §15). Every episode-running path goes through here so spent energy
         reflects all the thinking Jarvis actually did.
         """
+        depth = self._deliberation_value if value is None else value
         result = self._executive.run(
-            episode, evidence, conserve=self._should_conserve(), conversation=conversation
+            episode,
+            evidence,
+            conserve=self._should_conserve(),
+            conversation=conversation,
+            value=depth,
         )
-        cost = self._energy_costs.for_attention(episode.attention)
+        self._charge(episode.attention)
+        return result
+
+    def _charge(self, attention: Attention) -> None:
+        """Charge an episode's cognitive cost (Vision §15) and update the budget."""
+        cost = self._energy_costs.for_attention(attention)
         self._energy_spent += cost
         if self._energy_budget is not None:
             self._energy_available = max(0, self._energy_available - cost)
-        return result
 
     def _should_conserve(self) -> bool:
         """True when the budget is low enough that a full episode should be avoided."""
@@ -1935,6 +1960,24 @@ class Jarvis:
         """
         self._energy_budget = budget
         self._energy_available = budget if budget is not None else 0
+
+    def deliberation_value(self) -> DeliberationValue:
+        """The value Jarvis charges deliberations by default (Vision §15).
+
+        The stance used when a call to :meth:`think` or :meth:`consider` doesn't
+        name a per-call value: ``CHEAP`` answers simple problems briefly, ``HIGH``
+        keeps the full lifecycle even low on energy. Defaults to ``NORMAL``.
+        """
+        return self._deliberation_value
+
+    def set_deliberation_value(self, value: DeliberationValue) -> None:
+        """Set the default deliberation value at runtime (Vision §15, §40).
+
+        The seam a command center tunes to say how hard Jarvis should be willing to
+        think by default. Only the *default*: a per-call ``value=`` on
+        :meth:`think` or :meth:`consider` still overrides it for that deliberation.
+        """
+        self._deliberation_value = value
 
     def knobs(self) -> CognitiveKnobs:
         """The current cognition thresholds (grounded / insight / goal gates).
@@ -2666,16 +2709,26 @@ class Jarvis:
         return self._run(episode)
 
     def consider(
-        self, observation: str, options: Mapping[str, Sequence[Evidence]]
+        self,
+        observation: str,
+        options: Mapping[str, Sequence[Evidence]],
+        value: DeliberationValue | None = None,
     ) -> Deliberation:
         """Weigh competing explanations for ``observation`` (Vision §17).
 
         ``options`` maps each candidate explanation to the evidence bearing on it.
-        Runs as a first-class deliberation episode (recorded and traceable) and
-        returns the ranking plus the leading explanation -- or, when the top two
-        are tied, no leader and a request for evidence that would decide.
+        ``value`` (Vision §15) is how much this weighing is worth; it routes the
+        attention the deliberation is charged (``CHEAP`` answers briefly, ``HIGH``
+        keeps the full weighing even low on energy). When ``None``, the stance set
+        via :meth:`set_deliberation_value` applies (``NORMAL``). Runs as a
+        first-class deliberation episode (recorded and traceable) and returns the
+        ranking plus the leading explanation -- or, when the top two are tied, no
+        leader and a request for evidence that would decide.
         """
-        return self._executive.deliberate(observation, options)
+        depth = self._deliberation_value if value is None else value
+        deliberation = self._executive.deliberate(observation, options, value=depth)
+        self._charge(deliberation.attention)
+        return deliberation
 
     def trace_of(self, episode: CognitiveEpisode) -> tuple[CognitiveEvent, ...]:
         """The ordered cognitive events of ``episode`` -- its decision provenance

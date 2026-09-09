@@ -24,6 +24,7 @@ from jarvis.domain.entities.belief import (
     Belief,
 )
 from jarvis.domain.enums.attention import Attention
+from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.events.domain_event import CognitiveEvent
@@ -273,6 +274,7 @@ class ExecutiveController:
         *,
         conserve: bool = False,
         conversation: tuple[Turn, ...] = (),
+        value: DeliberationValue = DeliberationValue.NORMAL,
     ) -> CognitiveEpisode:
         """Drive ``episode`` to COMPLETED, grounding its decision in evidence.
 
@@ -286,6 +288,13 @@ class ExecutiveController:
         lifecycle -- but only then, since dropping to BRIEF while new evidence is
         present would discard that evidence. It economises, it never loses input.
 
+        ``value`` (Vision §15) is how much this deliberation is worth. A ``CHEAP``
+        problem is answered briefly when there is nothing new to integrate (a
+        simple problem should not trigger the full lifecycle); a ``HIGH`` value one
+        keeps the full lifecycle even when energy is low (a high-value ambiguous
+        problem may justify deeper reasoning). Routing depth only -- it never
+        changes what Jarvis concludes.
+
         ``conversation`` carries the recent turns of THIS conversation (Vision §3)
         into any reasoning the episode needs, so a provisional answer resolves
         pronouns and follow-ups against what was just said.
@@ -298,7 +307,17 @@ class ExecutiveController:
         attention = _assess_attention(
             belief, given_new_evidence=bool(pieces), grounded=self._knobs.grounded_confidence
         )
-        if conserve and attention is Attention.FULL and not pieces:
+        # Charge by value (Vision §15): a cheap, simple problem is answered briefly
+        # when there is nothing new to integrate; a high-value one stays full even
+        # under conserve. Both only route depth -- new evidence is never dropped.
+        if not pieces and value is DeliberationValue.CHEAP:
+            attention = Attention.BRIEF
+        if (
+            conserve
+            and attention is Attention.FULL
+            and not pieces
+            and value is not DeliberationValue.HIGH
+        ):
             attention = Attention.BRIEF
         episode.attend(attention)
         if episode.attention is Attention.FULL:
@@ -331,7 +350,10 @@ class ExecutiveController:
         return episode
 
     def deliberate(
-        self, observation: str, options: Mapping[str, Sequence[Evidence]]
+        self,
+        observation: str,
+        options: Mapping[str, Sequence[Evidence]],
+        value: DeliberationValue = DeliberationValue.NORMAL,
     ) -> Deliberation:
         """Weigh competing explanations as a first-class episode (Vision §17).
 
@@ -339,11 +361,23 @@ class ExecutiveController:
         episode's conclusion-model -- the same single shape a belief-conclusion
         uses -- so deliberation events flow through the same episode boundary and
         are recorded in memory as DELIBERATION (derived from that conclusion).
+
+        ``value`` (Vision §15) is how much this weighing is worth; it routes the
+        episode's attention -- a ``HIGH`` value deliberation gets full attention
+        even under conserve, a ``CHEAP`` one is charged briefly.
         """
         episode = CognitiveEpisode(trigger=observation)
         self._flush(episode)  # EpisodeStarted
 
         episode.begin_reasoning()
+        # A deliberation is inherently about an unsettled trigger, so it normally
+        # gets full attention (the whole weighing). Charge by value (Vision §15):
+        # a CHEAP one is answered briefly, a HIGH-value one keeps the full
+        # weighing.
+        attention = Attention.FULL
+        if value is DeliberationValue.CHEAP:
+            attention = Attention.BRIEF
+        episode.attend(attention)
         hypothesis_set = episode.form_hypotheses(observation)
         for statement, evidences in options.items():
             hypothesis = hypothesis_set.propose(statement, correlation_id=episode.id)
@@ -374,6 +408,7 @@ class ExecutiveController:
                     ),
                 ),
                 episode_id=episode.id,
+                attention=episode.attention,
             )
         else:
             decision = (
@@ -387,6 +422,7 @@ class ExecutiveController:
                 ranking=ranking,
                 evidence_request=None,
                 episode_id=episode.id,
+                attention=episode.attention,
             )
         self._flush(episode)
 

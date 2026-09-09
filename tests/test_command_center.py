@@ -18,6 +18,7 @@ import pytest
 
 from jarvis import Jarvis
 from jarvis.domain.enums.capability_status import CapabilityStatus
+from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.permission_level import PermissionLevel
@@ -354,6 +355,30 @@ class TestTuning:
         jarvis.think("spend some energy")
         handle(jarvis, "rest", {})
         assert jarvis.energy_remaining() == 6
+
+    def test_the_snapshot_reports_the_deliberation_stance(self) -> None:
+        result = handle(Jarvis(), "state", {})
+        state = cast("dict[str, object]", result["state"])
+        energy = cast("dict[str, object]", state["energy"])
+        assert energy["deliberation_value"] == "normal"
+
+    def test_setting_a_deliberation_value_swaps_the_stance(self) -> None:
+        jarvis = Jarvis()
+        result = handle(jarvis, "deliberation", {"value": "cheap"})
+        state = result["state"]
+        assert isinstance(state, dict)
+        energy = cast("dict[str, object]", state["energy"])
+        assert energy["deliberation_value"] == "cheap"
+        assert jarvis.deliberation_value().value == "cheap"
+
+    def test_reporting_the_stance_needs_no_value(self) -> None:
+        jarvis = Jarvis(deliberation_value=DeliberationValue.HIGH)
+        result = handle(jarvis, "deliberation", {})
+        assert str(result["reply"]).startswith("Deliberation value is currently 'high'")
+
+    def test_an_unknown_deliberation_value_is_a_clear_error(self) -> None:
+        result = handle(Jarvis(), "deliberation", {"value": "urgent"})
+        assert "unknown deliberation value" in str(result["error"])
 
 
 class TestCognitiveKnobsTuning:

@@ -53,6 +53,8 @@ _PUBLIC_METHODS = (
     "is_conserving",
     "rest",
     "set_energy_budget",
+    "deliberation_value",
+    "set_deliberation_value",
     "knobs",
     "set_knobs",
     "default_belief_policy",
