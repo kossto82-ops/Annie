@@ -35,6 +35,7 @@ still requires the tool's spec to permit it and the agent's upstream approval.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import shlex
 from typing import Any
@@ -127,22 +128,32 @@ def build_sandboxed_registry() -> ToolRegistry | None:
     """Build the default sandboxed :class:`ToolRegistry`, or ``None`` when not configured.
 
     Wires a :class:`FileSystemTool` under the ``JARVIS_AGENT_ROOT`` directory (defaulting
-    to the current directory when set) plus the harmless :class:`EchoTool`. ``None`` when
-    directory configuration is missing, so Jarvis keeps working offline. Shared by every
-    task-agent builder (decided-script and model-driven) so both act through the same,
-    sandboxed tool set.
+    to the current directory when set) plus the harmless :class:`EchoTool`. When
+    ``JARVIS_MCP_CONFIG`` names a pydantic-ai ``mcpServers`` config, the external MCP
+    server's tools are registered too (namespaced by server label) and share the same
+    approval gate (MCP tools are ``EXTERNAL_ACTION``). ``None`` when no tool source is
+    configured, so Jarvis keeps working offline. Shared by every task-agent builder
+    (decided-script and model-driven) so both act through the same, sandboxed tool set.
     """
     import os
 
     from jarvis.infrastructure.echo_tool import EchoTool
     from jarvis.infrastructure.filesystem_tool import FileSystemTool
+    from jarvis.infrastructure.mcp_tools import register_mcp_config
 
     root = os.environ.get("JARVIS_AGENT_ROOT")
-    if not root:
+    mcp_config = os.environ.get("JARVIS_MCP_CONFIG")
+    if not root and not mcp_config:
         return None
     registry = ToolRegistry()
-    registry.register(FileSystemTool(root))
-    registry.register(EchoTool())
+    if root:
+        registry.register(FileSystemTool(root))
+        registry.register(EchoTool())
+    if mcp_config:
+        # MCP is a live, opt-in edge: if the server cannot be reached or configured,
+        # Jarvis keeps its local tools and keeps working offline rather than failing.
+        with contextlib.suppress(Exception):
+            register_mcp_config(registry, mcp_config)
     return registry
 
 
