@@ -18,6 +18,7 @@ import json
 from collections.abc import Iterator
 from typing import Any, Protocol, cast
 
+from jarvis.infrastructure.guardrail import content_filtered, guard_reply
 from jarvis.infrastructure.provider_settings import ProviderSettings
 
 
@@ -109,7 +110,10 @@ class OpenAiCompatibleModel:
 
     def complete(self, prompt: str) -> str:
         body = self._request_body(prompt, stream=False)
-        return _extract_message(self._transport(self._url(), self._headers(), body))
+        reply, finish_reason = _extract_reply(
+            self._transport(self._url(), self._headers(), body)
+        )
+        return guard_reply(reply, finish_reason)
 
     def stream(self, prompt: str) -> Iterator[str]:
         """Yield the assistant's reply as content deltas arrive (SSE).
@@ -122,9 +126,14 @@ class OpenAiCompatibleModel:
             self._url(), self._headers(), self._request_body(prompt, stream=True)
         )
         for raw_line in lines:
+            reason = _finish_reason_from_sse_line(raw_line)
+            if content_filtered(reason):
+                return  # safety layer stopped the reply -> honest silence (§37)
             piece = _delta_from_sse_line(raw_line)
             if piece:
-                yield piece
+                piece = guard_reply(piece)
+                if piece:
+                    yield piece
 
 
 def _delta_from_sse_line(raw_line: bytes) -> str:
@@ -157,22 +166,53 @@ def _delta_from_sse_line(raw_line: bytes) -> str:
     return content if isinstance(content, str) else ""
 
 
-def _extract_message(raw: str) -> str:
-    """Pull the assistant's text out of an OpenAI-style response, or '' if absent."""
+def _finish_reason_from_sse_line(raw_line: bytes) -> str | None:
+    """The ``choices[0].finish_reason`` in one SSE line, or ``None`` if absent."""
+    try:
+        line = raw_line.decode("utf-8").strip()
+    except (UnicodeDecodeError, AttributeError):
+        return None
+    if not line.startswith("data:"):
+        return None
+    data = line[len("data:") :].strip()
+    if not data or data == "[DONE]":
+        return None
+    try:
+        parsed: Any = json.loads(data)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    choices: Any = cast("dict[str, Any]", parsed).get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    first: Any = cast("list[Any]", choices)[0]
+    if not isinstance(first, dict):
+        return None
+    reason: Any = cast("dict[str, Any]", first).get("finish_reason")
+    return reason if isinstance(reason, str) else None
+
+
+def _extract_reply(raw: str) -> tuple[str, str | None]:
+    """Pull (assistant text, finish_reason) out of an OpenAI-style response."""
     try:
         data: Any = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        return ""
+        return "", None
     if not isinstance(data, dict):
-        return ""
+        return "", None
     choices: Any = cast("dict[str, Any]", data).get("choices")
     if not isinstance(choices, list) or not choices:
-        return ""
+        return "", None
     first: Any = cast("list[Any]", choices)[0]
     if not isinstance(first, dict):
-        return ""
+        return "", None
+    reason: Any = cast("dict[str, Any]", first).get("finish_reason")
     message: Any = cast("dict[str, Any]", first).get("message")
     if not isinstance(message, dict):
-        return ""
+        return "", reason if isinstance(reason, str) else None
     content: Any = cast("dict[str, Any]", message).get("content")
-    return content if isinstance(content, str) else ""
+    return (
+        content if isinstance(content, str) else "",
+        reason if isinstance(reason, str) else None,
+    )

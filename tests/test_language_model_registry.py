@@ -117,6 +117,33 @@ class TestOpenAiCompatibleModel:
         OpenAiCompatibleModel(settings, transport=transport).complete("hi")
         assert "Authorization" not in transport.headers
 
+    def test_a_content_filtered_reply_is_honest_silence(self) -> None:
+        def transport(url: str, headers: dict[str, str], body: bytes) -> str:
+            return json.dumps(
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "content_filter",
+                            "message": {"content": "partial"},
+                        }
+                    ]
+                }
+            )
+
+        settings = ProviderSettings(
+            provider="groq", model="m", base_url="https://api.groq.com/openai/v1"
+        )
+        model = OpenAiCompatibleModel(settings, transport=transport)
+        assert model.complete("hi") == ""
+
+    def test_a_textual_refusal_is_honest_silence(self) -> None:
+        transport = _RecordingTransport("I'm sorry, but I can't help with that.")
+        settings = ProviderSettings(
+            provider="groq", model="m", base_url="https://api.groq.com/openai/v1"
+        )
+        model = OpenAiCompatibleModel(settings, transport=transport)
+        assert model.complete("hi") == ""
+
 
 class TestStream:
     def test_it_yields_content_deltas_from_sse_lines(self) -> None:
@@ -134,6 +161,52 @@ class TestStream:
             settings, stream_transport=lambda url, headers, body: iter(sse)
         )
         assert list(model.stream("hi")) == ["Hola", " Roberto"]
+
+    def test_a_content_filter_finish_stops_the_stream_early(self) -> None:
+        sse = [
+            b'data: {"choices":[{"delta":{"content":"Hola"}}]}\n',
+            b'data: {"choices":[{"finish_reason":"content_filter","delta":{}}]}\n',
+            b'data: {"choices":[{"delta":{"content":"never"}}]}\n',
+            b"data: [DONE]\n",
+        ]
+        settings = ProviderSettings(
+            provider="groq", model="m", base_url="https://api.groq.com/openai/v1"
+        )
+        model = OpenAiCompatibleModel(
+            settings, stream_transport=lambda url, headers, body: iter(sse)
+        )
+        # Honest forward-only streaming: whatever already flowed is out; the block
+        # marker stops everything after it, nothing later is invented.
+        assert list(model.stream("hi")) == ["Hola"]
+
+    def test_a_single_delta_that_is_a_refusal_is_honest_silence(self) -> None:
+        refusal = (
+            b'data: {"choices":[{"delta":{"content":'
+            b'"I\'m sorry, but I can\'t help with that."}}]}\n'
+        )
+        sse = [refusal, b"data: [DONE]\n"]
+        settings = ProviderSettings(
+            provider="groq", model="m", base_url="https://api.groq.com/openai/v1"
+        )
+        model = OpenAiCompatibleModel(
+            settings, stream_transport=lambda url, headers, body: iter(sse)
+        )
+        assert list(model.stream("hi")) == []
+
+    def test_an_already_streamed_refusal_fragment_cannot_be_retracted(self) -> None:
+        sse = [
+            b'data: {"choices":[{"delta":{"content":"I can"}}]}\n',
+            b'data: {"choices":[{"delta":{"content":"not help with that."}}]}\n',
+            b"data: [DONE]\n",
+        ]
+        settings = ProviderSettings(
+            provider="groq", model="m", base_url="https://api.groq.com/openai/v1"
+        )
+        model = OpenAiCompatibleModel(
+            settings, stream_transport=lambda url, headers, body: iter(sse)
+        )
+        # Streaming honesty is forward-only: deltas already yielded are already out.
+        assert list(model.stream("hi")) == ["I can", "not help with that."]
 
     def test_the_stream_request_sets_stream_true(self) -> None:
         captured: dict[str, object] = {}

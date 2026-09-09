@@ -137,6 +137,16 @@ class TestComplete:
         model = PydanticAiModel(_settings(), model=function_mod.FunctionModel(boom))
         assert model.complete("hi") == ""
 
+    def test_a_textual_refusal_is_honest_silence(self) -> None:
+        model = PydanticAiModel(
+            _settings(), model=_text_model("I'm sorry, but I can't help with that.")
+        )
+        assert model.complete("hi") == ""
+
+    def test_a_normal_textual_answer_passes_through(self) -> None:
+        model = PydanticAiModel(_settings(), model=_text_model("It was productive."))
+        assert model.complete("hi") == "It was productive."
+
 
 class TestStream:
     def test_it_streams_text_deltas(self) -> None:

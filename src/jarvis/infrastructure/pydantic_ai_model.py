@@ -28,6 +28,7 @@ import json
 from collections.abc import Iterator
 from typing import Any, cast
 
+from jarvis.infrastructure.guardrail import guard_reply
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.usage import Usage, read_run_usage
@@ -72,7 +73,7 @@ class PydanticAiModel(LanguageModel):
             self._usage = self._usage + read_run_usage(run)
         except Exception:  # any provider/validation/model error -> say nothing
             return ""
-        return _serialise(output)
+        return guard_reply(_serialise(output))
 
     def stream(self, prompt: str) -> Iterator[str]:
         """Stream a reply's text deltas; end early (honestly) on error."""
@@ -118,6 +119,15 @@ class PydanticAiModel(LanguageModel):
             kwargs["system_prompt"] = self.instructions
         if self.output_type is not None:
             kwargs["output_type"] = self.output_type
+        try:
+            # pydantic-ai >= 2.41: a content-filtered response is a run-ending error
+            # that honest-silence then absorbs (§37). Older 2.x has no capabilities.
+            content_filter_mod = cast(
+                Any, importlib.import_module("pydantic_ai.capabilities.content_filter")
+            )
+            kwargs["capabilities"] = [content_filter_mod.RaiseContentFilterError()]
+        except Exception:  # missing/older capability module -> no content-filter hook
+            pass
         self._agent = pai.Agent(**kwargs)
         return self._agent
 
