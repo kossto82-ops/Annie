@@ -52,7 +52,10 @@ from jarvis.infrastructure.perceiver_factory import (
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.provider_stats import InMemoryInstrumentation
 from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
-from jarvis.infrastructure.task_agent_source import build_task_agent
+from jarvis.infrastructure.task_agent_source import (
+    build_instruction_agent,
+    build_task_agent,
+)
 from jarvis.infrastructure.task_scheduler import build_task_scheduler
 from jarvis.interface.command_center import Response, parse_body, route, stream_say
 from jarvis.jarvis import Jarvis
@@ -139,12 +142,18 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
         Path(home) / "docs" if home is not None else None
     )
     # Live-provider instrumentation (Phase 4): one collector shared by the observable
-    # edges -- the delegated task agent -- is fed to Jarvis so `provider_stats()` can
-    # report what the live frontier has done. Offline edges record nothing at all.
+    # edges -- the delegated task agent and the earned-agency executor -- is fed to
+    # Jarvis so `provider_stats()` can report what the live frontier has done.
+    # Offline edges record nothing at all.
     instrumentation = InMemoryInstrumentation()
     if task_agent is not None:
         task_agent = InstrumentedTaskAgent(
             task_agent, instrumentation=instrumentation
+        )
+    instruction_agent = build_instruction_agent(settings)
+    if instruction_agent is not None:
+        instruction_agent = InstrumentedTaskAgent(
+            instruction_agent, instrumentation=instrumentation
         )
     if home is None:
         jarvis = Jarvis(
@@ -158,6 +167,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             model_compare=model_compare,
             mail_source=mail_source,
             task_agent=task_agent,
+            instruction_agent=instruction_agent,
             notes_store=notes_store,
             documents_store=documents_store,
             instrumentation=instrumentation,
@@ -187,6 +197,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             model_compare=model_compare,
             mail_source=mail_source,
             task_agent=task_agent,
+            instruction_agent=instruction_agent,
             notes_store=notes_store,
             documents_store=documents_store,
             instrumentation=instrumentation,

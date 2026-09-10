@@ -11,6 +11,7 @@ from __future__ import annotations
 from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
+from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.interface.command_center import handle
 from jarvis.jarvis import Jarvis
 
@@ -113,6 +114,56 @@ class TestConversationFirst:
         assert result["stance"] == "instruction"
         assert "no puedo consultar otra ia" in _reply_text(result)
         assert jarvis.episodes.history() == ()
+
+
+class _FakeExecutor:
+    """An instruction executor that narrates a canned, truthful outcome."""
+
+    def __init__(self) -> None:
+        self.runs: list[str] = []
+
+    def run_task(self, task: str) -> TaskResult:
+        self.runs.append(task)
+        if "falla" in task or "fail" in task:
+            return TaskResult(task=task, summary="el agente no pudo terminar", success=False)
+        return TaskResult(task=task, summary="archivo notas.txt guardado", success=True)
+
+
+class TestMaterialInstructions:
+    def test_a_material_directive_is_answered_as_an_act(self) -> None:
+        jarvis = Jarvis()
+        result = _reply(jarvis, "escribe un archivo que diga hola")
+        assert result["stance"] == "act"
+        assert "no tengo un agente de tareas" in _reply_text(result)
+        # Honest silence about any world effect: nothing was claimed, nothing stored.
+        assert jarvis.beliefs.all_beliefs() == ()
+        assert jarvis.companion.beliefs() == ()
+        assert jarvis.episodes.history() == ()
+
+    def test_an_act_with_a_working_executor_reports_done(self) -> None:
+        executor = _FakeExecutor()
+        jarvis = Jarvis(instruction_agent=executor)  # type: ignore[arg-type]
+        result = _reply(jarvis, "escribe un archivo que diga hola")
+        assert result["stance"] == "act"
+        assert "listo" in _reply_text(result)
+        assert executor.runs == ["escribe un archivo que diga hola"]
+
+    def test_a_failed_act_is_reported_honestly(self) -> None:
+        jarvis = Jarvis(instruction_agent=_FakeExecutor())  # type: ignore[arg-type]
+        result = _reply(jarvis, "ejecuta la tarea que falla")
+        assert result["stance"] == "act"
+        assert "no pude completarlo" in _reply_text(result)
+        jarvis2 = Jarvis(instruction_agent=_FakeExecutor())  # type: ignore[arg-type]
+        result = _reply(jarvis2, "remove the failing entry")
+        assert result["stance"] == "act"
+        assert "i couldn't complete it" in _reply_text(result)
+
+    def test_an_act_never_becomes_memory(self) -> None:
+        executor = _FakeExecutor()
+        jarvis = Jarvis(instruction_agent=executor)  # type: ignore[arg-type]
+        _reply(jarvis, "crea una nota de la reunión")
+        assert jarvis.beliefs.all_beliefs() == ()
+        assert jarvis.companion.beliefs() == ()
 
     def test_an_explicit_remember_becomes_memory(self) -> None:  # Test E
         jarvis = Jarvis()

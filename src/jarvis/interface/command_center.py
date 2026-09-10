@@ -378,7 +378,9 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
     (Vision §5, §37): not every message is knowledge. A short yes/no still matures the
     last reasoned answer (the learning loop, §20); otherwise the message's *intent*
     decides. Greetings, small talk, feedback about Jarvis and instructions are answered
-    as conversation and never become beliefs; only an explicit "remember this" or a real
+    as conversation and never become beliefs; a material directive (an act) is executed
+    through the earned-agency executor when one is wired and declined honestly
+    otherwise; only an explicit "remember this" or a real
     statement/question reaches perception, memory and reasoning. May raise on a provider
     failure (the caller decides how to surface it).
     """
@@ -402,6 +404,8 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
         return _turn(jarvis, _feedback_reply(text))
     if intent is ConversationIntent.INSTRUCTION:
         return _turn(jarvis, _instruction_reply(jarvis, text))
+    if intent is ConversationIntent.ACT:
+        return _turn(jarvis, _act_reply(jarvis, text))
     if intent is ConversationIntent.REMEMBER:
         return _turn(jarvis, _remember_reply(jarvis, text))
     return _turn(jarvis, _knowledge_reply(jarvis, text))
@@ -468,6 +472,40 @@ def _instruction_reply(jarvis: Jarvis, text: str) -> Reply:
         )
         return _plain(unavailable, "instruction")
     return _plain(inference.answer, "instruction")
+
+
+def _act_reply(jarvis: Jarvis, text: str) -> Reply:
+    """Perform a *material* instruction through the earned-agency executor, or
+    decline honestly when none is wired (Vision §27, §28).
+
+    The companion's words authorize protocol-level acts only: the executor runs a
+    sandboxed registry without approval, so locally reversible acts happen and
+    external/destructive ones refuse through the gate. Whatever the outcome, the
+    reply narrates *what actually happened* -- never a fabricated success.
+    """
+    if jarvis.instruction_agent is None:
+        unavailable = (
+            "Entiendo la instrucción, pero ahora mismo no tengo un agente de tareas "
+            "configurado para ejecutarla (JARVIS_AGENT_ROOT)."
+            if uses_spanish(text)
+            else "I understand the instruction, but I have no task agent configured "
+            "to execute it right now (JARVIS_AGENT_ROOT)."
+        )
+        return _plain(unavailable, "act")
+    outcome = jarvis.execute(text)
+    if outcome.success:
+        told = (
+            f"Listo — {outcome.summary}."
+            if uses_spanish(text)
+            else f"Done — {outcome.summary}."
+        )
+    else:
+        told = (
+            f"No pude completarlo: {outcome.summary}."
+            if uses_spanish(text)
+            else f"I couldn't complete it: {outcome.summary}."
+        )
+    return _plain(told, "act")
 
 
 def _remember_reply(jarvis: Jarvis, text: str) -> Reply:

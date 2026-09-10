@@ -6,7 +6,9 @@ message into evidence or traits, Jarvis first understands its *intent* and only 
 intents that genuinely carry knowledge (an explicit "remember this", or a real
 statement/question to reason about) are allowed to touch memory or beliefs. A
 greeting, small talk, feedback about Jarvis, or an instruction are conversation —
-they are answered as conversation and never silently turned into beliefs.
+they are answered as conversation and never silently turned into beliefs. A
+material directive (an act) is first classified as conversation too; *executing*
+it is a separate, gated decision (Vision §27, §28), never an implicit belief.
 
 Classification is deterministic and offline (no model), bilingual (Spanish/English),
 and intentionally conservative: when nothing marks a message as conversational, it
@@ -28,6 +30,7 @@ class ConversationIntent(Enum):
     SMALLTALK = "smalltalk"  # "¿qué tal?", "how are you?" -- casual, no knowledge
     FEEDBACK = "feedback"  # about Jarvis itself ("no funcionas bien") -- not a belief
     INSTRUCTION = "instruction"  # "busca X", "habla con la IA" -- an action to interpret
+    ACT = "act"  # "crea un archivo", "envía un correo" -- a material act to execute
     REMEMBER = "remember"  # "recuerda que ..." -- the one intent that IS memory
     STATEMENT = "statement"  # default: a claim/question to reason about (the knowledge path)
 
@@ -67,6 +70,84 @@ _INSTRUCTION_CUES = (
     "ask the",
     "find out",
     "google",
+)
+# A *material* directive: a world-effect act, not a question to the model. Cues are
+# deliberately narrow phrases (verb + object) so free-form statements ("creo que ...",
+# "voy a escribir un libro") never land here -- classify is intentionally conservative.
+_ACT_CUES = (
+    "escríbeme",
+    "escribime",
+    "escribe un",
+    "escribe una",
+    "escribe el",
+    "escribe la",
+    "escribe en",
+    "escribe al",
+    "crea un",
+    "crea una",
+    "crea el",
+    "crea la",
+    "guárdame",
+    "guardame",
+    "guárdalo",
+    "guardalo",
+    "guarda esto",
+    "guarda un",
+    "guarda una",
+    "guarda en",
+    "guarda el",
+    "guarda la",
+    "envía un",
+    "envia un",
+    "envía el",
+    "envia el",
+    "envía esta",
+    "envia esta",
+    "manda un",
+    "manda el",
+    "mandale un",
+    "ejecuta",
+    "ejecutá",
+    "abre el",
+    "abre la",
+    "lee el",
+    "lee la",
+    "lee mi",
+    "borra el",
+    "borra la",
+    "elimina",
+    "eliminá",
+    "write a",
+    "write an",
+    "write the",
+    "write to",
+    "write this",
+    "save this",
+    "save the",
+    "save a",
+    "create a",
+    "create an",
+    "create the",
+    "send an",
+    "send a",
+    "send the",
+    "send this",
+    "email the",
+    "email a",
+    "run the",
+    "run a",
+    "run this",
+    "open the",
+    "open this",
+    "read the",
+    "read my",
+    "read this",
+    "look at the",
+    "look at this",
+    "delete",
+    "remove",
+    "move the",
+    "copy the",
 )
 _GREETING_TOKENS = frozenset(
     {"hola", "holi", "holis", "buenas", "hey", "hi", "hello", "ey", "saludos"}
@@ -117,6 +198,8 @@ def classify(text: str) -> ConversationIntent:
         return ConversationIntent.REMEMBER
     if _has_phrase(lowered, _INSTRUCTION_CUES):
         return ConversationIntent.INSTRUCTION
+    if _has_phrase(lowered, _ACT_CUES):
+        return ConversationIntent.ACT
     if _is_feedback(lowered, tokens):
         return ConversationIntent.FEEDBACK
     if tokens & _GREETING_TOKENS or _has_phrase(lowered, _GREETING_PHRASES):

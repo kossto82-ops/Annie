@@ -231,6 +231,7 @@ class Jarvis:
         knowledge_source: KnowledgeSource | None = None,
         mail_source: MailBox | None = None,
         task_agent: TaskAgent | None = None,
+        instruction_agent: TaskAgent | None = None,
         notes_store: NotesStore | None = None,
         calendar_store: CalendarStore | None = None,
         task_scheduler: TaskScheduler | None = None,
@@ -320,6 +321,13 @@ class Jarvis:
         # It only acts on a concrete, already-decided instruction; reasoning over
         # the result, and deciding what to delegate, stay gated in the core (D6).
         self._task_agent: TaskAgent | None = task_agent
+        # Earned agency (Vision §27, §28): the edge that executes a *material*
+        # instruction spoken in conversation. Unlike delegation, it never carries
+        # upstream approval -- only protocol-level permission (approved=False):
+        # locally reversible sandbox acts run, and external/destructive acts
+        # refuse honestly through the gate. None by default -> a bare Jarvis
+        # "understands but cannot act", exactly as before.
+        self._instruction_agent: TaskAgent | None = instruction_agent
         # Notes (Odysseus #8): a local store that lists/searches/creates/updates
         # and deletes notes on request. None by default -> offline. It only keeps
         # and returns plain note content with provenance; reasoning over notes
@@ -949,6 +957,41 @@ class Jarvis:
         if self._task_agent is None:
             raise RuntimeError("no agent capability configured; set_task_agent")
         return self._task_agent.run_task(task)
+
+    @property
+    def instruction_agent(self) -> TaskAgent | None:
+        """The earned-agency executor (Vision §27, §28), or ``None`` when offline.
+
+        Read-only so a surface can report whether Jarvis can act on an
+        instruction. Its executor only ever holds protocol-level permission
+        (``approved=False``): a conversation authorizes a sandbox act, never a
+        world side-effect -- external or destructive calls refuse through the
+        gate, with the reply narrating the refusal honestly.
+        """
+        return self._instruction_agent
+
+    def set_instruction_agent(self, agent: TaskAgent | None) -> None:
+        """Wire (or clear) the earned-agency executor at runtime.
+
+        ``None`` disables it: Jarvis simply reports that it cannot act. Wired or
+        not, execution only happens for a concrete material instruction, and the
+        registry gate stays the boundary between a sandbox act and a world one.
+        """
+        self._instruction_agent = agent
+
+    def execute(self, task: str) -> TaskResult:
+        """Run one *material* instruction through the earned-agency executor.
+
+        The companion's own words are the authorization for protocol-level acts
+        only: sandboxed reads and writes may run, and external/destructive acts
+        refuse honestly through the tool gate (they need deliberate approval via
+        ``delegate``). Raises a clear error when no executor is wired.
+        """
+        if self._instruction_agent is None:
+            raise RuntimeError(
+                "no instruction executor configured; set_instruction_agent"
+            )
+        return self._instruction_agent.run_task(task)
 
     @property
     def notes_store(self) -> NotesStore | None:

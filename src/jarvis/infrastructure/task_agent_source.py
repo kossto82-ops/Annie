@@ -203,3 +203,34 @@ def build_task_agent(
                 fallback=ToolRegistryTaskAgent(registry),
             )
     return ToolRegistryTaskAgent(registry)
+
+
+def build_instruction_agent(
+    settings: ProviderSettings, *, model: Any = None
+) -> TaskAgent | None:
+    """Build the earned-agency executor for conversational instructions (Vision §28).
+
+    The same sandboxed :class:`ToolRegistry` as delegation, but wired with
+    ``approved=False``: instructions spoken in conversation authorize *protocol-level*
+    acts only -- locally reversible sandbox reads and writes run, while external
+    (MCP) and destructive acts refuse honestly through the policy gate (they need the
+    deliberate-approval path of delegation). ``None`` when no tool source is
+    configured, so a Jarvis built from this keeps working offline. The executor is
+    the pydantic-ai model-driven loop when a live provider is present, else the
+    deterministic decided-script agent.
+    """
+    registry = build_sandboxed_registry()
+    if registry is None:
+        return None
+    if settings.provider == "pydantic" and settings.model:
+        from jarvis.infrastructure.pydantic_ai_task_agent import PydanticAiTaskAgent
+
+        if importlib.util.find_spec("pydantic_ai") is not None:
+            return PydanticAiTaskAgent(
+                registry,
+                settings=settings,
+                model=model,
+                approved=False,
+                fallback=ToolRegistryTaskAgent(registry, approved=False),
+            )
+    return ToolRegistryTaskAgent(registry, approved=False)
