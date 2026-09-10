@@ -66,6 +66,10 @@ class WhisperTranscriber:
         if not settings.base_url:
             raise ValueError("an audio-transcriptions provider needs a base_url")
         self._settings = settings
+        self.provider = settings.provider
+        self.model = settings.model
+        # A live ear: raw audio becomes real text here, unlike the echo pass-through.
+        self.can_hear_audio = True
         self._endpoint = settings.base_url.rstrip("/") + "/audio/transcriptions"
         self._transport: AudioTransport = transport or self._default_transport
 

@@ -608,6 +608,7 @@ function renderState(s) {
   renderList("self", s.self);
   renderList("companion", s.companion);
   renderPerceiver(s.perceiver);
+  renderSpeech(s);
   renderTunables(s);
   if (activePanel === "cap") renderCapabilityPanels(s);
   renderTools(s);
@@ -1139,7 +1140,30 @@ $("taskCreate").addEventListener("click", () => {
   }, "taskOut");
 });
 
-/* ---- voice input (Web Speech API) — push to talk ------------------------ */
+/* ---- voice input: server-side live ear, or in-browser Web Speech -------- */
+const mediaRecorderOK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+let serverEar = false;
+function renderSpeech(s) {
+  const sp = (s && s.speech) || {};
+  serverEar = !!sp.live;
+  const mic = $("mic");
+  const earName = sp.provider || "browser";
+  const modelTag = sp.model ? (" \u2014 " + sp.model) : "";
+  if (serverEar) {
+    mic.disabled = !mediaRecorderOK;
+    mic.title = mediaRecorderOK
+      ? ("Hold to talk \u2014 " + earName + modelTag + " (server)")
+      : "Server transcription not available in this browser";
+  } else if (SR) {
+    mic.disabled = false;
+    mic.title = "Hold to talk";
+  } else {
+    mic.disabled = true;
+    mic.title = "Voice input not available in this browser";
+  }
+}
+/* In-browser Web Speech (the offline default): only used while no live ear is
+   wired, so the two never race for the mic. */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 if (SR) {
   const rec = new SR();
@@ -1147,7 +1171,6 @@ if (SR) {
   rec.interimResults = false; rec.maxAlternatives = 1;
   let held = false;
   const mic = $("mic");
-  mic.title = "Hold to talk";
   rec.onresult = (e) => {
     const said = e.results[0][0].transcript;
     if (said && said.trim()) { showChat(); converse(said.trim()); }
@@ -1156,7 +1179,7 @@ if (SR) {
   rec.onerror = () => { held = false; mic.classList.remove("on"); };
   const startHold = (ev) => {
     ev.preventDefault();
-    if (held) return;
+    if (held || serverEar) return;
     try { rec.start(); held = true; mic.classList.add("on"); } catch (e) {}
   };
   const endHold = (ev) => {
@@ -1167,8 +1190,55 @@ if (SR) {
   mic.addEventListener("pointerup", endHold);
   mic.addEventListener("pointerleave", endHold);
   mic.addEventListener("pointercancel", endHold);
-} else {
-  $("mic").disabled = true; $("mic").title = "Voice input not available in this browser";
+}
+/* Server-side live ear: record the mic and transcribe it through
+   POST /api/speech/transcribe (the configured Whisper-class backer). */
+if (mediaRecorderOK) {
+  const mic = $("mic");
+  let mediaRec = null, chunks = [];
+  const stopRecorder = () => {
+    if (mediaRec) { try { mediaRec.stop(); } catch (e) {} }
+  };
+  const sendRecording = async (blob, type) => {
+    try {
+      const res = await fetch("/api/speech/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": type || "audio/webm" },
+        body: blob,
+      });
+      const data = await res.json();
+      const text = (data && data.text) || "";
+      if (text && text.trim()) { showChat(); converse(text.trim()); }
+      else bubble("jarvis", "Did not hear any words.");
+    } catch (e) {
+      bubble("jarvis", "Could not transcribe the audio: " + e);
+    }
+  };
+  const startRecorder = async (ev) => {
+    ev.preventDefault();
+    if (!serverEar || mediaRec) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      mediaRec = new MediaRecorder(stream);
+      mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      mediaRec.onstop = () => {
+        const type = mediaRec.mimeType || "audio/webm";
+        const blob = new Blob(chunks, { type });
+        for (const t of stream.getTracks()) t.stop();
+        mediaRec = null;
+        mic.classList.remove("on");
+        sendRecording(blob, type);
+      };
+      mic.classList.add("on");
+      mediaRec.start();
+    } catch (e) {
+      bubble("jarvis", "The microphone is not available: " + e);
+    }
+  };
+  mic.addEventListener("pointerdown", startRecorder);
+  document.addEventListener("pointerup", stopRecorder);
+  document.addEventListener("pointercancel", stopRecorder);
 }
 
 /* ---- the reactive point-cloud sphere ------------------------------------ */

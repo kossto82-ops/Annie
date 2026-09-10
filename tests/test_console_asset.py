@@ -142,6 +142,28 @@ def test_the_snapshot_surfaces_the_full_capability_catalog() -> None:
         assert status_ok, c["status"]
 
 
+def test_the_live_ear_recorder_path_is_wired_and_keeps_web_speech() -> None:
+    """Tripwire: the console records to the server when a live STT ear is wired.
+
+    The snapshot's ``speech`` block (``live`` flag) decides between recording the
+    mic and POSTing it to ``/api/speech/transcribe`` (the Whisper-class backer) and
+    the in-browser Web Speech push-to-talk -- the two must never race for the mic.
+    """
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "renderSpeech",
+        "serverEar",
+        "MediaRecorder",
+        "navigator.mediaDevices.getUserMedia",
+        "/api/speech/transcribe",
+        "sendRecording",
+        "SpeechRecognition",
+    ):
+        assert marker in html, f"live STT recorder wiring lost its {marker!r}"
+    # The Web Speech hold guards on the server ear; the recorder guards on NOT server.
+    assert "serverEar) return;" in html, "in-browser and server mic paths must not race"
+
+
 def test_the_cognition_thresholds_are_tunable_from_the_settings_panel() -> None:
     html = _CONSOLE.read_text(encoding="utf-8")
     # The thresholds card lives in the settings drawer and drives the tunables

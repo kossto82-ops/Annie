@@ -143,6 +143,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
             "deliberation_value": jarvis.deliberation_value().value,
         },
         "provider": _provider_stats(jarvis),
+        "speech": _speech_block(jarvis),
         "tunables": {
             "grounded_confidence": jarvis.knobs().grounded_confidence,
             "insight_confidence": jarvis.knobs().insight_confidence,
@@ -179,6 +180,30 @@ def snapshot(jarvis: Jarvis) -> Reply:
             }
             for thread in jarvis.reasoning_span()
         ],
+    }
+
+
+def _speech_block(jarvis: Jarvis) -> Reply:
+    """The ear the console hears through, as a self-describing snapshot block.
+
+    ``live`` is a promise, not a guess: an ear that turns raw audio into real text
+    (a Whisper backer) reports ``can_hear_audio``; the browser's echo pass-through
+    cannot, so it reports ``live: False`` and the console keeps its in-browser Web
+    Speech path. ``endpoint`` is where a live console records audio to.
+    """
+    source = jarvis.speech_perception
+    if source is None:
+        return {
+            "provider": None,
+            "model": None,
+            "live": False,
+            "endpoint": "/api/speech/transcribe",
+        }
+    return {
+        "provider": source.provider,
+        "model": source.model,
+        "live": source.can_hear_audio,
+        "endpoint": "/api/speech/transcribe",
     }
 
 

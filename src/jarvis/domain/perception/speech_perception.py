@@ -26,7 +26,17 @@ class SpeechPerceptionSource(Protocol):
     STT) or a reference to raw audio for a richer transcriber. The returned text is
     an *observation* Jarvis then perceives through the ordinary ``PerceptionSource``
     -- never a belief on its own.
+
+    The three metadata attributes let a surface report -- honestly -- which ear is
+    wired: ``provider`` names it, ``model`` the engine it transcribes with ('' when
+    there is none), and ``can_hear_audio`` says whether raw audio produces real text
+    here (a Whisper backer can; the browser's echo pass-through cannot). They are
+    self-description, never a promise.
     """
+
+    provider: str
+    model: str
+    can_hear_audio: bool
 
     def transcribe(self, utterance: str) -> str:
         """Return the transcribed text of ``utterance`` -- '' when it cannot hear."""

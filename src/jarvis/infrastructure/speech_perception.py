@@ -14,6 +14,10 @@ from __future__ import annotations
 class EchoSpeechPerception:
     """Returns the already-transcribed utterance unchanged (browser STT path)."""
 
+    provider = "echo"
+    model = ""
+    can_hear_audio = False
+
     def transcribe(self, utterance: str) -> str:
         """The utterance is already text (the browser transcribed it)."""
         return utterance

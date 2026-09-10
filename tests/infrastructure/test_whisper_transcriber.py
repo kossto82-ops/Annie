@@ -94,6 +94,19 @@ class TestWhisperTranscriber:
         )
         assert ear.transcribe("already transcribed") == ""
 
+    def test_a_live_ear_describes_itself(self) -> None:
+        ear = WhisperTranscriber(
+            SttSettings(
+                provider="groq",
+                model="whisper-large-v3",
+                base_url="https://api.groq.com/openai/v1",
+            ),
+            transport=_fake_transport,
+        )
+        assert ear.can_hear_audio is True
+        assert ear.provider == "groq"
+        assert ear.model == "whisper-large-v3"
+
     def test_transcription_errors_stay_loud(self) -> None:
         def refusing(url: str, headers: dict[str, str], body: bytes) -> str:
             raise RuntimeError("401 unauthorized")
@@ -112,6 +125,9 @@ class TestRegistry:
             SttSettings(provider="echo", model="")
         )
         assert isinstance(ear, EchoSpeechPerception)
+        assert ear.can_hear_audio is False
+        assert ear.provider == "echo"
+        assert ear.model == ""
 
     def test_an_offline_provider_never_requires_a_model(self) -> None:
         for provider in ("echo", "stub", "scripted"):

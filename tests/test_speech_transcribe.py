@@ -9,6 +9,10 @@ from jarvis.interface.command_center import route
 class _StubEar:
     """A scripted ear: text passes through, audio becomes a fixed transcript."""
 
+    provider = "stub"
+    model = "fake-audio"
+    can_hear_audio = True
+
     def transcribe(self, utterance: str) -> str:
         return utterance
 
@@ -17,6 +21,10 @@ class _StubEar:
 
 
 class _BrokenEar:
+    provider = "stub"
+    model = ""
+    can_hear_audio = True
+
     def transcribe(self, utterance: str) -> str:
         return utterance
 
@@ -47,6 +55,41 @@ class TestJarvisTranscribe:
     def test_transcribing_flips_no_capability_when_none_is_wired(self) -> None:
         jarvis = Jarvis()
         assert not jarvis.can_do("perceive speech")
+
+
+class TestSpeechSnapshot:
+    def test_no_ear_reports_a_closed_ear(self) -> None:
+        from typing import cast
+
+        from jarvis.interface.command_center import snapshot
+
+        block = cast(dict[str, object], snapshot(Jarvis())["speech"])
+        assert block["live"] is False
+        assert block["provider"] is None
+        assert block["endpoint"] == "/api/speech/transcribe"
+
+    def test_a_live_ear_reports_live_and_its_name(self) -> None:
+        from typing import cast
+
+        from jarvis.interface.command_center import snapshot
+
+        jarvis = Jarvis(speech_perception=_StubEar())
+        block = cast(dict[str, object], snapshot(jarvis)["speech"])
+        assert block["live"] is True
+        assert block["provider"] == "stub"
+        assert block["model"] == "fake-audio"
+
+    def test_the_echo_ear_is_honestly_not_live(self) -> None:
+        from typing import cast
+
+        from jarvis.infrastructure.speech_perception import EchoSpeechPerception
+        from jarvis.interface.command_center import snapshot
+
+        jarvis = Jarvis(speech_perception=EchoSpeechPerception())
+        block = cast(dict[str, object], snapshot(jarvis)["speech"])
+        assert block["live"] is False
+        assert block["provider"] == "echo"
+        assert block["model"] == ""
 
 
 class TestTranscribeEndpoint:
