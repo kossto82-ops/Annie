@@ -253,8 +253,14 @@ Increments 111–112).
 - A real SQLite DB now backs the repository contracts (`Jarvis.database()`, Increment 150) and the command
   center's composition root uses it; the JSON stores / `Jarvis.persistent()` remain as the file-backed twin;
   `TemporalStability` count/recency weighting beyond the opt-in decay policy.
-- Speech: a live STT backer (Increment 154) is wired, but real instruction execution (earned agency) and
-  streaming/VAD mic delivery to the server ear remain open.
+- Speech: a live STT backer (Increment 154) is wired; streaming/VAD mic delivery to the server ear
+  remain open.
+- Real instruction execution (earned agency, Increment 160): a material directive in conversation is
+  classified as `ConversationIntent.ACT` and performed through `Jarvis.execute` behind the same
+  sandboxed ToolRegistry without approval — sandbox reads/writes run, external/destructive acts
+  refuse at the gate; without an executor (no `JARVIS_AGENT_ROOT`), Jarvis declines honestly. A live
+  `pydantic` provider turns free text into the multi-step loop; offline, only the decided-script
+  format can run, so free text fails *truthfully*.
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).
 
 Do not turn every future direction into immediate work. Follow the current user request.

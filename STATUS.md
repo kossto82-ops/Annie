@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-09 (Increment 159)
+Last updated: 2026-09-10 (Increment 160)
 
 ---
 
@@ -1552,8 +1552,8 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
 - A short-term `ConversationContext` on Jarvis records recent turns (separate from long-term
   memory, for follow-ups/pronouns); `_confirmation` narrowed to a *bare* yes/no so feedback is no
   longer a "correction". Verified live; `test_intent` + `test_conversation` added.
-- Pending (honest): the LLM reasoner does not yet consume the short-term context; real instruction
-  execution is unimplemented (earned agency) — instructions are acknowledged honestly, not acted on.
+- Resolved since: the reasoner consumes the short-term `ConversationContext` (Increment 138), and real
+  instruction execution ships as earned agency (Increment 160).
 - Gates: ruff clean · pyright strict · pytest 636 passed.
 
 ### Increment 115 — the Internet capability: Agent-Reach behind ExternalSource ✅ (2026-09-01)
@@ -1999,8 +1999,9 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
 - Gates: ruff clean · pyright strict 0 errors · pytest 1339 passed, 3 skipped.
 - **Remaining in Phase 4 part 2:** nothing in the client direction — the adapter ships behind the live
   seams. (The fastmcp *server* extra is still not installed, which only matters if an in-process MCP
-  server / round-trip test is ever wanted.) Next in the backlog after Phase 4: live STT nivel 2
-  (Whisper) refinements and real-instruction execution.
+  server / round-trip test is ever wanted.) What was next in the backlog after Phase 4 — live STT
+  nivel 2 (Whisper) refinements and real-instruction execution — landed: console mic through the live
+  ear (Increment 159) and instructions now execute as earned agency (Increment 160).
 
 ### Increment 159 — live STT nivel 2: the console mic uses the live ear ✅ (2026-09-09)
 - The gap from Increment 154 is closed in its console direction: the command-center mic no longer
@@ -2025,6 +2026,35 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
 - **Still open in STT** (honest): progressively streaming the mic while speaking and endpoint
   VAD/segmentation are not wired — push-to-talk sends one blob per hold. Deliberately out of scope
   here (offline-featureable, format-constrained edge).
+
+### Increment 160 — real instruction execution: instructions actually act (earned agency) ✅ (2026-09-10)
+- The oldest honest gap closes in its minimal real form: a *material* instruction in conversation is
+  now **executed**, not just acknowledged (Vision §27, §28 — autonomy is earned, and a world act is
+  never fabricated). A new deterministic intent, `ConversationIntent.ACT`, recognizes an unmistakable
+  world-effect directive ("escribe un archivo", "crea una nota", "envía un correo", "run the tests")
+  with conservative bilingual verb+object cues; free-form statements ("creo que …", "voy a escribir
+  un libro") and the intents that dominate it (REMEMBER, INSTRUCTION) never spill into execution.
+- A new earned-agency seam on Jarvis mirrors delegation: `instruction_agent` / `set_instruction_agent`
+  and `execute(task)` — the executor performs the act through the same sandboxed `ToolRegistry`
+  (D1-revised) but **without approval** (`build_instruction_agent` wires `approved=False`): locally
+  reversible sandbox reads/writes run, and external (MCP) or destructive calls refuse honestly
+  through the policy gate. The companion's words authorize a sandbox act, never a world side-effect —
+  the deliberate-approval path (`tool run approved`, delegation) stays the boundary.
+- The chat `say` path routes ACT to a truthful bilingual reply: "Listo — …" on a real outcome, "No
+  pude completarlo: …" on a refusal/failure, and an honest "no tengo un agente de tareas configurado
+  (JARVIS_AGENT_ROOT)" when no executor is wired. Nothing is narrated that did not happen; no
+  instruction becomes a belief (same conversation-first invariant as increment 114).
+- Composition root: `create_jarvis` builds and instruments the instruction agent beside the delegated
+  one (both count into `provider_stats()` via the shared collector). Tests stay offline and
+  deterministic: intent matrix, `execute` wiring/raise, conversation replies (decline / success /
+  honest failure), and the gate itself (protocol-level acts run, `EXTERNAL_ACTION` refuses).
+- Gates: ruff clean · pyright strict 0 errors · pytest 1383 passed, 3 skipped.
+- **Honest remaining gap in earned agency:** offline (no live `pydantic` provider) the charitable
+  executor is the decided-script agent, which needs the script format — a free-text instruction then
+  fails *honestly* (truthful "no pude completarlo"), while a live provider's model-driven loop decides
+  the steps from free text behind the same gate. An instruction that names an external/destructive
+  tool is refused, never guessed through. Deliberate delegation (`agent` capability) remains the
+  approved, higher-trust path.
 
 ---
 
@@ -2417,9 +2447,10 @@ seam.)*
 - Speech has an opt-in live STT backer (`JARVIS_STT_*` → a Whisper-compatible ear, Increment 154) and
   the console mic *uses* it when wired (record → `POST /api/speech/transcribe`, Increment 159);
   streaming the mic while speaking and VAD/segmentation are still unwired (push-to-talk sends one
-  blob per hold). The browser Web Speech default stays for offline/unconfigured setups. Real
-  instruction execution is unimplemented (instructions are acknowledged honestly, not acted on —
-  earned agency).
+  blob per hold). The browser Web Speech default stays for offline/unconfigured setups. A material
+  instruction *executes* when an agent is wired and declines honestly otherwise (Increment 160:
+  earned agency, protocol-level gate only); the offline charitable executor needs the decided-script
+  format, so a live provider is what turns free text into a multi-step act.
 - Notes/tasks/calendar local adapters now persist to SQLite in their own root (`jarvis.db`, Increment 151) but
   have no CalDAV/ICS sync; email has a real IMAP/SMTP adapter but no per-account UI management.
 - NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
@@ -2434,7 +2465,9 @@ live-tunable cognition thresholds, the root-injectable per-belief weighting poli
 database behind the repository contracts (`Jarvis.database()`) extended across the calendar/notes/tasks
 edge seams and the decision-provenance trace (Increments 150-152), an opt-in live STT backer behind
 the speech seam (Increment 154), and the console mic actually using that live ear when wired
-(Increment 159).
+(Increment 159), and real instruction execution: material directives in conversation perform through
+the earned-agency executor behind the same sandboxed registry, with external/destructive acts
+refusing at the gate (Increment 160).
 
 ---
 

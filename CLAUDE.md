@@ -51,7 +51,7 @@ Read these files only when relevant:
 
 ## Current priority
 
-The current project is around Increment 159 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is around Increment 160 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
@@ -87,7 +87,13 @@ inside `build_sandboxed_registry`); and the live STT level-2 console use
 (Increment 159: the console mic uses that ear — when `JARVIS_STT_*` wires a Whisper-class backer,
 push-to-talk records with `getUserMedia`/`MediaRecorder` and POSTs to `/api/speech/transcribe`, and
 the ear seam self-describes via `provider`/`model`/`can_hear_audio`; the snapshot's `speech` block
-tells the browser which path to take, Web Speech staying the offline default). A live LLM provider is
+tells the browser which path to take, Web Speech staying the offline default); and real instruction
+execution (Increment 160: a material directive — "escribe un archivo", "run the tests" — classifies
+as `ConversationIntent.ACT` and is *performed* through a new earned-agency seam,
+`Jarvis.execute`/`instruction_agent`, wired by `build_instruction_agent` to the same sandboxed
+`ToolRegistry` but at `approved=False` — sandbox reads/writes run, external (MCP)/destructive acts
+refuse honestly at the gate, and the chat reply narrates the real outcome ("Listo — …" / "No pude
+completarlo: …") or an honest decline when no executor is wired). A live LLM provider is
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 
@@ -95,7 +101,9 @@ The pydantic-ai provider thread is complete in its shipped parts: the opt-in imp
 LLM/agent/reasoner
 seams shipped in Increment 153 and stays
 gated — future live providers should implement the same seams, never a second bypass. The live-STT thread
-is complete too (Increment 154 backend, Increment 159 console use).
+is complete too (Increment 154 backend, Increment 159 console use), and earned-agency execution
+(Increment 160) extends the same `TaskAgent` seam rather than adding a new abstraction —
+the instruction executor is the delegated agent at `approved=False`.
 Instrumentation landed as Increment 156 (pydantic-ai Phase 4, part 1);
 provider guardrails as Increment 157 (Phase 4, part 2a); the MCP adapter (client direction — external
 toolsets into the `ToolRegistry` as `ToolSpec`s) as Increment 158 (Phase 4, part 2b). The pydantic-ai

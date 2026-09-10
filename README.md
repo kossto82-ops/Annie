@@ -99,6 +99,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - Provider guardrails — a live provider that *declines* (safety filter, "I can't help", "no puedo ayudarte") yields honest silence, not a refusal dressed up as an answer (Vision §37).
 - MCP client direction — tools from a live MCP server (`JARVIS_MCP_CONFIG`) join the gated `ToolRegistry` as `EXTERNAL_ACTION` specs, namespaced (`repo.status`) and approval-gated like any other tool.
 - Live STT in the console — when `JARVIS_STT_*` wires a Whisper-class ear, the hold-to-talk mic records (`getUserMedia`/`MediaRecorder`) and transcribes through `POST /api/speech/transcribe`; the browser's Web Speech push-to-talk stays the offline default.
+- Real instruction execution (earned agency) — a material directive in conversation ("escribe un archivo", "run the tests") is classified as an act and *performed* through the sandboxed `ToolRegistry` at `approved=False` (`Jarvis.execute`): sandbox reads/writes run, external/destructive tools refuse at the gate, and the reply narrates the real outcome or an honest decline.
 
 **Model of its companion**
 - `observe_companion(trait, evidence)` — evolve a belief about the companion.
