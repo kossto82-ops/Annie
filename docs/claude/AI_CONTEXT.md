@@ -234,6 +234,12 @@ Increments 111–112).
   Every MCP spec is `PermissionLevel.EXTERNAL_ACTION`, so approval is required and each call is an
   observed `ToolCall`. `JARVIS_MCP_CONFIG` adds the server's tools inside `build_sandboxed_registry`;
   absent `pydantic-ai` or a broken edge returns `()`/`None` (offline Jarvis untouched).
+- Live STT level 2 in the console (Increment 159): the `speech` snapshot block (`provider` / `model` /
+  `live`) is honest self-description — `SpeechPerceptionSource` now carries `provider`, `model`, and
+  `can_hear_audio` (echo `False`, Whisper backers `True`). When a live ear is wired the console mic
+  records (`getUserMedia` + `MediaRecorder`, webm) and POSTs one blob to `/api/speech/transcribe`
+  which feeds `converse()`; the two mic paths are mutually exclusive (`serverEar` guards), Web Speech
+  staying the offline default. Streaming/VAD remains unwired (one blob per hold).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
 ## Known technical debt / future directions

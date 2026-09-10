@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-09 (Increment 158)
+Last updated: 2026-09-09 (Increment 159)
 
 ---
 
@@ -2002,6 +2002,30 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
   server / round-trip test is ever wanted.) Next in the backlog after Phase 4: live STT nivel 2
   (Whisper) refinements and real-instruction execution.
 
+### Increment 159 — live STT nivel 2: the console mic uses the live ear ✅ (2026-09-09)
+- The gap from Increment 154 is closed in its console direction: the command-center mic no longer
+  *always* transcribes in-browser. When a live ear is wired (`JARVIS_STT_*` → a Whisper-class
+  backer), push-to-talk records the mic (`getUserMedia` + `MediaRecorder`, webm/opus) and POSTs the
+  bytes to `POST /api/speech/transcribe`, whose reply feeds the same `converse()` as typed input —
+  so the configured engine genuinely hears the user at the console.
+- The ear seam self-describes so the surface can decide honestly: `SpeechPerceptionSource` gains
+  `provider`, `model`, and — the honest distinction — `can_hear_audio`. The browser's echo
+  pass-through is `False` (raw audio yields nothing, so the console keeps in-browser Web Speech);
+  a Whisper backer is `True`, so the console records server-side. Self-description, never a guess.
+- The snapshot carries a `speech` block (`provider` / `model` / `live` / `endpoint`); the console
+  reads it on every render. The two mic paths are mutually exclusive (`serverEar` guards each), so
+  Web Speech and the recorder never race for the mic; a browser without `MediaRecorder` reports an
+  honest disabled mic and otherwise falls back to Web Speech.
+- Offline Jarvis is untouched: with no `JARVIS_STT_*` (default `echo`) the browser keeps its
+  in-browser push-to-talk, and the tests stay socket-free (the recorder lives in the one browser
+  asset, guarded by the console tripwires).
+- Tests: snapshot `speech` block for none/echo/live ears; self-description on both implementers;
+  console tripwire checks the recorder path's markers and the `serverEar)` guard. Gates: ruff clean ·
+  pyright strict 0 errors · pytest 1344 passed, 3 skipped.
+- **Still open in STT** (honest): progressively streaming the mic while speaking and endpoint
+  VAD/segmentation are not wired — push-to-talk sends one blob per hold. Deliberately out of scope
+  here (offline-featureable, format-constrained edge).
+
 ---
 
 ## Decisions log (ADR-lite — settled, do not revisit)
@@ -2390,10 +2414,12 @@ seam.)*
 - Documents are folder-aware (Increment 142), carry recorded ownership (Increment 148) and are
   editable via the chat itself (Increment 149) — remaining gap: search ranks whole documents, not
   passages.
-- Speech has an opt-in live STT backer (`JARVIS_STT_*` → a Whisper-compatible ear, Increment 154), but
-  the console mic still transcribes in-browser by default and no streaming/VAD mic path is wired; real
-  instruction execution is unimplemented (instructions are acknowledged honestly, not acted on — earned
-  agency).
+- Speech has an opt-in live STT backer (`JARVIS_STT_*` → a Whisper-compatible ear, Increment 154) and
+  the console mic *uses* it when wired (record → `POST /api/speech/transcribe`, Increment 159);
+  streaming the mic while speaking and VAD/segmentation are still unwired (push-to-talk sends one
+  blob per hold). The browser Web Speech default stays for offline/unconfigured setups. Real
+  instruction execution is unimplemented (instructions are acknowledged honestly, not acted on —
+  earned agency).
 - Notes/tasks/calendar local adapters now persist to SQLite in their own root (`jarvis.db`, Increment 151) but
   have no CalDAV/ICS sync; email has a real IMAP/SMTP adapter but no per-account UI management.
 - NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
@@ -2406,8 +2432,9 @@ reasoning + confirmation, the five edge capability seams + tool registry, and th
 dashboard/sphere/catalog surface, the files/documents surface (accept, recall, search, chip, read, folders),
 live-tunable cognition thresholds, the root-injectable per-belief weighting policy, a real SQLite
 database behind the repository contracts (`Jarvis.database()`) extended across the calendar/notes/tasks
-edge seams and the decision-provenance trace (Increments 150-152), and an opt-in live STT backer behind
-the speech seam (Increment 154).
+edge seams and the decision-provenance trace (Increments 150-152), an opt-in live STT backer behind
+the speech seam (Increment 154), and the console mic actually using that live ear when wired
+(Increment 159).
 
 ---
 
