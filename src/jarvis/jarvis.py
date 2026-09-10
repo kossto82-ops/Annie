@@ -947,6 +947,17 @@ class Jarvis:
         """
         return self._instrumentation.snapshot()
 
+    def reset_provider_stats(self) -> None:
+        """Forget every recorded provider call (bookkeeping only).
+
+        The collector keeps counting from zero afterwards; cognition, memory and
+        capabilities are untouched. A store that cannot reset simply keeps its
+        totals (the in-memory default resets).
+        """
+        reset = getattr(self._instrumentation, "reset", None)
+        if callable(reset):
+            reset()
+
     def delegate(self, task: str) -> TaskResult:
         """Run one delegated material task through the agent capability.
 
@@ -1453,6 +1464,36 @@ class Jarvis:
         if self._task_scheduler is None:
             raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
         return self._task_scheduler.due_tasks()
+
+    def run_scheduled_task(self, task_id: str) -> TaskResult:
+        """Run one scheduled task right now through the earned-agency executor.
+
+        The task must exist and be enabled; its ``command`` runs exactly as a
+        material instruction would (sandboxed reads/writes may run,
+        external/destructive acts refuse through the tool gate). The outcome is
+        recorded on the task itself (last run, status, capped output) whether
+        it succeeded or failed honestly. Raises a clear error when no
+        scheduler is wired, the task is unknown or disabled, or no executor
+        is configured -- in those cases nothing ran, so nothing is recorded.
+        """
+        if self._task_scheduler is None:
+            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
+        task = self._task_scheduler.get_task(task_id)
+        if not task.enabled:
+            raise RuntimeError(f"task {task_id!r} is disabled; enable it first")
+        if self._instruction_agent is None:
+            raise RuntimeError(
+                "no instruction executor configured; set_instruction_agent"
+            )
+        try:
+            outcome = self._instruction_agent.run_task(task.command)
+        except Exception as error:  # noqa: BLE001 - record the honest failure
+            self._task_scheduler.record_run(task_id, ok=False, output=str(error))
+            raise
+        self._task_scheduler.record_run(
+            task_id, ok=outcome.success, output=outcome.summary
+        )
+        return outcome
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Investigate ``query`` in depth through the research capability.

@@ -83,3 +83,13 @@ class TaskScheduler(Protocol):
         An empty tuple is an honest "nothing due", not an error.
         """
         ...
+
+    def record_run(self, task_id: str, *, ok: bool, output: str) -> ScheduledTask:
+        """Record that ``task_id`` just ran, and return the refreshed task.
+
+        ``ok`` is whether the run succeeded; ``output`` is its capped outcome
+        text. This records an execution that already happened (via the earned-
+        agency executor or the scheduler loop) -- it never executes anything
+        itself. Raises a clear error for an unknown id.
+        """
+        ...

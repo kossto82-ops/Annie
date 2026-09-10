@@ -17,9 +17,11 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from jarvis.domain.services.cron import next_run_after, validate_cron
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
 
 _Record = dict[str, Any]
+_MAX_RUN_OUTPUT = 2000  # last execution output kept per task (chars)
 
 
 def _now() -> datetime:
@@ -36,11 +38,15 @@ def _to_record(task: ScheduledTask) -> _Record:
         "next_run": task.next_run.isoformat() if task.next_run is not None else None,
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat(),
+        "last_run": task.last_run.isoformat() if task.last_run is not None else None,
+        "last_status": task.last_status,
+        "last_output": task.last_output,
     }
 
 
 def _from_record(task_id: str, rec: _Record) -> ScheduledTask:
     next_run_raw = rec.get("next_run")
+    last_run_raw = rec.get("last_run")
     return ScheduledTask(
         id=task_id,
         name=rec.get("name", ""),
@@ -55,6 +61,13 @@ def _from_record(task_id: str, rec: _Record) -> ScheduledTask:
         ),
         created_at=datetime.fromisoformat(rec["created_at"]),
         updated_at=datetime.fromisoformat(rec["updated_at"]),
+        last_run=(
+            datetime.fromisoformat(last_run_raw)
+            if last_run_raw is not None
+            else None
+        ),
+        last_status=rec.get("last_status"),
+        last_output=rec.get("last_output", ""),
     )
 
 
@@ -102,6 +115,7 @@ class SqliteTaskScheduler:
     ) -> ScheduledTask:
         task_id = self._id_factory()
         now = _now()
+        validate_cron(cron)
         task = ScheduledTask(
             id=task_id,
             name=name,
@@ -109,6 +123,7 @@ class SqliteTaskScheduler:
             cron=cron,
             description=description,
             enabled=enabled,
+            next_run=next_run_after(cron, now),
             created_at=now,
             updated_at=now,
         )
@@ -126,14 +141,20 @@ class SqliteTaskScheduler:
         enabled: bool,
     ) -> ScheduledTask:
         current = self.get_task(task_id)
+        new_cron = cron if cron else current.cron
+        if cron:
+            validate_cron(new_cron)
         constructed = ScheduledTask(
             id=task_id,
             name=name if name else current.name,
             command=command if command else current.command,
-            cron=cron if cron else current.cron,
+            cron=new_cron,
             description=description if description else current.description,
             enabled=enabled,
-            next_run=current.next_run,
+            next_run=next_run_after(new_cron, _now()) if cron else current.next_run,
+            last_run=current.last_run,
+            last_status=current.last_status,
+            last_output=current.last_output,
             created_at=current.created_at,
             updated_at=_now(),
         )
@@ -161,6 +182,25 @@ class SqliteTaskScheduler:
             if t.enabled and t.next_run is not None and t.next_run <= now
         )
 
+    def record_run(self, task_id: str, *, ok: bool, output: str) -> ScheduledTask:
+        current = self.get_task(task_id)
+        ran = ScheduledTask(
+            id=current.id,
+            name=current.name,
+            command=current.command,
+            cron=current.cron,
+            description=current.description,
+            enabled=current.enabled,
+            next_run=current.next_run,
+            last_run=_now(),
+            last_status="ok" if ok else "error",
+            last_output=output[:_MAX_RUN_OUTPUT],
+            created_at=current.created_at,
+            updated_at=_now(),
+        )
+        self._upsert(ran)
+        return ran
+
     # -- storage helpers ------------------------------------------------------
 
     def _set_enabled(self, task_id: str, enabled: bool) -> ScheduledTask:
@@ -172,7 +212,10 @@ class SqliteTaskScheduler:
             cron=current.cron,
             description=current.description,
             enabled=enabled,
-            next_run=current.next_run,
+            next_run=next_run_after(current.cron, _now()) if enabled else current.next_run,
+            last_run=current.last_run,
+            last_status=current.last_status,
+            last_output=current.last_output,
             created_at=current.created_at,
             updated_at=_now(),
         )

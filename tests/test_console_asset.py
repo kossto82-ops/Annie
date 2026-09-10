@@ -184,7 +184,7 @@ def test_the_inline_script_has_no_broken_single_quoted_strings() -> None:
 
     A raw apostrophe inside a single-quoted JavaScript string (e.g. the reasoning
     placeholder "Jarvis's") breaks the literal and stops the entire console script
-    from running. Escape those (\\u2019 or double quotes). This walks each line's
+    from running. Escape those (\u2019 or double quotes). This walks each line's
     single-quoted segments and rejects any that contain a raw apostrophe.
     """
     html = _CONSOLE.read_text(encoding="utf-8")
@@ -216,3 +216,402 @@ def test_the_inline_script_has_no_broken_single_quoted_strings() -> None:
                 i = end + 1
             else:
                 i += 1
+
+
+def test_agents_are_the_real_edge_seams_not_the_capability_catalog() -> None:
+    """Tripwire: the Active Agents surface must report wired seams, honestly.
+
+    The reported agent count and cards come from the snapshot's ``agents`` block
+    (the real edges + ``can_do``), and the panel opens the dedicated Agents drawer —
+    never the capability catalog dressed up as agents.
+    """
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        '"panel-agents"',
+        'id="agentsbody"',
+        "renderAgentsPanel",
+        "(s.agents || []).filter((a) => a.active).length",
+        "data-nav=\"agents\"",
+        "data-nav=\"mem\"",
+        "openPanel(\"agents\")",
+    ):
+        assert marker in html, f"real edge-agent wiring lost its {marker!r}"
+    assert "AGENT_MAP" not in html, "the fake capability->agent map must not return"
+    assert 'openPanel("agents")' in html, "agent cards must open the real agents panel"
+
+
+def test_tasks_calendar_and_memory_have_their_own_panels() -> None:
+    """Tripwire: calendar/tasks widgets live in their own panes, not buried in Ajustes."""
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        '"panel-task"',
+        '"panel-cal"',
+        '"panel-mem"',
+        '"panel-wf"',
+        'id="pendingTaskBody"',
+        'id="pendingCalBody"',
+        'id="wfbody"',
+        'id="convCount"',
+        'id="taskCount"',
+        "renderTasksPanel",
+        "renderCalPanel",
+        "renderWorkflows",
+    ):
+        assert marker in html, f"dedicated pane wiring lost its {marker!r}"
+    # The task/calendar creation widgets are still present where they belong.
+    assert 'id="taskCreate"' in html and 'id="calCreate"' in html
+
+
+def test_the_system_monitor_reports_only_measured_values() -> None:
+    """Tripwire: the monitor must never estimate CPU in the browser."""
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in ("renderEnvironment", "s.environment", "monCpu", "monRam", "monDisk"):
+        assert marker in html, f"honest system monitor lost its {marker!r}"
+    assert "CPU est." not in html
+    assert "systemMonitorTick" not in html, "the fake browser CPU estimate must not return"
+
+
+def test_memory_insights_are_derived_from_real_metrics_and_episodes() -> None:
+    """Tripwire: memory stats include session turns/calls and a data-derived chart."""
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="memTurns"',
+        'id="memCalls"',
+        'id="memChart"',
+        "renderMemoryChart",
+        "episode_series",
+    ):
+        assert marker in html, f"memory insights lost its {marker!r}"
+    assert "addEventListener(\"click\", () => openPanel(\"mem\"))" in html, \
+        "the intelligence feed 'View All' must open the real memory panel"
+
+
+def test_llm_status_counts_only_providers_with_real_calls() -> None:
+    """Tripwire: 'Conectado' requires live successes; standby is never counted."""
+    html = _CONSOLE.read_text(encoding="utf-8")
+    assert '"En espera"' in html, "active-but-unproven providers must read 'En espera'"
+    assert "Conectado" in html
+    # The connected count must be incremented only on the genuinely-connected path:
+    # there must be exactly one increment, inside the connected branch.
+    lines = [ln for ln in html.splitlines() if "connectedCount" in ln]
+    increments = [ln for ln in lines if ln.strip().endswith("connectedCount += 1;")]
+    assert len(increments) == 1, "connectedCount must be incremented in exactly one path"
+    assert 'data-q="task"' in html, "Quick Commands must expose a real new-task target"
+
+
+def _snapshot_block(name: str) -> dict[str, object]:
+    from jarvis.interface.command_center import snapshot
+    from jarvis.jarvis import Jarvis
+
+    return cast(dict[str, object], snapshot(Jarvis())[name])
+
+
+def test_the_snapshot_surfaces_the_agents_block_from_real_seams() -> None:
+    agents = cast(list[dict[str, object]], _snapshot_block("agents"))
+    labels = {a.get("label") for a in agents}
+    for expected in ("Percepción", "Web", "Razonador", "Voz", "Calendario", "Tareas"):
+        assert expected in labels, f"agents block missing {expected!r}"
+    for a in agents:
+        assert isinstance(a.get("active"), bool), f"agent {a.get('label')!r} lacks an active flag"
+        assert a.get("description"), f"agent {a.get('label')!r} lacks a description"
+    # A fresh offline Jarvis runs no live edge: everything honest standby.
+    assert not any(a.get("active") for a in agents), "fresh Jarvis must report no live edges"
+
+
+def test_the_snapshot_surfaces_a_real_host_environment_block() -> None:
+    env = _snapshot_block("environment")
+    for key in ("cpu", "ram", "disk", "cores"):
+        assert key in env, f"environment block missing {key!r}"
+    # Values are either measured numbers or None ("n/d"), never invented zeros.
+    for key in ("cpu", "ram", "disk"):
+        v = env[key]
+        assert v is None or isinstance(v, (int, float)), f"{key} must be a measured value or None"
+
+
+def test_the_snapshot_memory_block_carries_session_turns_and_calls() -> None:
+    mem = _snapshot_block("memory")
+    assert "turns" in mem and isinstance(mem["turns"], int)
+    assert "calls" in mem and isinstance(mem["calls"], int)
+    assert isinstance(mem["episode_series"], list), "episode_series must be a list of timestamps"
+
+
+def test_f1_agents_block_carries_a_derived_reason_per_edge() -> None:
+    """F1: every agent edge explains its standby with a derived reason."""
+    agents = cast(list[dict[str, object]], _snapshot_block("agents"))
+    assert agents, "agents block must not be empty"
+    for a in agents:
+        reason = a.get("reason")
+        assert isinstance(reason, str) and reason.strip(), (
+            f"agent {a.get('label')!r} lacks a derived reason"
+        )
+    by_label = {a.get("label"): a for a in agents}
+    assert "JARVIS_" in str(by_label["Tareas"].get("reason")) or "TASKS" in str(
+        by_label["Tareas"].get("reason")
+    ).upper()
+    assert "JARVIS_" in str(by_label["Calendario"].get("reason")) or "CALENDAR" in str(
+        by_label["Calendario"].get("reason")
+    ).upper()
+
+
+def test_f1_tools_snapshot_exposes_policy_and_args() -> None:
+    """F1: the tools block carries permission + args so the UI can gate runs."""
+    from jarvis.interface.command_center import snapshot
+    from jarvis.jarvis import Jarvis
+
+    tools = cast(list[dict[str, object]], snapshot(Jarvis())["tools"])
+    for t in tools:
+        assert "permission" in t, f"tool {t.get('name')!r} lacks a permission level"
+        assert "args" in t, f"tool {t.get('name')!r} lacks an args schema"
+
+
+def test_f1_console_wires_task_crud() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="taskEditId"',
+        'id="taskSave"',
+        'id="taskCancel"',
+        "editTask(",
+        "toggleTask(",
+        "deleteTask(",
+        '"disable"',
+        '"enable"',
+        '"delete"',
+        '"update"',
+        "window.confirm(",
+    ):
+        assert marker in html, f"task CRUD wiring lost its {marker!r}"
+
+
+def test_f1_console_wires_calendar_crud() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="calEditId"',
+        'id="calSave"',
+        'id="calCancel"',
+        "editEvent(",
+        "deleteEvent(",
+        'action: "update"',
+        'action: "delete"',
+    ):
+        assert marker in html, f"calendar CRUD wiring lost its {marker!r}"
+
+
+def test_f1_console_wires_docs_crud() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "infoDocument(",
+        "deleteDocument(",
+        "editDocument(",
+        'action: "info"',
+        'action: "remove"',
+        'action: "edit"',
+    ):
+        assert marker in html, f"documents CRUD wiring lost its {marker!r}"
+
+
+def test_f1_console_wires_tool_run_with_approval() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "runTool(",
+        "requires_approval",
+        "approved",
+        'action: "run"',
+        "window.confirm(",
+        "spec.permission",
+    ):
+        assert marker in html, f"tool run/approval wiring lost its {marker!r}"
+
+
+def test_f2_capability_catalog_carries_a_derived_stance() -> None:
+    """F2: every catalog entry carries its evidence-derived stance."""
+    from jarvis.interface.command_center import snapshot
+    from jarvis.jarvis import Jarvis
+
+    caps = cast(list[dict[str, str]], snapshot(Jarvis())["capabilities"])
+    assert caps, "capabilities must not be empty"
+    for c in caps:
+        assert c.get("stance") in {
+            "suggest",
+            "ask_first",
+            "withhold",
+        }, f"capability {c.get('name')!r} lacks a derived stance"
+
+
+def test_f2_console_wires_odysseus_actions() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="capScoutInput"',
+        'id="capScoutBtn"',
+        'id="noticeBtn"',
+        "scoutCapability(",
+        "acquireCapability(",
+        "rejectCapability(",
+        "noticeGaps(",
+        'action: "scout"',
+        'action: "acquire"',
+        'action: "reject"',
+        'action: "notice"',
+        "STANCE_TEXT",
+    ):
+        assert marker in html, f"odysseus panel wiring lost its {marker!r}"
+
+
+def test_f2_console_lists_real_skills_and_counts_them() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "skillsOf(",
+        "Skills — capacidades ganadas",
+        "specs.length + skills.length",
+    ):
+        assert marker in html, f"skills section lost its {marker!r}"
+
+
+def test_f3_console_wires_provider_management() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="deliberation"',
+        'id="providerStats"',
+        'id="providerReset"',
+        'id="probeprovider"',
+        'id="provOut"',
+        'id="offlineBanner"',
+        'id="reasonerProvider"',
+        'id="reasonerModel"',
+        'id="applyreasoner"',
+        'id="reasonerOut"',
+        'id="reasonerState"',
+        'id="modelList"',
+        "applyDeliberation(",
+        "probeProvider(",
+        "applyReasoner(",
+        "resetProviderStats(",
+        "renderProviderStats(",
+        "renderProviderBanner(",
+        "renderReasonerState(",
+        'api("deliberation"',
+        'api("provider_health"',
+        'api("reasoner"',
+        'api("provider_reset"',
+    ):
+        assert marker in html, f"provider management lost its {marker!r}"
+
+
+def test_f3_snapshot_stats_carry_averages() -> None:
+    stats = cast(dict[str, object], _snapshot_block("provider"))
+    assert "avg_seconds" in stats and "slowest_seconds" in stats
+
+
+def test_f4_console_wires_workflow_orchestration() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "renderWorkflows(",
+        "runWorkflow(",
+        "renderWorkflowSteps(",
+        'api("workflow"',
+        "WF_STATE_TEXT",
+        "ejecutando pasos sobre los bordes",
+    ):
+        assert marker in html, f"workflow orchestration lost its {marker!r}"
+    assert "WORKFLOW_EDGES" not in html, "the static edge list must not return"
+
+
+def test_f4_snapshot_carries_workflows_with_readiness() -> None:
+    flows = cast(list[dict[str, object]], _snapshot_block("workflows"))
+    assert {f["name"] for f in flows} == {"brief", "investigate", "dossier"}
+    for flow in flows:
+        assert flow["title"] and isinstance(flow["inputs"], list)
+        assert isinstance(flow["ready"], bool) and isinstance(flow["missing"], list)
+    # Fresh offline Jarvis: every workflow honestly blocked.
+    assert not any(f["ready"] for f in flows)
+
+
+def test_f5_console_wires_memory_depth() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="beliefbody"',
+        'id="memRecallInput"',
+        'id="memRecallBtn"',
+        'id="recallbody"',
+        'id="convbody"',
+        "loadMemoryPanel(",
+        "renderBeliefs(",
+        "openBelief(",
+        "searchMemories(",
+        "renderConversations(",
+        "resumeSession(",
+        'api("belief"',
+        'api("recall"',
+        'api("conversations"',
+    ):
+        assert marker in html, f"memory depth lost its {marker!r}"
+
+
+def test_f6_console_wires_task_runs_and_calendar_depth() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "runTaskNow(",
+        'action: "run"',
+        "calDay",
+        "calDayBody",
+        "loadCalDay(",
+        "shiftCalDay(",
+        "calGoogleState",
+        "calGoogleConnect",
+        "calGoogleDisconnect",
+        "calGoogleCode",
+        "calGoogleComplete",
+        "googleConnect(",
+        "googleComplete(",
+        "googleDisconnect(",
+        "loadGoogleStatus(",
+        'api("google_calendar"',
+        'action: "range"',
+        'action: "complete"',
+        'action: "disconnect"',
+    ):
+        assert marker in html, f"F6 wiring lost its {marker!r}"
+
+
+def test_f6_snapshot_carries_calendar_source_and_task_runs() -> None:
+    cal = cast(dict[str, object], _snapshot_block("calendar"))
+    assert cal == {"source": "none", "connected": False}
+
+
+def test_f7_console_wires_the_setup_guide() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="guidebody"',
+        "GUIDE_ROWS",
+        "renderGuide(",
+        "JARVIS_AGENT_ROOT",
+        "JARVIS_STT_*",
+        "JARVIS_TASKS_ROOT",
+        "JARVIS_PROJECT_ROOTS",
+        "SEARXNG_INSTANCE",
+    ):
+        assert marker in html, f"setup guide lost its {marker!r}"
+
+
+def test_f7_console_wires_goals_actions_operator_and_monitor() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="goalsDrop"',
+        'id="goalwrap"',
+        "renderGoalsDrop(",
+        "renderOperator(",
+        "companion_name",
+        'id="monHost"',
+        'id="monSpark"',
+        "renderCpuSpark(",
+        "cpuSamples",
+    ):
+        assert marker in html, f"F7 polish lost its {marker!r}"
+
+
+def test_f7_snapshot_carries_platform_and_companion_name() -> None:
+    from jarvis.interface.command_center import snapshot
+    from jarvis.jarvis import Jarvis
+
+    state = snapshot(Jarvis())
+    assert state["environment"]["platform"] == __import__("os").name
+    assert state["companion_name"] is None

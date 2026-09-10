@@ -19,6 +19,8 @@ import base64
 import json
 import os
 import re
+import shutil
+import time
 import urllib.parse
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
@@ -42,6 +44,7 @@ from jarvis.domain.services.capability_scout import catalog
 from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.research_report import ResearchReport
@@ -62,6 +65,7 @@ from jarvis.infrastructure.perceiver_factory import (
     describe,
     saved_models,
 )
+from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.response_renderer import uses_spanish
 from jarvis.jarvis import Jarvis
 
@@ -117,6 +121,8 @@ def _provider_stats(jarvis: Jarvis) -> dict[str, object]:
         "chat_calls": stats.chat_calls,
         "agent_calls": stats.agent_calls,
         "total_seconds": round(stats.total_seconds, 4),
+        "avg_seconds": round(stats.total_seconds / stats.calls, 4) if stats.calls else 0.0,
+        "slowest_seconds": round(stats.slowest_seconds, 4),
         "tokens": stats.usage.total_tokens,
     }
 
@@ -153,6 +159,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
         "companion": [
             {"statement": s, "confidence": c} for s, c in summary.companion_traits
         ],
+        "companion_name": _companion_name(jarvis),
         "goals": [{"goal": g, "count": n} for g, n in summary.recurring_goals],
         "actions": [
             {"description": a.description, "confidence": a.confidence, "stance": a.stance.name}
@@ -168,6 +175,8 @@ def snapshot(jarvis: Jarvis) -> Reply:
                 "name": spec.name,
                 "description": spec.description,
                 "requires_approval": spec.requires_approval,
+                "permission": spec.permission.name,
+                "args": dict(spec.args),
             }
             for spec in jarvis.tool_channels()
         ],
@@ -180,6 +189,15 @@ def snapshot(jarvis: Jarvis) -> Reply:
             }
             for thread in jarvis.reasoning_span()
         ],
+        "activity": _recent_activity(jarvis),
+        "providers": _providers_block(jarvis),
+        "agents": _agents_block(jarvis),
+        "environment": _environment_block(),
+        "calendar_events": _upcoming_events(jarvis),
+        "calendar": _calendar_block(jarvis),
+        "upcoming_tasks": _upcoming_tasks(jarvis),
+        "workflows": _workflows_block(jarvis),
+        "memory": _memory_block(jarvis, summary),
     }
 
 
@@ -220,6 +238,342 @@ def _document_names(jarvis: Jarvis, limit: int = 200) -> list[str]:
     return list(store.list_documents())[:limit]
 
 
+def _recent_activity(jarvis: Jarvis, limit: int = 6) -> list[Reply]:
+    """The tail of episodic memory, newest first, for the intelligence feed.
+
+    A *memory*, never a belief: these are the recorded episode headers (trigger,
+    outcome, when), so the dashboard narrates what happened without asserting it.
+    Defensive: a store half-wired offline simply yields an empty feed.
+    """
+    try:
+        history = list(jarvis.episodes.history())[-limit:]
+    except Exception:  # noqa: BLE001 - the store boundary
+        return []
+    history.reverse()
+    return [
+        {
+            "trigger": record.trigger,
+            "outcome": record.outcome.name,
+            "recorded_at": record.recorded_at.isoformat(),
+        }
+        for record in history
+    ]
+
+
+def _providers_block(jarvis: Jarvis) -> Reply:
+    """The provider landscape the LLM panel renders: active + selectable + live stats.
+
+    ``active`` is the perceiver currently in the loop; ``available`` is every
+    provider the surface can switch to; ``stats`` mirrors the live instrumentation
+    block. All from existing seams -- nothing asserted here.
+    """
+    perception = describe(jarvis.perception)
+    kind = perception.get("kind") or ""
+    active = perception.get("provider") or perception.get("model") or kind
+    return {
+        "active": active,
+        "model": perception.get("model"),
+        "kind": kind,
+        "available": list(available_providers()),
+        "stats": _provider_stats(jarvis),
+    }
+
+
+def _agent_reason(
+    *,
+    active: bool,
+    seam_present: bool | None,
+    capability: str | None,
+    held: dict[str, CapabilityStatus],
+    hint: str,
+) -> str:
+    """Why an edge reads standby, derived from the seam — never hard-coded.
+
+    ``active`` means acquired + live-backed (``can_do``). Otherwise the reason
+    names the actionable prerequisite: a missing seam names its ``JARVIS_*``
+    env var; a present seam without an acquired capability points at
+    ``capability scout/acquire``; an acquired-but-unusable seam reports a
+    disconnected provider. ``seam_present=None`` means no public seam to
+    inspect (reasoner/recall), so the reason derives from held/ready only.
+    """
+    if active:
+        return "activo y respaldado por un proveedor vivo"
+    if seam_present is False:
+        return f"en espera — necesita {hint}"
+    if capability is None:
+        return f"en espera — necesita {hint}"
+    if capability not in held:
+        if seam_present is True:
+            return "borde presente pero capacidad sin adquirir — usa capability scout/acquire"
+        return f"en espera — necesita {hint} y adquirir la capacidad"
+    if held[capability] is not CapabilityStatus.ACQUIRED:
+        return "capacidad sin adquirir — usa capability acquire (solo sugerencia)"
+    return "proveedor no conectado"
+
+
+def _agents_block(jarvis: Jarvis) -> list[Reply]:
+    """The real edge agents Jarvis runs on, honestly labelled (one per seam).
+
+    ``active`` derives from ``can_do`` -- an acquired capability with a live backing
+    provider in this composition; a seam that is absent or present-but-unusable reads
+    standby. Every edge also carries a derived ``reason`` naming the actionable
+    prerequisite (the ``JARVIS_*`` env var, the capability acquisition, or the
+    provider), so "En espera" always has an honest, checkable why. A fresh offline
+    Jarvis reports every edge as standby: nothing pretended.
+    This is the *control plane* (the wired seams), not the capability *catalog*.
+    """
+    perception = describe(jarvis.perception)
+    ready = set(jarvis.usable_capabilities())
+    held = {
+        cap.name: cap.status for cap in jarvis.capabilities()
+    }
+    kind = perception.get("kind") or "keyword"
+    perceiving = kind not in _OFFLINE_PERCEIVERS
+    edges: list[Reply] = [
+        {
+            "label": "Percepción",
+            "capability": None,
+            "description": "Lee el mundo y lo que dices",
+            "active": perceiving,
+            "reason": (
+                "activo y respaldado por un proveedor vivo"
+                if perceiving
+                else "en espera — necesita JARVIS_LLM_* (proveedor y modelo)"
+            ),
+        }
+    ]
+    # (label, capability, description, seam-present, env hint). seam-present comes
+    # from the public seam accessor; None means no public seam (reason derived
+    # from held/ready only). The Ejecutor has no catalog capability: its seam IS
+    # the instruction agent (JARVIS_AGENT_ROOT), so capability is None.
+    speech = jarvis.speech_perception
+    seams: list[tuple[str, str | None, str, bool | None, str]] = [
+        ("Razonador", "reason with a language model",
+         "Razona provisionalmente y propone respuestas", None, "JARVIS_LLM_*"),
+        ("Memoria", "recall by meaning", "Recuerda por significado con el retriever",
+         None, "JARVIS_EMBED_*"),
+        ("Web", "search the web", "Busca y lee páginas externas",
+         jarvis.external_source is not None,
+         "JARVIS_LLM_* (backend de búsqueda) o JINA_API_KEY"),
+        ("Investigación", "deep research", "Investiga en profundidad en el borde",
+         jarvis.research_source is not None, "SEARXNG_INSTANCE"),
+        ("Comparador", "compare language models", "Compara modelos a ciegas",
+         jarvis.model_compare is not None, "JARVIS_COMPARE_MODELS"),
+        ("Correo", "send and read email", "Lee y envía correo en el borde",
+         jarvis.mail_source is not None,
+         "MAIL_IMAP_HOST + MAIL_EMAIL + MAIL_PASSWORD"),
+        ("Delegación", "delegate to an agent", "Delega tareas ya decididas",
+         jarvis.task_agent is not None, "JARVIS_AGENT_ROOT"),
+        ("Ejecutor", None, "Ejecuta instrucciones materiales (agency)",
+         jarvis.instruction_agent is not None, "JARVIS_AGENT_ROOT"),
+        ("Notas", "manage notes", "Notas locales",
+         jarvis.notes_store is not None, "JARVIS_NOTES_ROOT"),
+        ("Calendario", "manage calendar", "Agenda y eventos",
+         jarvis.calendar_store is not None,
+         "JARVIS_CALENDAR_ROOT o Google OAuth"),
+        ("Tareas", "manage tasks", "Tareas planificadas",
+         jarvis.task_scheduler is not None, "JARVIS_TASKS_ROOT"),
+        ("Documentos", "work with files", "Archivos compartidos",
+         jarvis.documents_store is not None, "JARVIS_HOME/docs"),
+        ("Voz", "perceive speech", "Oye y transcribe audio",
+         speech is not None, "JARVIS_STT_*"),
+    ]
+    for label, capability, description, seam_present, hint in seams:
+        active = bool(seam_present) if capability is None else capability in ready
+        edges.append(
+            {
+                "label": label,
+                "capability": capability,
+                "description": description,
+                "active": active,
+                "reason": _agent_reason(
+                    active=active,
+                    seam_present=seam_present,
+                    capability=capability,
+                    held=held,
+                    hint=hint,
+                ),
+            }
+        )
+    edges.sort(key=lambda edge: (not bool(edge.get("active")), str(edge.get("label"))))
+    return edges
+
+
+# Sampled host metrics (System Monitor): the process CPU share since the last call,
+# a lazy estimate that converges, never a fake number. Reset by the server per boot.
+_ENV_CPU: dict[str, float | None] = {"at": None, "cpu": None}
+
+
+def _process_cpu_percent() -> float | None:
+    """The command-center process's CPU share in %, or None on the first call."""
+    now = time.monotonic()
+    cpu = time.process_time()
+    last_at = _ENV_CPU["at"]
+    last_cpu = _ENV_CPU["cpu"]
+    _ENV_CPU["at"] = now
+    _ENV_CPU["cpu"] = cpu
+    if last_at is None or last_cpu is None or now <= last_at:
+        return None
+    dt = now - last_at
+    delta = cpu - last_cpu
+    if dt <= 0 or delta < 0:
+        return None
+    return round(min(100 * delta / dt, 100.0), 1)
+
+
+def _host_ram_percent() -> float | None:
+    """Host-wide RAM in use (%), via stdlib only; None when the OS won't say."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class _MemStatus(ctypes.Structure):  # noqa: N801 - mirror the Win32 struct
+                _fields_ = [
+                    ("Length", wintypes.DWORD),
+                    ("MemoryLoad", wintypes.DWORD),
+                    ("TotalPhys", ctypes.c_ulonglong),
+                    ("AvailPhys", ctypes.c_ulonglong),
+                    ("TotalPageFile", ctypes.c_ulonglong),
+                    ("AvailPageFile", ctypes.c_ulonglong),
+                    ("TotalVirtual", ctypes.c_ulonglong),
+                    ("AvailVirtual", ctypes.c_ulonglong),
+                    ("AvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = _MemStatus()
+            status.Length = ctypes.sizeof(_MemStatus)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return float(status.MemoryLoad)
+        except (AttributeError, OSError):
+            return None
+    return None
+
+
+def _environment_block() -> Reply:
+    """The real host the command center runs on: CPU/RAM/Disk of THIS machine.
+
+    Every figure is measured here, not scripted: process CPU share, host RAM (when
+    the OS reports it), and the working drive's disk usage. ``None`` reads as
+    "n/d" in the UI -- honest when the host won't answer.
+    """
+    disk = None
+    try:
+        usage = shutil.disk_usage(os.getcwd())
+        disk = round(min(100.0 * usage.used / usage.total, 100.0), 1)
+    except OSError:
+        disk = None
+    return {
+        "cpu": _process_cpu_percent(),
+        "ram": _host_ram_percent(),
+        "disk": disk,
+        "cores": os.cpu_count(),
+        "platform": os.name,
+    }
+
+
+def _upcoming_events(jarvis: Jarvis, limit: int = 4) -> list[Reply]:
+    """The next handful of calendar events, newest-first, for the mission timeline.
+
+    Offline (no store, not earned) honestly reads as an empty timeline.
+    """
+    store = jarvis.calendar_store
+    if store is None:
+        return []
+    try:
+        events = list(store.list_events(limit=limit))
+    except Exception:  # noqa: BLE001 - the store boundary
+        return []
+    return [
+        {"title": event.title, "start": event.start.isoformat(), "id": event.id}
+        for event in events
+    ]
+
+
+def _upcoming_tasks(jarvis: Jarvis, limit: int = 4) -> list[Reply]:
+    """The next handful of scheduled tasks (enabled ones first) for the timeline.
+
+    Offline reads as an empty list, truthfully.
+    """
+    scheduler = jarvis.task_scheduler
+    if scheduler is None:
+        return []
+    try:
+        tasks = list(scheduler.list_tasks(limit=limit))
+    except Exception:  # noqa: BLE001 - the store boundary
+        return []
+    return [
+        {
+            "name": task.name,
+            "enabled": task.enabled,
+            "next_run": task.next_run.isoformat() if task.next_run else None,
+            "id": task.id,
+            "last_run": task.last_run.isoformat() if task.last_run else None,
+            "last_status": task.last_status,
+            "last_output": task.last_output[:200] if task.last_output else "",
+        }
+        for task in tasks
+    ]
+
+
+def _calendar_block(jarvis: Jarvis) -> Reply:
+    """Which calendar backs the agenda: google, local, or none (F6).
+
+    ``source`` derives from the wired store's kind (a Google store vs any
+    other store vs no store); ``connected`` is whether events can be read
+    right now. The surface uses it for the connect/disconnect affordance.
+    """
+    store = jarvis.calendar_store
+    if store is None:
+        return {"source": "none", "connected": False}
+    if isinstance(store, google_calendar.GoogleCalendarStore):
+        return {"source": "google", "connected": True}
+    return {"source": "local", "connected": True}
+
+
+def _episode_series(jarvis: Jarvis, limit: int = 24) -> list[str]:
+    """The last episodes' timestamps, chronological, for the memory chart.
+
+    A plain recorded_at series -- the histogram the browser draws is derived only
+    from these real timestamps, never scripted. Offline stores yield an empty list.
+    """
+    try:
+        history = list(jarvis.episodes.history())[-limit:]
+    except Exception:  # noqa: BLE001 - the store boundary
+        return []
+    return [record.recorded_at.isoformat() for record in history]
+
+
+def _memory_block(jarvis: Jarvis, summary: object) -> Reply:
+    """The memory read-model for the insights panel, in one honest block.
+
+    ``episodes`` is the durable episodic count; ``beliefs`` counts the grounded
+    conclusions; ``reasoning`` is the live session span size; ``provider`` folds
+    the instrumentation surface so the panel can show real tool/call activity
+    (zero when no live edge ever ran).
+    """
+    try:
+        beliefs = len(jarvis.beliefs.all_beliefs())
+    except Exception:  # noqa: BLE001 - the store boundary
+        beliefs = 0
+    try:
+        reasoning = len(jarvis.reasoning_span())
+    except Exception:  # noqa: BLE001 - the store boundary
+        reasoning = 0
+    return {
+        "episodes": getattr(summary, "episode_count", 0),
+        "beliefs": beliefs,
+        "self_tendencies": len(getattr(summary, "self_tendencies", ())),
+        "companion_traits": len(getattr(summary, "companion_traits", ())),
+        "reasoning": reasoning,
+        "turns": len(jarvis.conversation.recent()),
+        "calls": _provider_stats(jarvis)["calls"],
+        "provider": _provider_stats(jarvis),
+        "goals": len(getattr(summary, "recurring_goals", ())),
+        "episode_series": _episode_series(jarvis),
+    }
+
+
 def _capability_catalog(jarvis: Jarvis, summary: object) -> list[Reply]:
     """The full capability landscape: catalog entries merged with real state.
 
@@ -227,7 +581,9 @@ def _capability_catalog(jarvis: Jarvis, summary: object) -> list[Reply]:
     also surfaces the wider catalog of what Jarvis could grow to do, so the surface
     is never blank. Each entry is annotated with a status the UI reads directly:
     ``ready`` (acquired + live provider), ``acquired`` (held but not live now),
-    ``proposed``/``rejected``, or ``available`` (catalog-only, not yet grown).
+    ``proposed``/``rejected``, or ``available`` (catalog-only, not yet grown) --
+    plus the evidence-derived ``stance`` (suggest/ask_first/withhold) so the
+    surface can suggest without deciding (the stance recommends, never acquires).
     """
     ready_names = set(jarvis.usable_capabilities())
     held = {
@@ -248,6 +604,7 @@ def _capability_catalog(jarvis: Jarvis, summary: object) -> list[Reply]:
                 "description": cap.description,
                 "requirement": cap.requirement,
                 "status": status,
+                "stance": jarvis.capability_stance(name).value,
             }
         )
     return ready
@@ -879,6 +1236,107 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     }
 
 
+def _provider_health(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Probe one provider with a real minimal call and report what happened.
+
+    Builds that provider's model from the UI choice (key read from the
+    environment only, never echoed) and runs one tiny ``complete("ok")``,
+    timing it. A success reports the latency; a failure reports the
+    self-diagnosing provider error. This is a *probe*, not usage: it is not
+    recorded in the instrumentation totals, so ``successes`` still counts only
+    real work. Offline rules (keyword/scripted/stub) have no live endpoint to
+    verify, which is reported honestly instead of faked.
+    """
+    _ = jarvis
+    provider = str(payload.get("provider", "")).strip()
+    if not provider:
+        return {"error": "Name a provider to probe."}
+    if provider.lower() in _OFFLINE_PERCEIVERS:
+        return {
+            "ok": True,
+            "reply": f"{provider} is an offline rule — nothing live to verify (deterministic).",
+            "speak": False,
+        }
+    model = str(payload.get("model", "")).strip() or llm_config_store.resolve_model(
+        provider.lower(), os.environ
+    )
+    if not model:
+        return {"error": f"a model id is required to probe {provider!r}"}
+    base_url = str(payload.get("base_url", "")).strip() or None
+    try:
+        timeout = float(os.environ.get("JARVIS_LLM_TIMEOUT", "30"))
+    except ValueError:
+        timeout = 30.0
+    settings = ProviderSettings(
+        provider=provider.lower(),
+        model=model,
+        base_url=base_url,
+        api_key=llm_config_store.resolve_api_key(provider.lower(), os.environ),
+        timeout=timeout,
+        temperature=0.0,
+    )
+    try:
+        model_adapter = build_language_model(settings)
+    except ValueError as error:
+        return {"ok": False, "reply": str(error), "speak": False}
+    started = time.perf_counter()
+    try:
+        answer = model_adapter.complete("ok")
+    except Exception as error:  # noqa: BLE001 - the external-provider boundary
+        return {"ok": False, "reply": _provider_error(error), "speak": False}
+    latency = round(time.perf_counter() - started, 3)
+    head = answer.strip().replace("\n", " ")[:120]
+    return {
+        "ok": True,
+        "reply": f"{provider} ({model}) answered in {latency}s: {head or '(empty reply)'}",
+        "speak": False,
+        "latency_seconds": latency,
+    }
+
+
+def _reasoner(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Report or switch the reasoner seam at runtime (Vision §37, §38).
+
+    With no ``provider`` it reports whether provisional reasoning is live
+    (``can_do``) or silent-offline. With one it swaps only the reasoner --
+    perception, voice and companion stay as they are -- so the companion can
+    aim provisional answers at a different model. Runtime-only: unlike the
+    perceiver switch this is not persisted to ``.env`` (the saved config names
+    one shared provider), and a restart resumes the perceiver's model.
+    """
+    provider = str(payload.get("provider", "")).strip()
+    if not provider:
+        live = jarvis.can_do("reason with a language model")
+        state = "live" if live else "silent (offline)"
+        return {"reply": f"The reasoner is currently {state}.", "speak": False, "live": live}
+    model = str(payload.get("model", "")).strip() or llm_config_store.resolve_model(
+        provider.lower(), os.environ
+    )
+    base_url = str(payload.get("base_url", "")).strip() or None
+    try:
+        reasoner = build_reasoner(provider, model, base_url)
+    except ValueError as error:
+        return {"error": str(error)}
+    jarvis.set_reasoner(reasoner)
+    live = jarvis.can_do("reason with a language model")
+    named = model or provider
+    return {
+        "reply": f"Reasoner set to {provider} ({named}) — "
+        + ("live." if live else "silent (offline)."),
+        "speak": False,
+        "live": live,
+    }
+
+
+def _provider_reset(jarvis: Jarvis, _payload: Reply) -> Reply:
+    """Forget every recorded provider call and count from zero (bookkeeping only)."""
+    jarvis.reset_provider_stats()
+    return {
+        "reply": "Provider stats cleared — counting from zero.",
+        "speak": False,
+    }
+
+
 def _learn(jarvis: Jarvis, payload: Reply) -> Reply:
     """Teach Jarvis about the companion from a pasted profile/notes (Vision §5, §38).
 
@@ -1474,6 +1932,10 @@ def _format_scheduled_task(task: object) -> str:
     lines.append(f"Enabled: {'yes' if task.enabled else 'no'}")
     if task.next_run is not None:
         lines.append(f"Next run: {task.next_run}")
+    if task.last_run is not None:
+        lines.append(f"Last run: {task.last_run} ({task.last_status or 'unknown'})")
+        if task.last_output:
+            lines.append(f"Last output: {task.last_output[:500]}")
     if task.description:
         lines.append(f"Description: {task.description}")
     lines.append(f"ID: {task.id}")
@@ -1723,13 +2185,16 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
     """Manage scheduled tasks through the task-scheduler capability (Odysseus #7).
 
     Actions: ``list``, ``get``, ``create``, ``update``, ``delete``,
-    ``enable``, ``disable``, ``due``.
+    ``enable``, ``disable``, ``due``, ``run``. ``run`` executes the task's
+    command right now through the earned-agency executor and records the
+    outcome on the task (last run, status, output); it needs an enabled task
+    and a wired executor, else it declines honestly and records nothing.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
         return {
             "reply": "Use tasks with action 'list', 'get', 'create', 'update', "
-            "'delete', 'enable', 'disable', or 'due'.",
+            "'delete', 'enable', 'disable', 'due', or 'run'.",
             "speak": False,
         }
     if jarvis.task_scheduler is None:
@@ -1836,6 +2301,27 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
                 "speak": False,
                 "count": len(tasks),
             }
+        if action == "run":
+            task_id = str(payload.get("id", "")).strip()
+            if not task_id:
+                return {"reply": "Provide the task id to run.", "speak": False}
+            try:
+                outcome = jarvis.run_scheduled_task(task_id)
+            except RuntimeError as error:
+                return {"reply": f"I couldn't run it: {error}", "speak": False}
+            if outcome.success:
+                return {
+                    "reply": f"Ran it — {outcome.summary} (recorded on the task).",
+                    "speak": False,
+                    "ok": True,
+                }
+            return {
+                "reply": f"It ran but failed honestly: {outcome.summary} (recorded on the task).",
+                "speak": False,
+                "ok": False,
+            }
+    except ValueError as error:  # noqa: BLE001 - a bad cron/schedule is guidance, not a crash
+        return {"reply": f"No pude hacerlo: {error}", "speak": False}
     except Exception as error:  # noqa: BLE001 - the store boundary
         return {"reply": f"I couldn't do that ({type(error).__name__}).", "speak": False}
     return {"reply": "Unknown tasks action.", "speak": False}
@@ -2139,6 +2625,465 @@ def _ready_marker(jarvis: Jarvis, capability: str) -> str:
     return " (ready)" if jarvis.can_do(capability) else ""
 
 
+def _belief(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Explore what Jarvis holds as grounded beliefs, with their evidence (F5).
+
+    Actions: ``list`` (every belief with its derived confidence and how many
+    pieces of evidence bear for/against it) and ``get`` (``statement`` -- the
+    full provenance of one belief, the same grounds the reasoning panel shows).
+    Read-only: beliefs are never edited here, only inspected.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {
+            "reply": "Use belief with action 'list' or 'get'.",
+            "speak": False,
+        }
+    if action == "list":
+        beliefs = sorted(
+            jarvis.beliefs.all_beliefs(),
+            key=lambda b: b.confidence.value,
+            reverse=True,
+        )
+        if not beliefs:
+            return {
+                "reply": "I hold no grounded beliefs yet — talk to me and confirm what I reason.",
+                "speak": False,
+                "beliefs": [],
+            }
+        entries: list[Reply] = []
+        for belief in beliefs:
+            explanation = belief.explain()
+            entries.append(
+                {
+                    "statement": explanation.statement,
+                    "subject": subject_of(explanation.statement),
+                    "confidence": explanation.confidence.value,
+                    "supporting": len(explanation.supporting),
+                    "contradicting": len(explanation.contradicting),
+                }
+            )
+        lines = [
+            f"- {e['subject']} ({e['confidence']:.2f}, "
+            f"{e['supporting']}+{e['contradicting']}-)"
+            for e in entries
+        ]
+        return {
+            "reply": "What I hold:\n" + "\n".join(lines),
+            "speak": False,
+            "beliefs": entries,
+        }
+    if action == "get":
+        statement = str(payload.get("statement", "")).strip()
+        if not statement:
+            return {"reply": "Name a belief statement to inspect.", "speak": False}
+        belief = jarvis.beliefs.get_by_statement(statement)
+        if belief is None:
+            return {
+                "reply": f"I hold no belief recorded as {statement!r}.",
+                "speak": False,
+            }
+        grounds = _provenance(belief)
+        grounds["statement"] = belief.explain().statement
+        return {
+            "reply": belief.explain().narrate(subject_of(belief.explain().statement)),
+            "speak": False,
+            "provenance": grounds,
+        }
+    return {"reply": "Unknown belief action.", "speak": False}
+
+
+def _recall(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Actively search Jarvis's memory for what bears on a query (F5).
+
+    Runs the recall seam (lexical offline, meaning-backed when an embedder is
+    wired) and reports candidates with their match strength and provenance --
+    candidates, never a verdict. Nothing is written: recall reads only.
+    """
+    query = str(payload.get("query", "")).strip()
+    if not query:
+        return {"reply": "Ask what to search my memory for.", "speak": False}
+    try:
+        limit = int(payload.get("limit", 5))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        limit = 5
+    limit = max(1, min(limit, 20))
+    recalled = jarvis.recall(query)[:limit]
+    if not recalled:
+        return {
+            "reply": f"Nothing in my memory bears on {query!r} yet.",
+            "speak": False,
+            "memories": [],
+        }
+    entries = [
+        {
+            "content": item.content,
+            "kind": item.kind.name,
+            "provenance": item.provenance,
+            "relevance": round(item.relevance, 4),
+            "source_confidence": item.source_confidence,
+        }
+        for item in recalled
+    ]
+    lines = [
+        f"{i}. [{e['kind']}] {e['content']} (match {e['relevance']:.2f}, {e['provenance']})"
+        for i, e in enumerate(entries, 1)
+    ]
+    return {
+        "reply": f"What my memory surfaces for {query!r} (candidates, not verdicts):\n"
+        + "\n".join(lines),
+        "speak": False,
+        "memories": entries,
+    }
+
+
+# Episodes this far apart start a new session arc (an honest, documented
+# grouping heuristic: the store keeps no session id, so a quiet hour splits).
+_SESSION_GAP_SECONDS = 3600.0
+
+
+def _conversations_block(jarvis: Jarvis, session_limit: int = 12) -> list[Reply]:
+    """Past episodes grouped into session arcs, newest first (F5).
+
+    A session is a maximal run of episodes less than an hour apart -- memory,
+    never belief: trigger, outcome and time per episode, so the surface can
+    recap an arc without asserting any of it.
+    """
+    try:
+        history = sorted(jarvis.episodes.history(), key=lambda r: r.recorded_at)
+    except Exception:  # noqa: BLE001 - the store boundary
+        return []
+    sessions: list[list[EpisodeRecord]] = []
+    for record in history:
+        if (
+            sessions
+            and (record.recorded_at - sessions[-1][-1].recorded_at).total_seconds()
+            <= _SESSION_GAP_SECONDS
+        ):
+            sessions[-1].append(record)
+        else:
+            sessions.append([record])
+    block: list[Reply] = []
+    for index, run in enumerate(reversed(sessions[-session_limit:])):
+        first = run[0]
+        last = run[-1]
+        block.append(
+            {
+                "id": index,
+                "start": first.recorded_at.isoformat(),
+                "end": last.recorded_at.isoformat(),
+                "count": len(run),
+                "episodes": [
+                    {
+                        "trigger": episode.trigger,
+                        "outcome": episode.outcome.name,
+                        "recorded_at": episode.recorded_at.isoformat(),
+                    }
+                    for episode in run
+                ],
+            }
+        )
+    return block
+
+
+def _conversations(jarvis: Jarvis, payload: Reply) -> Reply:
+    """List past episode sessions so the surface can recap one (F5).
+
+    Returns the session arcs, each with its episodes, so the surface can post
+    one back to the chat -- framed as remembered, never re-asserted.
+    """
+    _ = payload
+    sessions = _conversations_block(jarvis)
+    if not sessions:
+        return {
+            "reply": "No past conversations yet — talk to me and they will land here.",
+            "speak": False,
+            "sessions": [],
+        }
+    lines = [
+        f"- sesión {s['id']}: {s['count']} episodios ({s['start']} → {s['end']})"
+        for s in sessions
+    ]
+    return {
+        "reply": "Past sessions:\n" + "\n".join(lines),
+        "speak": False,
+        "sessions": sessions,
+    }
+
+
+# Predefined multi-step chains over the real edge commands (F4). Each step names
+# a command from _COMMANDS plus its static payload; ``from_inputs`` copies named
+# caller inputs into that payload. A step with ``collect`` builds its payload
+# from the previous steps' replies instead (a genuine chain, not parallel calls).
+_WORKFLOWS: dict[str, Reply] = {
+    "brief": {
+        "title": "El día de un vistazo",
+        "description": "Próximos eventos del calendario + tareas pendientes, en un digest.",
+        "inputs": [],
+        "steps": [
+            {"command": "calendar", "payload": {"action": "list", "limit": 5}},
+            {"command": "tasks", "payload": {"action": "due"}},
+        ],
+    },
+    "investigate": {
+        "title": "Investigar un tema",
+        "description": "Búsqueda web y después investigación en profundidad sobre el tema.",
+        "inputs": [
+            {"name": "query", "label": "tema", "required": True},
+            {"name": "depth", "label": "profundidad", "required": False, "default": "1"},
+        ],
+        "steps": [
+            {
+                "command": "external",
+                "payload": {"action": "search", "limit": 5},
+                "from_inputs": ["query"],
+            },
+            {
+                "command": "research",
+                "payload": {"depth": 1},
+                "from_inputs": ["query", "depth"],
+            },
+        ],
+    },
+    "dossier": {
+        "title": "Armar un dossier",
+        "description": "Busca, investiga y guarda el combinado como documento generado.",
+        "inputs": [
+            {"name": "query", "label": "tema", "required": True},
+        ],
+        "steps": [
+            {
+                "command": "external",
+                "payload": {"action": "search", "limit": 5},
+                "from_inputs": ["query"],
+            },
+            {
+                "command": "research",
+                "payload": {"depth": 1},
+                "from_inputs": ["query"],
+            },
+            {"command": "documents", "collect": True},
+        ],
+    },
+}
+
+
+def _workflow_step_capability(command: str, payload: Reply) -> str | None:
+    """The earned capability a workflow step needs, or None when it needs none."""
+    if command == "external":
+        action = str(payload.get("action", "")).strip().lower()
+        if action == "search":
+            return "search the web"
+        if action == "read":
+            return "read external documents"
+        return None
+    if command == "research":
+        return "deep research"
+    if command == "compare":
+        return "compare language models"
+    if command == "calendar":
+        return "manage calendar"
+    if command == "tasks":
+        return "manage tasks"
+    if command == "documents":
+        return "work with files"
+    return None
+
+
+def _workflow_missing(jarvis: Jarvis, name: str) -> list[Reply]:
+    """The inactive edges a workflow needs, each with its honest derived reason."""
+    definition = _WORKFLOWS[name]
+    reasons = {edge.get("capability"): edge.get("reason") for edge in _agents_block(jarvis)}
+    missing: list[Reply] = []
+    seen: set[str] = set()
+    for step in cast("list[Reply]", definition["steps"]):
+        command = str(step.get("command", ""))
+        if bool(step.get("collect")):
+            capability: str | None = "work with files"
+        else:
+            capability = _workflow_step_capability(command, cast("Reply", step.get("payload", {})))
+        if capability is None or capability in seen:
+            continue
+        seen.add(capability)
+        if not jarvis.can_do(capability):
+            missing.append({"capability": capability, "reason": reasons.get(capability)})
+    return missing
+
+
+def _workflows_block(jarvis: Jarvis) -> list[Reply]:
+    """Every predefined workflow with its inputs and whether its edges are live."""
+    block: list[Reply] = []
+    for name, definition in _WORKFLOWS.items():
+        missing = _workflow_missing(jarvis, name)
+        block.append(
+            {
+                "name": name,
+                "title": definition["title"],
+                "description": definition["description"],
+                "inputs": definition["inputs"],
+                "steps": [
+                    {
+                        "command": step.get("command", ""),
+                        "action": cast("Reply", step.get("payload", {})).get("action", ""),
+                    }
+                    for step in cast("list[Reply]", definition["steps"])
+                ],
+                "ready": not missing,
+                "missing": missing,
+            }
+        )
+    return block
+
+
+def _slug(text: str, limit: int = 40) -> str:
+    """A filesystem-safe slug for a generated dossier name."""
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return slug[:limit] or "dossier"
+
+
+def _workflow(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Run a predefined multi-step chain over the real edge commands (F4).
+
+    Actions: ``list`` (definitions with inputs and which edges are live) and
+    ``run`` (``name`` plus ``inputs``). A workflow runs only when every edge
+    it needs is active (acquired + live-backed); otherwise it refuses honestly
+    with each step marked blocked and the derived reason -- nothing half-runs.
+    Steps run in order and stop on the first error (later steps read as
+    omitted); the final reply joins every step's real outcome under headers.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {
+            "reply": "Use workflow with action 'list' or 'run'.",
+            "speak": False,
+        }
+    if action == "list":
+        block = _workflows_block(jarvis)
+        lines = [
+            f"- {entry['name']}: {entry['title']}"
+            + (" (ready)" if entry["ready"] else " (blocked)")
+            for entry in block
+        ]
+        return {
+            "reply": "Workflows:\n" + "\n".join(lines),
+            "speak": False,
+            "workflows": block,
+        }
+    if action == "run":
+        name = str(payload.get("name", "")).strip()
+        if name not in _WORKFLOWS:
+            return {"error": f"unknown workflow: {name or '(none)'}", "speak": False}
+        definition = _WORKFLOWS[name]
+        raw_inputs = payload.get("inputs", {})
+        inputs: dict[str, str] = {}
+        if isinstance(raw_inputs, dict):
+            items = cast("dict[object, object]", raw_inputs)
+            inputs = {str(k): str(v) for k, v in items.items()}
+        for schema in cast("list[Reply]", definition["inputs"]):
+            key = str(schema.get("name", ""))
+            if bool(schema.get("required")) and not inputs.get(key, "").strip():
+                return {
+                    "error": f"workflow '{name}' needs input '{key}'.",
+                    "speak": False,
+                }
+            if key not in inputs and schema.get("default") is not None:
+                inputs[key] = str(schema["default"])
+        missing = _workflow_missing(jarvis, name)
+        steps = cast("list[Reply]", definition["steps"])
+        if missing:
+            wanted = ", ".join(str(m.get("capability")) for m in missing)
+            return {
+                "ok": False,
+                "reply": (
+                    f"No puedo ejecutar '{name}': faltan bordes activos ({wanted}). "
+                    "Mira la pestaña Agentes para el porqué de cada uno."
+                ),
+                "speak": False,
+                "steps": [
+                    {
+                        "command": step.get("command", ""),
+                        "action": cast("Reply", step.get("payload", {})).get("action", ""),
+                        "state": "bloqueado",
+                        "reason": next(
+                            (
+                                str(m.get("reason"))
+                                for m in missing
+                                if m.get("capability")
+                                == (
+                                    "work with files"
+                                    if step.get("collect")
+                                    else _workflow_step_capability(
+                                        str(step.get("command", "")),
+                                        cast("Reply", step.get("payload", {})),
+                                    )
+                                )
+                            ),
+                            None,
+                        ),
+                    }
+                    for step in steps
+                ],
+            }
+        ran: list[Reply] = []
+        collected: list[tuple[str, str]] = []
+        halted = False
+        for step in steps:
+            command = str(step.get("command", ""))
+            if halted:
+                ran.append({"command": command, "state": "omitido"})
+                continue
+            if bool(step.get("collect")):
+                query = inputs.get("query", "tema")
+                body = "\n\n".join(
+                    f"# {title}\n\n{text}" for title, text in collected
+                ) or "(sin resultados previos)"
+                step_payload: Reply = {
+                    "action": "save",
+                    "name": f"dossier-{_slug(query)}.md",
+                    "content": f"# Dossier: {query}\n\n{body}\n",
+                    "owner": "jarvis",
+                }
+            else:
+                step_payload = dict(cast("Reply", step.get("payload", {})))
+                for key in cast("list[str]", step.get("from_inputs", [])):
+                    if key in inputs:
+                        step_payload[key] = inputs[key]
+            run = _COMMANDS.get(command)
+            if run is None:
+                ran.append(
+                    {"command": command, "state": "error", "reply": "unknown step command."}
+                )
+                halted = True
+                continue
+            outcome = run(jarvis, step_payload)
+            outcome.pop("state", None)
+            text = str(outcome.get("reply") or outcome.get("error") or "(sin salida)")
+            if "error" in outcome:
+                ran.append({"command": command, "state": "error", "reply": text})
+                halted = True
+                continue
+            label = (
+                f"{command} {step_payload.get('action', '')}".strip()
+                if not step.get("collect")
+                else "documents save"
+            )
+            collected.append((label, text))
+            ran.append({"command": command, "state": "ok", "reply": text})
+        digest = "\n\n---\n\n".join(
+            f"## {title}\n\n{text}" for title, text in collected
+        ) or "(sin resultados)"
+        all_ok = all(entry.get("state") == "ok" for entry in ran)
+        title = str(definition.get("title", name))
+        done = sum(1 for entry in ran if entry.get("state") == "ok")
+        return {
+            "ok": all_ok,
+            "reply": f"Workflow '{title}' ({done}/{len(ran)} pasos ok):\n\n{digest}",
+            "speak": False,
+            "steps": ran,
+        }
+    return {"reply": "Unknown workflow action.", "speak": False}
+
+
 _COMMANDS: dict[str, Command] = {
     "say": _say,
     "explain": _explain,
@@ -2150,6 +3095,9 @@ _COMMANDS: dict[str, Command] = {
     "deliberation": _deliberation,
     "tunables": _tunables,
     "perceiver": _perceiver,
+    "provider_health": _provider_health,
+    "reasoner": _reasoner,
+    "provider_reset": _provider_reset,
     "learn": _learn,
     "greeting": _greeting,
     "state": _state,
@@ -2162,6 +3110,10 @@ _COMMANDS: dict[str, Command] = {
     "google_calendar": _google_calendar,
     "tasks": _tasks,
     "documents": _documents,
+    "workflow": _workflow,
+    "belief": _belief,
+    "recall": _recall,
+    "conversations": _conversations,
 }
 
 

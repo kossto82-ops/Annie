@@ -13,8 +13,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from jarvis.domain.retrieval.task_scheduler import TaskScheduler
+from jarvis.domain.services.cron import next_run_after, validate_cron
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
+from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.infrastructure.capability_registry import (
     TaskSchedulerCapability,
     build_default_registry,
@@ -102,6 +104,33 @@ class _FakeTaskScheduler:
             t for t in self.tasks.values()
             if t.enabled and t.next_run is not None and t.next_run <= now
         )
+
+    def record_run(self, task_id: str, *, ok: bool, output: str) -> ScheduledTask:
+        current = self.tasks[task_id]
+        ran = ScheduledTask(
+            id=current.id, name=current.name, command=current.command,
+            cron=current.cron, description=current.description,
+            enabled=current.enabled, next_run=current.next_run,
+            last_run=datetime.now(UTC), last_status="ok" if ok else "error",
+            last_output=output[:2000],
+        )
+        self.tasks[task_id] = ran
+        return ran
+
+
+class _FakeInstructionAgent:
+    """A stub executor returning (or raising) a canned outcome."""
+
+    def __init__(self, *, ok: bool = True, summary: str = "did it") -> None:
+        self._ok = ok
+        self._summary = summary
+        self.ran: list[str] = []
+
+    def run_task(self, task: str) -> TaskResult:
+        self.ran.append(task)
+        if not self._ok and self._summary == "raise":
+            raise RuntimeError("executor boom")
+        return TaskResult(task=task, summary=self._summary, success=self._ok)
 
 
 class TestScheduledTask:
@@ -234,3 +263,98 @@ class TestJarvisTasks:
         jarvis = Jarvis()
         with pytest.raises(RuntimeError, match="task-scheduler capability"):
             jarvis.list_scheduled_tasks()
+
+
+class TestCron:
+    def test_empty_means_unscheduled(self) -> None:
+        validate_cron("")
+        validate_cron("   ")
+        assert next_run_after("", datetime.now(UTC)) is None
+
+    def test_common_shapes_validate(self) -> None:
+        for cron in ("0 9 * * *", "*/15 * * * *", "0 0 1 * *", "30 8 * * MON-FRI", "0 12 * JAN *"):
+            validate_cron(cron)
+
+    def test_bad_shapes_raise_clearly(self) -> None:
+        for cron in ("nope", "0 9 * *", "0 9 * * * *", "61 * * * *", "0 24 * * *",
+                     "0 9 * * XXX", "0 9 * * */0", "0 9 * * 1-"):
+            with pytest.raises(ValueError, match="cron"):
+                validate_cron(cron)
+
+    def test_next_run_after_simple(self) -> None:
+        after = datetime(2026, 9, 10, 8, 30, tzinfo=UTC)
+        assert next_run_after("0 9 * * *", after) == datetime(2026, 9, 10, 9, 0, tzinfo=UTC)
+        assert next_run_after("* * * * *", after) == datetime(2026, 9, 10, 8, 31, tzinfo=UTC)
+
+    def test_next_run_skips_to_next_day(self) -> None:
+        after = datetime(2026, 9, 10, 10, 0, tzinfo=UTC)
+        assert next_run_after("0 9 * * *", after) == datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
+
+    def test_next_run_weekday_or_month_day(self) -> None:
+        # 2026-09-10 is a Thursday.
+        after = datetime(2026, 9, 10, 8, 0, tzinfo=UTC)
+        assert next_run_after("0 9 * * MON", after) == datetime(2026, 9, 14, 9, 0, tzinfo=UTC)
+        assert next_run_after("0 9 11 * *", after) == datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
+
+    def test_impossible_date_gives_up_honestly(self) -> None:
+        after = datetime(2026, 9, 10, 8, 0, tzinfo=UTC)
+        assert next_run_after("0 0 30 2 *", after) is None
+
+
+class TestJarvisRunScheduledTask:
+    def _wired(self, agent: _FakeInstructionAgent | None) -> tuple[Jarvis, str]:
+        scheduler = _FakeTaskScheduler()
+        jarvis = Jarvis(
+            task_scheduler=scheduler,  # type: ignore[arg-type]
+            instruction_agent=agent,  # type: ignore[arg-type]
+        )
+        task = jarvis.create_scheduled_task(name="job", command="do the thing")
+        assert isinstance(scheduler, _FakeTaskScheduler)
+        return jarvis, task.id
+
+    def test_success_runs_and_records(self) -> None:
+        agent = _FakeInstructionAgent(ok=True, summary="all done")
+        jarvis, task_id = self._wired(agent)
+        outcome = jarvis.run_scheduled_task(task_id)
+        assert outcome.success is True
+        assert agent.ran == ["do the thing"]
+        stored = jarvis.get_scheduled_task(task_id)
+        assert stored.last_status == "ok"
+        assert stored.last_output == "all done"
+        assert stored.last_run is not None
+
+    def test_honest_failure_is_recorded(self) -> None:
+        agent = _FakeInstructionAgent(ok=False, summary="it broke")
+        jarvis, task_id = self._wired(agent)
+        outcome = jarvis.run_scheduled_task(task_id)
+        assert outcome.success is False
+        assert jarvis.get_scheduled_task(task_id).last_status == "error"
+
+    def test_executor_crash_is_recorded_and_raised(self) -> None:
+        agent = _FakeInstructionAgent(ok=False, summary="raise")
+        jarvis, task_id = self._wired(agent)
+        with pytest.raises(RuntimeError, match="executor boom"):
+            jarvis.run_scheduled_task(task_id)
+        assert jarvis.get_scheduled_task(task_id).last_status == "error"
+
+    def test_disabled_task_is_refused_without_recording(self) -> None:
+        agent = _FakeInstructionAgent()
+        jarvis, task_id = self._wired(agent)
+        jarvis.disable_scheduled_task(task_id)
+        with pytest.raises(RuntimeError, match="disabled"):
+            jarvis.run_scheduled_task(task_id)
+        assert agent.ran == []
+        assert jarvis.get_scheduled_task(task_id).last_run is None
+
+    def test_missing_executor_is_refused_without_recording(self) -> None:
+        jarvis, task_id = self._wired(None)
+        with pytest.raises(RuntimeError, match="executor"):
+            jarvis.run_scheduled_task(task_id)
+        assert jarvis.get_scheduled_task(task_id).last_run is None
+
+    def test_offline_and_unknown_are_clear_errors(self) -> None:
+        with pytest.raises(RuntimeError, match="task-scheduler capability"):
+            Jarvis().run_scheduled_task("t1")
+        jarvis, _ = self._wired(_FakeInstructionAgent())
+        with pytest.raises(KeyError):
+            jarvis.run_scheduled_task("missing")

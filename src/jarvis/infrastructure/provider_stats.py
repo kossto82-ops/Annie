@@ -75,5 +75,9 @@ class InMemoryInstrumentation:
     def record(self, call: ProviderCall) -> None:
         self._snapshot = self._snapshot.extend(call)
 
+    def reset(self) -> None:
+        """Forget every recorded call (bookkeeping only; never touches cognition)."""
+        self._snapshot = ProviderSnapshot()
+
     def snapshot(self) -> ProviderSnapshot:
         return self._snapshot

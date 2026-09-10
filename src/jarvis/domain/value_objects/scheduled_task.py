@@ -31,6 +31,11 @@ class ScheduledTask:
     next_run: datetime | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
+    # The last manual or scheduled execution the scheduler recorded, if any:
+    # when it ran, whether it succeeded ("ok"/"error"), and its capped output.
+    last_run: datetime | None = None
+    last_status: str | None = None
+    last_output: str = ""
 
     def __post_init__(self) -> None:
         if not self.name:

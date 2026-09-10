@@ -216,3 +216,101 @@ class TestSqliteTaskScheduler:
         assert store.list_tasks() == ()
         with pytest.raises(KeyError):
             store.get_task(task.id)
+
+    def test_bad_cron_is_rejected_clearly(self) -> None:
+        store = SqliteTaskScheduler(sqlite3.connect(":memory:"), id_factory=_ids())
+        with pytest.raises(ValueError, match="cron"):
+            store.create_task(name="bad", command="echo x", cron="not a cron")
+        task = store.create_task(name="good", command="echo x", cron="0 9 * * *")
+        with pytest.raises(ValueError, match="cron"):
+            store.update_task(
+                task.id, name="good", command="echo x", cron="61 * * * *",
+                description="", enabled=True,
+            )
+
+    def test_create_computes_next_run_from_cron(self) -> None:
+        store = SqliteTaskScheduler(sqlite3.connect(":memory:"), id_factory=_ids())
+        task = store.create_task(name="daily", command="echo x", cron="0 9 * * *")
+        assert task.next_run is not None and task.next_run > datetime.now(UTC)
+        assert (task.next_run.hour, task.next_run.minute) == (9, 0)
+        unscheduled = store.create_task(name="once", command="echo x", cron="")
+        assert unscheduled.next_run is None
+
+    def test_record_run_persists_status_and_output(self, tmp_path: Path) -> None:
+        path = tmp_path / "tasks.db"
+        connection = sqlite3.connect(path)
+        store = SqliteTaskScheduler(connection, id_factory=_ids())
+        task = store.create_task(name="job", command="echo hi")
+        ran = store.record_run(task.id, ok=True, output="all done")
+        assert ran.last_status == "ok"
+        assert ran.last_output == "all done"
+        assert ran.last_run is not None
+        connection.close()
+        reloaded = SqliteTaskScheduler(sqlite3.connect(path)).get_task(task.id)
+        assert reloaded.last_status == "ok"
+        assert reloaded.last_output == "all done"
+
+    def test_record_run_caps_output_and_marks_error(self) -> None:
+        store = SqliteTaskScheduler(sqlite3.connect(":memory:"), id_factory=_ids())
+        task = store.create_task(name="job", command="echo hi")
+        ran = store.record_run(task.id, ok=False, output="x" * 5000)
+        assert ran.last_status == "error"
+        assert len(ran.last_output) == 2000
+
+    def test_legacy_payloads_without_runs_read_honestly(self, tmp_path: Path) -> None:
+        import json
+
+        path = tmp_path / "tasks.db"
+        connection = sqlite3.connect(path)
+        connection.execute(
+            "CREATE TABLE tasks (task_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
+        )
+        legacy = {
+            "name": "old", "command": "echo old", "cron": "", "description": "",
+            "enabled": True, "next_run": None,
+            "created_at": "2026-09-01T10:00:00+00:00",
+            "updated_at": "2026-09-01T10:00:00+00:00",
+        }
+        connection.execute(
+            "INSERT INTO tasks (task_id, payload) VALUES (?, ?)",
+            ("old1", json.dumps(legacy)),
+        )
+        connection.commit()
+        task = SqliteTaskScheduler(connection).get_task("old1")
+        assert task.last_run is None
+        assert task.last_status is None
+        assert task.last_output == ""
+
+
+class TestLocalTaskSchedulerRuns:
+    def test_record_run_bad_cron_and_next_run(self, tmp_path: Path) -> None:
+        from jarvis.infrastructure.task_scheduler import LocalTaskScheduler
+
+        store = LocalTaskScheduler(tmp_path)
+        with pytest.raises(ValueError, match="cron"):
+            store.create_task(name="bad", command="echo x", cron="nope nope")
+        task = store.create_task(name="daily", command="echo x", cron="0 9 * * *")
+        assert task.next_run is not None
+        ran = store.record_run(task.id, ok=True, output="done")
+        assert (ran.last_status, ran.last_output) == ("ok", "done")
+        reloaded = LocalTaskScheduler(tmp_path).get_task(task.id)
+        assert reloaded.last_status == "ok"
+
+    def test_legacy_json_without_runs_reads_honestly(self, tmp_path: Path) -> None:
+        import json
+
+        from jarvis.infrastructure.task_scheduler import LocalTaskScheduler
+
+        (tmp_path / "tasks.json").write_text(
+            json.dumps({
+                "old1": {
+                    "name": "old", "command": "echo old", "cron": "",
+                    "description": "", "enabled": True, "next_run": None,
+                    "created_at": "2026-09-01T10:00:00+00:00",
+                    "updated_at": "2026-09-01T10:00:00+00:00",
+                }
+            }),
+            encoding="utf-8",
+        )
+        task = LocalTaskScheduler(tmp_path).get_task("old1")
+        assert task.last_run is None and task.last_output == ""

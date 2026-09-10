@@ -543,6 +543,51 @@ class TestPerceiver:
         assert models.get("groq") == "gpt-oss"
 
 
+class TestProviderManagement:
+    def test_reasoner_reports_silence_when_offline(self) -> None:
+        result = handle(Jarvis(), "reasoner", {})
+        assert result["live"] is False
+        assert "silent" in str(result["reply"]).lower()
+
+    def test_reasoner_switch_to_keyword_is_silent_not_a_crash(self) -> None:
+        result = handle(Jarvis(), "reasoner", {"provider": "keyword"})
+        assert result["live"] is False
+        assert "state" in result
+
+    def test_reasoner_with_an_unknown_provider_is_a_clear_error(self) -> None:
+        result = handle(Jarvis(), "reasoner", {"provider": "bogus-nope", "model": "m"})
+        assert "error" in result
+
+    def test_provider_health_without_a_provider_just_asks(self) -> None:
+        result = handle(Jarvis(), "provider_health", {})
+        assert "error" in result
+
+    def test_provider_health_reports_offline_rules_honestly(self) -> None:
+        result = handle(Jarvis(), "provider_health", {"provider": "keyword"})
+        assert result["ok"] is True
+        assert "offline" in str(result["reply"]).lower()
+
+    def test_provider_health_with_an_unknown_provider_is_a_clear_error(self) -> None:
+        result = handle(Jarvis(), "provider_health", {"provider": "bogus-nope", "model": "m"})
+        assert result["ok"] is False
+        assert "state" in result
+
+    def test_provider_reset_zeroes_the_counts(self) -> None:
+        jarvis = Jarvis()
+        jarvis.reset_provider_stats()
+        stats = cast("dict[str, object]", snapshot(jarvis)["provider"])
+        assert stats["calls"] == 0
+        result = handle(jarvis, "provider_reset", {})
+        assert "zero" in str(result["reply"]).lower()
+        stats = cast("dict[str, object]", result["state"]["provider"])
+        assert stats["calls"] == 0
+
+    def test_snapshot_stats_carry_averages(self) -> None:
+        stats = cast("dict[str, object]", snapshot(Jarvis())["provider"])
+        assert stats["avg_seconds"] == 0.0
+        assert stats["slowest_seconds"] == 0.0
+
+
 class TestUnknownCommand:
     def test_it_is_a_clear_error_with_live_state(self) -> None:
         result = handle(Jarvis(), "does-not-exist", {})
@@ -1063,6 +1108,18 @@ class _FakeTaskScheduler:
             if t.enabled and t.next_run is not None and t.next_run <= now
         )
 
+    def record_run(self, task_id: str, *, ok: bool, output: str) -> ScheduledTask:
+        current = self.tasks[task_id]
+        ran = ScheduledTask(
+            id=current.id, name=current.name, command=current.command,
+            cron=current.cron, description=current.description,
+            enabled=current.enabled, next_run=current.next_run,
+            last_run=datetime.now(UTC), last_status="ok" if ok else "error",
+            last_output=output[:2000],
+        )
+        self.tasks[task_id] = ran
+        return ran
+
 
 def _calendar_able_jarvis() -> Jarvis:
     """A Jarvis that has a wire calendar store and has earned the capability."""
@@ -1376,6 +1433,74 @@ class TestTasksCommand:
         assert isinstance(result["reply"], str)
         assert "overdue" in result["reply"]
         assert "later" not in result["reply"]
+
+    def test_create_with_a_bad_cron_is_clear_guidance(self, tmp_path: Path) -> None:
+        from jarvis.infrastructure.task_scheduler import LocalTaskScheduler
+
+        jarvis = Jarvis(task_scheduler=LocalTaskScheduler(tmp_path))  # type: ignore[arg-type]
+        jarvis.remember_capability(
+            Capability(
+                name="manage tasks",
+                description="schedule and manage recurring tasks",
+                requirement="a wired task scheduler at the edge (TaskScheduler)",
+                provenance="test harness",
+                status=CapabilityStatus.ACQUIRED,
+            )
+        )
+        result = handle(jarvis, "tasks", {
+            "action": "create", "name": "bad", "command": "echo", "cron": "nonsense",
+        })
+        assert isinstance(result["reply"], str)
+        assert "cron" in result["reply"].lower()
+        assert "5 fields" in result["reply"]
+
+    def test_run_executes_and_records_the_outcome(self) -> None:
+        from jarvis.domain.value_objects.task_result import TaskResult
+
+        class _Agent:
+            def run_task(self, task: str) -> TaskResult:
+                return TaskResult(task=task, summary="ran fine", success=True)
+
+        jarvis = _tasks_able_jarvis()
+        jarvis.set_instruction_agent(_Agent())  # type: ignore[arg-type]
+        task = jarvis.create_scheduled_task(name="job", command="do it")
+        result = handle(jarvis, "tasks", {"action": "run", "id": task.id})
+        assert result["ok"] is True
+        assert "Ran it" in result["reply"]
+        stored = jarvis.get_scheduled_task(task.id)
+        assert stored.last_status == "ok"
+        assert stored.last_output == "ran fine"
+
+    def test_run_without_an_executor_declines_honestly(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        task = jarvis.create_scheduled_task(name="job", command="do it")
+        result = handle(jarvis, "tasks", {"action": "run", "id": task.id})
+        assert "executor" in result["reply"]
+        assert jarvis.get_scheduled_task(task.id).last_run is None
+
+    def test_run_refuses_a_disabled_task(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        task = jarvis.create_scheduled_task(name="job", command="do it")
+        jarvis.disable_scheduled_task(task.id)
+        result = handle(jarvis, "tasks", {"action": "run", "id": task.id})
+        assert "disabled" in result["reply"]
+
+    def test_run_needs_an_id(self) -> None:
+        result = handle(_tasks_able_jarvis(), "tasks", {"action": "run"})
+        assert "id" in result["reply"].lower()
+
+    def test_snapshot_task_entries_carry_last_runs(self) -> None:
+        jarvis = _tasks_able_jarvis()
+        task = jarvis.create_scheduled_task(name="job", command="do it")
+        jarvis.task_scheduler.record_run(task.id, ok=True, output="ok")  # type: ignore[union-attr]
+        entries = cast("list[dict[str, object]]", snapshot(jarvis)["upcoming_tasks"])
+        assert entries[0]["last_status"] == "ok"
+        assert entries[0]["last_output"] == "ok"
+
+    def test_snapshot_calendar_block_names_its_source(self) -> None:
+        assert snapshot(Jarvis())["calendar"] == {"source": "none", "connected": False}
+        jarvis = Jarvis(calendar_store=_FakeCalendarStore())  # type: ignore[arg-type]
+        assert snapshot(jarvis)["calendar"] == {"source": "local", "connected": True}
 
     def test_missing_action_is_guided(self) -> None:
         result = handle(_tasks_able_jarvis(), "tasks", {})
@@ -1754,6 +1879,165 @@ class TestDocumentChipInSay:
         jarvis = Jarvis(enable_recall=True)
         result = handle(jarvis, "say", {"text": "¿algo nuevo?"})
         assert "documents" not in result
+
+
+class TestWorkflowCommand:
+    def test_list_reports_definitions_with_readiness(self) -> None:
+        result = handle(Jarvis(), "workflow", {"action": "list"})
+        flows = cast("list[dict[str, object]]", result["workflows"])
+        assert {f["name"] for f in flows} == {"brief", "investigate", "dossier"}
+        for flow in flows:
+            assert flow["title"] and flow["description"]
+            assert isinstance(flow["inputs"], list)
+            assert isinstance(flow["steps"], list) and flow["steps"]
+            # Fresh offline Jarvis: nothing ready, every gap named.
+            assert flow["ready"] is False
+            assert flow["missing"]
+
+    def test_run_unknown_workflow_is_a_clear_error(self) -> None:
+        result = handle(Jarvis(), "workflow", {"action": "run", "name": "nope"})
+        assert "error" in result
+        assert "unknown workflow" in str(result["error"])
+
+    def test_run_requires_declared_inputs(self) -> None:
+        result = handle(
+            Jarvis(), "workflow", {"action": "run", "name": "investigate", "inputs": {}}
+        )
+        assert "error" in result
+        assert "query" in str(result["error"])
+
+    def test_run_without_live_edges_blocks_every_step_honestly(self) -> None:
+        result = handle(Jarvis(), "workflow", {"action": "run", "name": "brief"})
+        assert result["ok"] is False
+        assert "manage calendar" in result["reply"]
+        states = [s["state"] for s in cast("list[dict[str, object]]", result["steps"])]
+        assert states == ["bloqueado", "bloqueado"]
+        assert all(s.get("reason") for s in cast("list[dict[str, object]]", result["steps"]))
+
+    def test_run_brief_over_wired_edges_returns_real_outcomes(self) -> None:
+        jarvis = Jarvis(
+            calendar_store=_FakeCalendarStore(),  # type: ignore[arg-type]
+            task_scheduler=_FakeTaskScheduler(),  # type: ignore[arg-type]
+        )
+        _grow(jarvis, "manage calendar")
+        _grow(jarvis, "manage tasks")
+        jarvis.create_calendar_event(
+            title="standup", start=_event_start(), end=_event_end()
+        )
+        result = handle(jarvis, "workflow", {"action": "run", "name": "brief"})
+        assert result["ok"] is True
+        assert "standup" in result["reply"]
+        states = [s["state"] for s in cast("list[dict[str, object]]", result["steps"])]
+        assert states == ["ok", "ok"]
+
+    def test_run_investigate_chains_search_then_research(self) -> None:
+        jarvis = Jarvis(
+            external_source=_FakeExternalSource(),  # type: ignore[arg-type]
+            research_source=_FakeResearchSource(),  # type: ignore[arg-type]
+        )
+        _grow(jarvis, "search the web")
+        _grow(jarvis, "deep research")
+        result = handle(
+            jarvis,
+            "workflow",
+            {"action": "run", "name": "investigate", "inputs": {"query": "sky"}},
+        )
+        assert result["ok"] is True
+        assert "Title body text" in result["reply"]
+        assert "Rayleigh" in result["reply"]
+
+    def test_run_dossier_saves_a_generated_document(self) -> None:
+        jarvis = Jarvis(
+            external_source=_FakeExternalSource(),  # type: ignore[arg-type]
+            research_source=_FakeResearchSource(),  # type: ignore[arg-type]
+            documents_store=_FakeDocumentStore(),  # type: ignore[arg-type]
+        )
+        _grow(jarvis, "search the web")
+        _grow(jarvis, "deep research")
+        _grow(jarvis, "work with files")
+        result = handle(
+            jarvis,
+            "workflow",
+            {"action": "run", "name": "dossier", "inputs": {"query": "Blue Sky"}},
+        )
+        assert result["ok"] is True
+        assert "dossier-blue-sky.md" in result["reply"]
+        assert "dossier-blue-sky.md" in jarvis.list_documents()
+
+
+def _thinking_jarvis() -> Jarvis:
+    """A Jarvis with grounded beliefs and recorded episodes (no network)."""
+    jarvis = Jarvis(enable_recall=True)
+    evidence = Evidence(
+        content="the night sky is clear",
+        source=EvidenceSource.USER_STATEMENT,
+        weight=Confidence(1.0),
+    )
+    jarvis.think("the night sky is clear", evidence=[evidence])
+    jarvis.think("stars are visible tonight", evidence=[evidence])
+    return jarvis
+
+
+class TestBeliefCommand:
+    def test_list_is_empty_but_honest_when_fresh(self) -> None:
+        result = handle(Jarvis(), "belief", {"action": "list"})
+        assert result["beliefs"] == []
+        assert "no grounded beliefs" in str(result["reply"]).lower()
+
+    def test_list_reports_confidence_and_evidence_counts(self) -> None:
+        result = handle(_thinking_jarvis(), "belief", {"action": "list"})
+        entries = cast("list[dict[str, object]]", result["beliefs"])
+        assert len(entries) == 2
+        for entry in entries:
+            assert entry["statement"] and entry["subject"]
+            assert isinstance(entry["confidence"], float)
+            assert entry["supporting"] >= 1
+
+    def test_get_opens_the_full_provenance(self) -> None:
+        jarvis = _thinking_jarvis()
+        listed = handle(jarvis, "belief", {"action": "list"})
+        entries = cast("list[dict[str, object]]", listed["beliefs"])
+        result = handle(jarvis, "belief", {"action": "get", "statement": entries[0]["statement"]})
+        grounds = cast("dict[str, object]", result["provenance"])
+        assert grounds["supporting"]
+        assert isinstance(result["reply"], str)
+
+    def test_get_unknown_statement_is_honest(self) -> None:
+        result = handle(Jarvis(), "belief", {"action": "get", "statement": "nope"})
+        assert "no belief" in str(result["reply"]).lower()
+
+
+class TestRecallCommand:
+    def test_empty_memory_is_honest(self) -> None:
+        result = handle(Jarvis(), "recall", {"query": "anything"})
+        assert result["memories"] == []
+
+    def test_recall_surfaces_candidates_with_provenance(self) -> None:
+        result = handle(_thinking_jarvis(), "recall", {"query": "night sky"})
+        entries = cast("list[dict[str, object]]", result["memories"])
+        assert entries
+        for entry in entries:
+            assert entry["content"] and entry["kind"] and entry["provenance"]
+            assert isinstance(entry["relevance"], float)
+
+    def test_recall_needs_a_query(self) -> None:
+        result = handle(Jarvis(), "recall", {"query": "  "})
+        assert "reply" in result
+
+
+class TestConversationsCommand:
+    def test_no_sessions_yet_is_honest(self) -> None:
+        result = handle(Jarvis(), "conversations", {})
+        assert result["sessions"] == []
+
+    def test_episodes_group_into_a_session_arc(self) -> None:
+        result = handle(_thinking_jarvis(), "conversations", {})
+        sessions = cast("list[dict[str, object]]", result["sessions"])
+        assert len(sessions) == 1
+        assert sessions[0]["count"] == 2
+        episodes = cast("list[dict[str, object]]", sessions[0]["episodes"])
+        assert len(episodes) == 2
+        assert all(e["trigger"] and e["outcome"] for e in episodes)
 
 
 class TestRoute:
