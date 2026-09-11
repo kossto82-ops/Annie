@@ -40,6 +40,7 @@ from jarvis.actions import (
 from jarvis.actions import (
     record_outcome as _record_outcome_fn,
 )
+from jarvis.capabilities import CapabilitySurface
 from jarvis.cognitive import (
     act_on_insight as _act_on_insight_fn,
 )
@@ -155,7 +156,6 @@ from jarvis.domain.conversation.conversation_context import ConversationContext,
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.capability_stance import CapabilityStance
-from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -180,17 +180,13 @@ from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.retrieval.task_scheduler import TaskScheduler
-from jarvis.domain.services.capability_evaluator import recommend as recommend_capability
 from jarvis.domain.services.capability_gap_observation import (
     CapabilityGap,
-    detect_capability_gaps,
 )
-from jarvis.domain.services.capability_scout import catalog, scout
 from jarvis.domain.services.evidence_weighting import (
     DEFAULT_WEIGHTING,
     EvidenceWeightingPolicy,
 )
-from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
 from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.model_compare import ModelComparator, ModelRun
 from jarvis.domain.tools.tool import Tool
@@ -200,7 +196,6 @@ from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
 from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.capability import Capability
-from jarvis.domain.value_objects.capability_need import CapabilityNeed
 from jarvis.domain.value_objects.capability_recommendation import CapabilityRecommendation
 from jarvis.domain.value_objects.challenge import Challenge
 from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
@@ -228,43 +223,12 @@ from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.domain.value_objects.tool_call import ToolCall
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
+from jarvis.edges import EdgesSurface
 from jarvis.executive.executive_controller import (
     ExecutiveController,
     working_statement,
 )
-from jarvis.goals import (
-    _goal_statement as _goal_statement_fn,
-)
-from jarvis.goals import (
-    ask_for_help as _ask_for_help_fn,
-)
-from jarvis.goals import (
-    belief_about_goal as _belief_about_goal_fn,
-)
-from jarvis.goals import (
-    goal_progress as _goal_progress_fn,
-)
-from jarvis.goals import (
-    is_exhausted_stuck_goal as _is_exhausted_stuck_goal_fn,
-)
-from jarvis.goals import (
-    is_open_stuck_goal as _is_open_stuck_goal_fn,
-)
-from jarvis.goals import (
-    is_stuck_goal as _is_stuck_goal_fn,
-)
-from jarvis.goals import (
-    mark_goal_reached as _mark_goal_reached_fn,
-)
-from jarvis.goals import (
-    receive_help as _receive_help_fn,
-)
-from jarvis.goals import (
-    stuck_goals as _stuck_goals_fn,
-)
-from jarvis.goals import (
-    sub_goals as _sub_goals_fn,
-)
+from jarvis.goal_surface import GoalSurface
 from jarvis.infrastructure.capability_registry import (
     CapabilityRegistry,
     ProjectFilesCapability,
@@ -281,7 +245,6 @@ from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.in_memory_refutation_store import InMemoryRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
-from jarvis.infrastructure.mcp_tools import McpTool
 from jarvis.infrastructure.provider_stats import (
     InMemoryInstrumentation,
     InstrumentationStore,
@@ -318,6 +281,12 @@ from jarvis.introspection import (
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace, EpisodeTraceSink
 from jarvis.persistence import build_database_kwargs, build_persistent_kwargs
+from jarvis.surfaces import (
+    CalendarSurface,
+    DocumentsSurface,
+    NotesSurface,
+    TaskSchedulerSurface,
+)
 
 # The goal-reflection cap and the insight threshold now live in ``CognitiveKnobs``
 # (defaults 3 and 0.5, the historical constants), validated at the value level
@@ -648,6 +617,15 @@ class Jarvis:
             knowledge_source=knowledge_source,
             knobs=self._knobs,
         )
+        # Sub-facades: each wraps a coherent method group, keeping the public
+        # API on Jarvis via thin delegators for backward compatibility.
+        self._cap_surface = CapabilitySurface(self)
+        self._edges_surface = EdgesSurface(self)
+        self._notes_surface = NotesSurface(self)
+        self._docs_surface = DocumentsSurface(self)
+        self._cal_surface = CalendarSurface(self)
+        self._task_surface = TaskSchedulerSurface(self)
+        self._goal_surface = GoalSurface(self)
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
         """Swap the reasoner at runtime (Vision §37, §38; Track B).
@@ -988,9 +966,7 @@ class Jarvis:
         fails. The returned document carries its provenance (source/url/title/
         metadata) so Jarvis can later tell it apart from internal knowledge.
         """
-        if self._external_source is None:
-            raise RuntimeError("no Internet capability configured; set_external_source")
-        return self._external_source.read(url)
+        return self._edges_surface.read_external(url)
 
     def search_external(
         self, query: str, *, limit: int = 5
@@ -1001,9 +977,7 @@ class Jarvis:
         is configured (versus simply finding nothing). An empty result is an honest
         "nothing found".
         """
-        if self._external_source is None:
-            raise RuntimeError("no Internet capability configured; set_external_source")
-        return self._external_source.search(query, limit=limit)
+        return self._edges_surface.search_external(query, limit=limit)
 
     def internet_channels(self) -> tuple[ChannelStatus, ...]:
         """Report which external channels are reachable right now (doctor).
@@ -1011,9 +985,7 @@ class Jarvis:
         Returns an empty tuple when no Internet capability is wired. Report-only: it
         tells Jarvis what it *can* reach, not what to use.
         """
-        if self._external_source is None:
-            return ()
-        return self._external_source.available_channels()
+        return self._edges_surface.internet_channels()
 
     @property
     def research_source(self) -> ResearchSource | None:
@@ -1065,15 +1037,11 @@ class Jarvis:
         provenance and becomes candidate evidence for the core (D6) -- reading an
         inbox is not adopting its claims as facts.
         """
-        if self._mail_source is None:
-            raise RuntimeError("no email capability configured; set_mail_source")
-        return self._mail_source.list_messages(folder=folder, limit=limit)
+        return self._edges_surface.list_emails(folder=folder, limit=limit)
 
     def read_email(self, message_id: str, *, folder: str = "inbox") -> EmailMessage:
         """Read one message through the email capability, or raise when offline."""
-        if self._mail_source is None:
-            raise RuntimeError("no email capability configured; set_mail_source")
-        return self._mail_source.read_message(message_id, folder=folder)
+        return self._edges_surface.read_email(message_id, folder=folder)
 
     def send_email(self, *, to: tuple[str, ...], subject: str, body: str) -> EmailMessage:
         """Send an outbound message through the email capability.
@@ -1082,9 +1050,7 @@ class Jarvis:
         approved by the controlled-autonomy policy before calling. Raises a clear
         error when no mailbox is wired.
         """
-        if self._mail_source is None:
-            raise RuntimeError("no email capability configured; set_mail_source")
-        return self._mail_source.send_message(to=to, subject=subject, body=body)
+        return self._edges_surface.send_email(to=to, subject=subject, body=body)
 
     @property
     def task_agent(self) -> TaskAgent | None:
@@ -1135,9 +1101,7 @@ class Jarvis:
         approved by the controlled-autonomy policy before calling. Raises a clear
         error when no agent is wired.
         """
-        if self._task_agent is None:
-            raise RuntimeError("no agent capability configured; set_task_agent")
-        return self._task_agent.run_task(task)
+        return self._edges_surface.delegate(task)
 
     @property
     def openbot_agent(self) -> TaskAgent | None:
@@ -1170,11 +1134,7 @@ class Jarvis:
         destructive computer action is never implicitly approved. Raises a clear
         error when no OpenBot execution environment is wired.
         """
-        if self._openbot_agent is None:
-            raise RuntimeError(
-                "no OpenBot execution capability configured; set_openbot_agent"
-            )
-        return self._openbot_agent.run_task(task)
+        return self._edges_surface.execute_on_computer(task)
 
     @property
     def instruction_agent(self) -> TaskAgent | None:
@@ -1205,11 +1165,7 @@ class Jarvis:
         refuse honestly through the tool gate (they need deliberate approval via
         ``delegate``). Raises a clear error when no executor is wired.
         """
-        if self._instruction_agent is None:
-            raise RuntimeError(
-                "no instruction executor configured; set_instruction_agent"
-            )
-        return self._instruction_agent.run_task(task)
+        return self._edges_surface.execute(task)
 
     @property
     def notes_store(self) -> NotesStore | None:
@@ -1239,15 +1195,11 @@ class Jarvis:
         Raises a clear error when no notes store is wired. Plain note content is
         candidate context for the core; it is not adopted as fact (D6).
         """
-        if self._notes_store is None:
-            raise RuntimeError("no notes capability configured; set_notes_store")
-        return self._notes_store.list_notes(limit=limit)
+        return self._notes_surface.list_notes(limit=limit)
 
     def get_note(self, note_id: str) -> Note:
         """Read one note by id, or raise when offline or unknown."""
-        if self._notes_store is None:
-            raise RuntimeError("no notes capability configured; set_notes_store")
-        return self._notes_store.get_note(note_id)
+        return self._notes_surface.get_note(note_id)
 
     def create_note(
         self, *, title: str, body: str = "", tags: tuple[str, ...] = ()
@@ -1258,9 +1210,7 @@ class Jarvis:
         having it approved by the controlled-autonomy policy. Raises a clear error
         when no notes store is wired.
         """
-        if self._notes_store is None:
-            raise RuntimeError("no notes capability configured; set_notes_store")
-        return self._notes_store.create_note(title=title, body=body, tags=tags)
+        return self._notes_surface.create_note(title=title, body=body, tags=tags)
 
     def update_note(
         self,
@@ -1275,9 +1225,9 @@ class Jarvis:
         A local, reversible side-effect, gated in the caller. Raises a clear error
         when no notes store is wired or the note is unknown.
         """
-        if self._notes_store is None:
-            raise RuntimeError("no notes capability configured; set_notes_store")
-        return self._notes_store.update_note(note_id, title=title, body=body, tags=tags)
+        return self._notes_surface.update_note(
+            note_id, title=title, body=body, tags=tags
+        )
 
     def delete_note(self, note_id: str) -> None:
         """Delete a local note through the notes capability.
@@ -1286,15 +1236,11 @@ class Jarvis:
         when no notes store is wired; deleting an unknown note is a no-op at the
         store, and this method does not pre-check it (the store reports).
         """
-        if self._notes_store is None:
-            raise RuntimeError("no notes capability configured; set_notes_store")
-        self._notes_store.delete_note(note_id)
+        self._notes_surface.delete_note(note_id)
 
     def search_notes(self, query: str, *, limit: int = 10) -> tuple[Note, ...]:
         """Search notes by query through the notes capability, or raise when offline."""
-        if self._notes_store is None:
-            raise RuntimeError("no notes capability configured; set_notes_store")
-        return self._notes_store.search_notes(query, limit=limit)
+        return self._notes_surface.search_notes(query, limit=limit)
 
     # -- Documents (work with files) -----------------------------------------
 
@@ -1321,15 +1267,11 @@ class Jarvis:
 
     def list_documents(self) -> tuple[str, ...]:
         """The names of every document Jarvis holds, or raise when offline."""
-        if self._documents_store is None:
-            raise RuntimeError("no documents capability configured; set_documents_store")
-        return self._documents_store.list_documents()
+        return self._docs_surface.list_documents()
 
     def read_document(self, name: str) -> bytes:
         """The raw bytes of the document ``name``, or raise when offline."""
-        if self._documents_store is None:
-            raise RuntimeError("no documents capability configured; set_documents_store")
-        return self._documents_store.read_document(name)
+        return self._docs_surface.read_document(name)
 
     def write_document(
         self, name: str, content: bytes | str, *, owner: DocumentOwner = DocumentOwner.COMPANION
@@ -1342,10 +1284,7 @@ class Jarvis:
         report passes ``DocumentOwner.JARVIS``. A reversible, local side-effect
         gated in the caller.
         """
-        if self._documents_store is None:
-            raise RuntimeError("no documents capability configured; set_documents_store")
-        payload = content if isinstance(content, bytes) else content.encode("utf-8")
-        self._documents_store.write_document(name, payload, owner=owner)
+        self._docs_surface.write_document(name, content, owner=owner)
 
     def document_meta(self, name: str) -> DocumentMeta | None:
         """The recorded provenance of ``name``, or None when none was recorded.
@@ -1354,15 +1293,11 @@ class Jarvis:
         was stored/updated; ``None`` honestly says the store keeps no provenance
         for that file. Raises when offline (no store to ask).
         """
-        if self._documents_store is None:
-            raise RuntimeError("no documents capability configured; set_documents_store")
-        return self._documents_store.document_meta(name)
+        return self._docs_surface.document_meta(name)
 
     def remove_document(self, name: str) -> None:
         """Delete the document ``name`` through the documents capability."""
-        if self._documents_store is None:
-            raise RuntimeError("no documents capability configured; set_documents_store")
-        self._documents_store.remove_document(name)
+        self._docs_surface.remove_document(name)
 
     def search_documents(self, query: str, *, limit: int = 5) -> tuple[DocumentHit, ...]:
         """The stored documents bearing on ``query``, best first (or raise when offline).
@@ -1370,9 +1305,7 @@ class Jarvis:
         Surfaces candidates with a snippet, never a verdict (Vision §3); the
         companion's own files can answer before Jarvis reaches for explanation.
         """
-        if self._documents_store is None:
-            raise RuntimeError("no documents capability configured; set_documents_store")
-        return self._documents_store.search_documents(query, limit=limit)
+        return self._docs_surface.search_documents(query, limit=limit)
 
     @property
     def document_editor(self) -> DocumentEditor | None:
@@ -1405,25 +1338,7 @@ class Jarvis:
         §37). Raises when offline (no store or no editor) or when ``name`` is not
         text (binary files are kept intact, never rewritten).
         """
-        if self._documents_store is None:
-            raise RuntimeError("no documents capability configured; set_documents_store")
-        if self._document_editor is None:
-            raise RuntimeError("no document editor configured; set_document_editor")
-        raw = self._documents_store.read_document(name)
-        try:
-            source = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            raise ValueError(f"{name} is not text; documents stay intact as bytes") from None
-        proposal = self._document_editor.propose(source, instruction)
-        if not proposal or not proposal.strip():
-            return None
-        proposal = proposal.strip()
-        if proposal == source.strip():
-            return DocumentEdit(content=source, note="unchanged -- already as you asked")
-        meta = self._documents_store.document_meta(name)
-        owner = meta.owner if meta is not None else DocumentOwner.COMPANION
-        self._documents_store.write_document(name, proposal.encode("utf-8"), owner=owner)
-        return DocumentEdit(content=proposal, note=_describe_document_change(source, proposal))
+        return self._docs_surface.edit_document(name, instruction)
 
     def set_project_files(self, available: bool) -> None:
         """Flip whether project folders are wired for file editing right now.
@@ -1467,15 +1382,11 @@ class Jarvis:
         content is candidate context for the core; it is not adopted as fact
         (D6).
         """
-        if self._calendar_store is None:
-            raise RuntimeError("no calendar capability configured; set_calendar_store")
-        return self._calendar_store.list_events(limit=limit)
+        return self._cal_surface.list_calendar_events(limit=limit)
 
     def get_calendar_event(self, event_id: str) -> CalendarEvent:
         """Read one calendar event by id, or raise when offline or unknown."""
-        if self._calendar_store is None:
-            raise RuntimeError("no calendar capability configured; set_calendar_store")
-        return self._calendar_store.get_event(event_id)
+        return self._cal_surface.get_calendar_event(event_id)
 
     def create_calendar_event(
         self,
@@ -1493,9 +1404,7 @@ class Jarvis:
         for having it approved by the controlled-autonomy policy. Raises a
         clear error when no calendar store is wired.
         """
-        if self._calendar_store is None:
-            raise RuntimeError("no calendar capability configured; set_calendar_store")
-        return self._calendar_store.create_event(
+        return self._cal_surface.create_calendar_event(
             title=title,
             start=start,
             end=end,
@@ -1520,9 +1429,7 @@ class Jarvis:
         A local, reversible side-effect, gated in the caller. Raises a clear
         error when no calendar store is wired or the event is unknown.
         """
-        if self._calendar_store is None:
-            raise RuntimeError("no calendar capability configured; set_calendar_store")
-        return self._calendar_store.update_event(
+        return self._cal_surface.update_calendar_event(
             event_id,
             title=title,
             start=start,
@@ -1538,17 +1445,13 @@ class Jarvis:
         A local, reversible side-effect, gated in the caller. Raises a clear
         error when no calendar store is wired.
         """
-        if self._calendar_store is None:
-            raise RuntimeError("no calendar capability configured; set_calendar_store")
-        self._calendar_store.delete_event(event_id)
+        self._cal_surface.delete_calendar_event(event_id)
 
     def calendar_events_in_range(
         self, start: datetime, end: datetime, *, limit: int = 100
     ) -> tuple[CalendarEvent, ...]:
         """Return calendar events overlapping ``[start, end]``, or raise when offline."""
-        if self._calendar_store is None:
-            raise RuntimeError("no calendar capability configured; set_calendar_store")
-        return self._calendar_store.events_in_range(start, end, limit=limit)
+        return self._cal_surface.calendar_events_in_range(start, end, limit=limit)
 
     # -- Task scheduler (Odysseus #7) -----------------------------------------
 
@@ -1583,15 +1486,11 @@ class Jarvis:
         content is candidate context for the core; it is not adopted as fact
         (D6).
         """
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        return self._task_scheduler.list_tasks(limit=limit)
+        return self._task_surface.list_scheduled_tasks(limit=limit)
 
     def get_scheduled_task(self, task_id: str) -> ScheduledTask:
         """Read one scheduled task by id, or raise when offline or unknown."""
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        return self._task_scheduler.get_task(task_id)
+        return self._task_surface.get_scheduled_task(task_id)
 
     def create_scheduled_task(
         self,
@@ -1608,9 +1507,7 @@ class Jarvis:
         for having it approved by the controlled-autonomy policy. Raises a
         clear error when no task scheduler is wired.
         """
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        return self._task_scheduler.create_task(
+        return self._task_surface.create_scheduled_task(
             name=name,
             command=command,
             cron=cron,
@@ -1633,9 +1530,7 @@ class Jarvis:
         A local, reversible side-effect, gated in the caller. Raises a clear
         error when no task scheduler is wired or the task is unknown.
         """
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        return self._task_scheduler.update_task(
+        return self._task_surface.update_scheduled_task(
             task_id,
             name=name,
             command=command,
@@ -1650,27 +1545,19 @@ class Jarvis:
         A local, reversible side-effect, gated in the caller. Raises a clear
         error when no task scheduler is wired.
         """
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        self._task_scheduler.delete_task(task_id)
+        self._task_surface.delete_scheduled_task(task_id)
 
     def enable_scheduled_task(self, task_id: str) -> ScheduledTask:
         """Enable a scheduled task through the task-scheduler capability, or raise."""
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        return self._task_scheduler.enable_task(task_id)
+        return self._task_surface.enable_scheduled_task(task_id)
 
     def disable_scheduled_task(self, task_id: str) -> ScheduledTask:
         """Disable a scheduled task through the task-scheduler capability, or raise."""
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        return self._task_scheduler.disable_task(task_id)
+        return self._task_surface.disable_scheduled_task(task_id)
 
     def due_scheduled_tasks(self) -> tuple[ScheduledTask, ...]:
         """Return all enabled tasks whose next_run is in the past, or raise when offline."""
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        return self._task_scheduler.due_tasks()
+        return self._task_surface.due_scheduled_tasks()
 
     def run_scheduled_task(self, task_id: str) -> TaskResult:
         """Run one scheduled task right now through the earned-agency executor.
@@ -1683,24 +1570,7 @@ class Jarvis:
         scheduler is wired, the task is unknown or disabled, or no executor
         is configured -- in those cases nothing ran, so nothing is recorded.
         """
-        if self._task_scheduler is None:
-            raise RuntimeError("no task-scheduler capability configured; set_task_scheduler")
-        task = self._task_scheduler.get_task(task_id)
-        if not task.enabled:
-            raise RuntimeError(f"task {task_id!r} is disabled; enable it first")
-        if self._instruction_agent is None:
-            raise RuntimeError(
-                "no instruction executor configured; set_instruction_agent"
-            )
-        try:
-            outcome = self._instruction_agent.run_task(task.command)
-        except Exception as error:  # noqa: BLE001 - record the honest failure
-            self._task_scheduler.record_run(task_id, ok=False, output=str(error))
-            raise
-        self._task_scheduler.record_run(
-            task_id, ok=outcome.success, output=outcome.summary
-        )
-        return outcome
+        return self._task_surface.run_scheduled_task(task_id)
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Investigate ``query`` in depth through the research capability.
@@ -1710,9 +1580,7 @@ class Jarvis:
         Jarvis can reason over *what was found*; it is retrieval, never a
         conclusion.
         """
-        if self._research_source is None:
-            raise RuntimeError("no research capability configured; set research_source")
-        return self._research_source.deep_research(query, depth=depth)
+        return self._edges_surface.deep_research(query, depth=depth)
 
     @property
     def model_compare(self) -> ModelComparator | None:
@@ -1744,9 +1612,7 @@ class Jarvis:
         candidate evidence only -- candidate text plus the model that produced it
         (D6); weighing or synthesising them is Jarvis's, never the adapter's.
         """
-        if self._model_compare is None:
-            raise RuntimeError("no model comparison configured; set model_compare")
-        return self._model_compare.compare(prompt, models=models)
+        return self._edges_surface.compare_models(prompt, models=models)
 
     # -- Tools (Vision §34, 06_TOOLS_AGENCY) ------------------------------
 
@@ -1758,7 +1624,7 @@ class Jarvis:
         decide anything on its own (the core reasons over outcomes; the policy
         gates risky calls).
         """
-        self._tools.register(tool)
+        self._edges_surface.register_tool(tool)
 
     def run_tool(
         self,
@@ -1774,17 +1640,15 @@ class Jarvis:
         act happens. Every call is recorded as a :class:`ToolCallRecorded` event so
         the trace later holds what Jarvis did and how it went.
         """
-        if arguments is None:
-            arguments = {}
-        return self._tools.run(name, dict(arguments), approved=approved)
+        return self._edges_surface.run_tool(name, arguments, approved=approved)
 
     def tool_names(self) -> tuple[str, ...]:
         """Every registered tool name (what Jarvis *can* act through)."""
-        return self._tools.tool_names()
+        return self._edges_surface.tool_names()
 
     def tool_spec(self, name: str) -> ToolSpec | None:
         """The declaration of tool ``name``, or None when it is not registered."""
-        return self._tools.spec(name)
+        return self._edges_surface.tool_spec(name)
 
     def tool_channels(self) -> tuple[ToolSpec, ...]:
         """Report the registered tool declarations (doctor).
@@ -1792,9 +1656,7 @@ class Jarvis:
         Report-only: it tells Jarvis what actions are possible, not to take them
         (decision stays in the core, D6/D9).
         """
-        return tuple(
-            spec for name in self._tools.tool_names() if (spec := self._tools.spec(name))
-        )
+        return self._edges_surface.tool_channels()
 
     def tool_origin(self, name: str) -> str:
         """Where the tool ``name`` comes from: ``mcp``, ``project`` or ``local``.
@@ -1804,14 +1666,7 @@ class Jarvis:
         registered locally reports ``local``. Unknown names report ``unknown``.
         Read-only introspection for surfaces; it never executes.
         """
-        tool = self._tools.tool(name)
-        if tool is None:
-            return "unknown"
-        if isinstance(tool, McpTool):
-            return "mcp"
-        if name.startswith("project:"):
-            return "project"
-        return "local"
+        return self._edges_surface.tool_origin(name)
 
     # -- Odysseus: capability acquisition (Vision §34, §28) -------------------
 
@@ -1825,8 +1680,7 @@ class Jarvis:
         and autonomy stays earned (Vision §28). A need that matches no candidate
         yields an empty tuple, an honest "no candidate yet".
         """
-        need = CapabilityNeed(statement=statement, rationale=rationale)
-        return scout(need)
+        return self._cap_surface.need_capability(statement, rationale)
 
     def recognise_need(
         self,
@@ -1845,22 +1699,7 @@ class Jarvis:
         need's own confidence is never set -- it is exactly as strong as its
         evidence.
         """
-        need_statement = self._need_statement(statement)
-        belief = self._needs.get_by_statement(need_statement) or self._fresh_belief(
-            need_statement
-        )
-        for piece in evidence or ():
-            belief.add_evidence(piece)
-        self._needs.save(belief)
-        for event in belief.pull_events():
-            self.nervous_system.publish(event)
-        self.nervous_system.dispatch()
-
-        need = CapabilityNeed(statement=statement, rationale=rationale)
-        candidates = scout(need)
-        for capability in candidates:
-            self._capabilities.save(capability)
-        return candidates
+        return self._cap_surface.recognise_need(statement, rationale, evidence)
 
     def capability_needs(self) -> tuple[tuple[str, Confidence], ...]:
         """The capability needs Jarvis has recognised, with their *derived*
@@ -1869,12 +1708,7 @@ class Jarvis:
         Each is a need belief ("I need the ability to …") whose confidence comes
         from its evidence, not an assertion. Read-only.
         """
-        needs = [
-            (belief.statement, belief.confidence)
-            for belief in self._needs.all_beliefs()
-        ]
-        needs.sort(key=lambda pair: pair[1].value, reverse=True)
-        return tuple(needs)
+        return self._cap_surface.capability_needs()
 
     def recommend_capability(self, name: str) -> CapabilityRecommendation:
         """Derive a stance toward acquiring the capability named ``name``
@@ -1886,9 +1720,7 @@ class Jarvis:
         already available; withhold one whose need is contradicted. It only
         recommends -- it acquires nothing.
         """
-        need = self._need_for_capability(name)
-        capability = self._capabilities.get_by_name(name)
-        return recommend_capability(need, capability)
+        return self._cap_surface.recommend_capability(name)
 
     def _need_for_capability(self, capability_name: str) -> Belief | None:
         """The need belief bearing on a named capability, if Jarvis recorded one.
@@ -1897,28 +1729,14 @@ class Jarvis:
         names the capability's work. Best effort: it looks for any recorded need
         whose plain-text subject mentions ``capability_name``, else None.
         """
-        prefix = _NEED_PREFIX
-        candidates = self._needs.all_beliefs()
-        if not candidates:
-            return None
-        # The capability's own name usually appears in the need's plain subject.
-        for belief in candidates:
-            subject = belief.statement[len(prefix) :] if belief.statement.startswith(
-                prefix
-            ) else belief.statement
-            if capability_name.lower() in subject.lower():
-                return belief
-        # Fall back to the most confident need as the best available grounds.
-        return max(candidates, key=lambda b: b.confidence.value)
+        return self._cap_surface._need_for_capability(capability_name)
 
     def capability_stance(self, name: str) -> CapabilityStance:
         """The recommended stance toward acquiring ``name`` (Odysseus, Vision §28).
 
         A lightweight shorthand over :meth:`recommend_capability` for the surface.
         """
-        return recommend_capability(
-            self._need_for_capability(name), self._capabilities.get_by_name(name)
-        ).stance
+        return self._cap_surface.capability_stance(name)
 
     def acquire_capability(self, name: str) -> Capability | None:
         """Mark a previously-proposed capability as acquired (Odysseus, Vision §28).
@@ -1929,12 +1747,7 @@ class Jarvis:
         *can* do -- it is not the capability itself, which must remain an
         injectable capability provider at the edge (D7).
         """
-        current = self._capabilities.get_by_name(name)
-        if current is None:
-            return None
-        acquired = current.mark_acquired()
-        self._capabilities.save(acquired)
-        return acquired
+        return self._cap_surface.acquire_capability(name)
 
     def reject_capability(self, name: str) -> Capability | None:
         """Mark a proposed capability as rejected (Odysseus, Vision §28).
@@ -1943,12 +1756,7 @@ class Jarvis:
         not keep re-proposing the same idea. Returns the updated capability, or
         None when Jarvis has not proposed anything by that name.
         """
-        current = self._capabilities.get_by_name(name)
-        if current is None:
-            return None
-        rejected = current.mark_rejected()
-        self._capabilities.save(rejected)
-        return rejected
+        return self._cap_surface.reject_capability(name)
 
     def remember_capability(self, capability: Capability) -> None:
         """Persist a proposed capability so it is not re-discovered from scratch.
@@ -1957,13 +1765,13 @@ class Jarvis:
         caller to record a scout result for continuity), so a repeated need is
         recognised rather than re-proposed. No acquisition happens here.
         """
-        self._capabilities.save(capability)
+        self._cap_surface.remember_capability(capability)
 
     def capabilities(self) -> tuple[Capability, ...]:
         """Every capability Jarvis has proposed or acquired, for the surface to
         report what it can do (Vision §34). Read-only.
         """
-        return self._capabilities.all_capabilities()
+        return self._cap_surface.capabilities()
 
     def can_do(self, capability: str) -> bool:
         """Whether Jarvis can actually do ``capability`` right now (Odysseus, D7).
@@ -1973,15 +1781,7 @@ class Jarvis:
         proposed, rejected, or unwired reads as not doable -- so the surfaces say
         honestly "I can't use it yet" instead of pretending.
         """
-        current = self._capabilities.get_by_name(capability)
-        if current is None or current.status is not CapabilityStatus.ACQUIRED:
-            return False
-        provider = (
-            self._capability_providers.provider_for(capability)
-            if self._capability_providers is not None
-            else None
-        )
-        return provider is not None and provider.is_available()
+        return self._cap_surface.can_do(capability)
 
     def usable_capabilities(self) -> tuple[str, ...]:
         """The capabilities Jarvis can actually use now, sorted by name.
@@ -1989,13 +1789,7 @@ class Jarvis:
         Acquired capabilities with a ready backing provider (``can_do``), for the
         surface to report what is genuinely live. Read-only.
         """
-        return tuple(
-            sorted(
-                capability.name
-                for capability in self._capabilities.all_capabilities()
-                if self.can_do(capability.name)
-            )
-        )
+        return self._cap_surface.usable_capabilities()
 
     def provision_live_capabilities(self) -> tuple[Capability, ...]:
         """Mark every live-backed catalog capability as acquired (Odysseus, D37).
@@ -2010,24 +1804,7 @@ class Jarvis:
         ones are left untouched, and nothing outside the catalog is provisioned.
         Idempotent; returns the capabilities this call newly acquired.
         """
-        registry = self._capability_providers
-        if registry is None:
-            return ()
-        provisioned: list[Capability] = []
-        for candidate in catalog():
-            provider = registry.provider_for(candidate.name)
-            if provider is None or not provider.is_available():
-                continue
-            current = self._capabilities.get_by_name(candidate.name)
-            if current is None:
-                acquired = candidate.mark_acquired()
-                self._capabilities.save(acquired)
-                provisioned.append(acquired)
-            elif current.status is CapabilityStatus.PROPOSED:
-                acquired = current.mark_acquired()
-                self._capabilities.save(acquired)
-                provisioned.append(acquired)
-        return tuple(provisioned)
+        return self._cap_surface.provision_live_capabilities()
 
     def observe_capability_gaps(self) -> tuple[CapabilityGap, ...]:
         """The recurring subjects Jarvis keeps failing to answer, from its own
@@ -2038,14 +1815,14 @@ class Jarvis:
         caller's job (e.g. the surface records it via :meth:`recognise_need`), so
         this never writes state by itself.
         """
-        return detect_capability_gaps(self.episodes.history(), knobs=self._knobs)
+        return self._cap_surface.observe_capability_gaps()
 
     def unanswered_subjects(self) -> tuple[str, ...]:
         """The subjects Jarvis has noticed itself failing to answer about, as
         plain strings for the surface (Odysseus). Read-only; the gaps are the
         recurring failure subjects from the episode history.
         """
-        return tuple(gap.subject for gap in self.observe_capability_gaps())
+        return self._cap_surface.unanswered_subjects()
 
     def auto_scout_gaps(self) -> tuple[Capability, ...]:
         """Detect recurring capability gaps and auto-scout candidates (Odysseus).
@@ -2057,34 +1834,7 @@ class Jarvis:
         recurrence (never asserted). Returns the newly proposed candidate
         capabilities (possibly empty when no gap exists or none match).
         """
-        proposals: list[Capability] = []
-        for gap in self.observe_capability_gaps():
-            statement = f"answer repeated questions about {gap.subject}"
-            rationale = (
-                f"I noticed I keep failing to conclude about '{gap.subject}' "
-                f"({len(gap.episodes)} ungrounded attempt(s))"
-            )
-            evidence = [
-                Evidence(
-                    content=(
-                        f"episode about '{record.trigger}' concluded ungrounded "
-                        f"(confidence {record.conclusion_confidence.value:.2f})"
-                    ),
-                    source=EvidenceSource.SYSTEM_OBSERVATION,
-                    weight=Confidence(1.0),
-                    supports=True,
-                )
-                for record in gap.episodes
-            ]
-            # Dedup: skip evidence already on the need (idempotent re-runs).
-            need = self._needs.get_by_statement(self._need_statement(statement))
-            if need is not None:
-                existing = {piece.content for piece in need.evidence}
-                evidence = [p for p in evidence if p.content not in existing]
-            if not evidence:
-                continue
-            proposals.extend(self.recognise_need(statement, rationale, evidence))
-        return tuple(proposals)
+        return self._cap_surface.auto_scout_gaps()
 
     @staticmethod
     def _need_statement(statement: str) -> str:
@@ -2291,7 +2041,7 @@ class Jarvis:
         names what Jarvis has come back to often enough to be a pattern, saying
         nothing about whether pursuing it is wise. Empty when nothing recurs.
         """
-        return recurring_goals(self.episodes.history())
+        return self._goal_surface.recurring_goals()
 
     def reflection_effort(self, goal_statement: str) -> int:
         """How many times Jarvis has wondered about this goal on its own initiative
@@ -2300,14 +2050,14 @@ class Jarvis:
         The mirror of the companion-side :meth:`recurring_goals`. It measures
         effort, not progress -- a high count with low reachability is honest.
         """
-        return reflection_effort(self.episodes.history(), goal_statement)
+        return self._goal_surface.reflection_effort(goal_statement)
 
     def stuck_goals(self) -> tuple[str, ...]:
         """Goals Jarvis has given up wondering about alone (Vision §16, §37): those
         it has learned are not reliably reachable *and* has already turned over to
         exhaustion. Ordered by recurrence (most-returned-to first). Empty when none.
         """
-        return _stuck_goals_fn(self)
+        return self._goal_surface.stuck_goals()
 
     def ask_for_help(self) -> str | None:
         """A spoken request for help with the most stuck goal, or None if there is
@@ -2317,7 +2067,7 @@ class Jarvis:
         goal it keeps returning to but has not found how to reach, and asks. It only
         asks -- it asserts nothing and takes no action.
         """
-        return _ask_for_help_fn(self)
+        return self._goal_surface.ask_for_help()
 
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition
@@ -2546,46 +2296,45 @@ class Jarvis:
         action-outcome learning). Reaching it also supplies the criterion, if any,
         as context.
         """
-        return _mark_goal_reached_fn(self, goal, reached)
+        return self._goal_surface.mark_goal_reached(goal, reached)
 
     def sub_goals(self, parent: str) -> tuple[str, ...]:
         """The parts recorded for ``parent`` (Vision §26), in the order first seen."""
-        return _sub_goals_fn(self, parent)
+        return self._goal_surface.sub_goals(parent)
 
     def _first_unreached_part(self, parent: str) -> str | None:
         """The first recorded part of ``parent`` never yet reached, or None."""
-        from jarvis.goals import _first_unreached_part as _fun
-        return _fun(self, parent)
+        return self._goal_surface._first_unreached_part(parent)
 
     def goal_progress(self, parent: str) -> tuple[int, int]:
         """How far along a decomposed goal is, as ``(parts reached, parts known)``
         (Vision §26, §30).
         """
-        return _goal_progress_fn(self, parent)
+        return self._goal_surface.goal_progress(parent)
 
     def receive_help(self, goal: Goal, helpful: bool = True) -> Belief:
         """Take in the companion's guidance on a goal and learn from it (Vision §18, §26)."""
-        return _receive_help_fn(self, goal, helpful)
+        return self._goal_surface.receive_help(goal, helpful)
 
     def belief_about_goal(self, goal: Goal | str) -> Belief | None:
         """What Jarvis has learned about whether a goal of this kind is reachable (Vision §26)."""
-        return _belief_about_goal_fn(self, goal)
+        return self._goal_surface.belief_about_goal(goal)
 
     @staticmethod
     def _goal_statement(goal_statement: str) -> str:
-        return _goal_statement_fn(goal_statement)
+        return GoalSurface._goal_statement(goal_statement)
 
     def _is_stuck_goal(self, goal_statement: str) -> bool:
         """True when Jarvis has *learned* this goal is not reliably reachable."""
-        return _is_stuck_goal_fn(self, goal_statement)
+        return self._goal_surface._is_stuck_goal(goal_statement)
 
     def _is_open_stuck_goal(self, goal_statement: str) -> bool:
         """A stuck goal still worth wondering about."""
-        return _is_open_stuck_goal_fn(self, goal_statement)
+        return self._goal_surface._is_open_stuck_goal(goal_statement)
 
     def _is_exhausted_stuck_goal(self, goal_statement: str) -> bool:
         """A stuck goal wondered about enough for now."""
-        return _is_exhausted_stuck_goal_fn(self, goal_statement)
+        return self._goal_surface._is_exhausted_stuck_goal(goal_statement)
 
     def _reachability_note(self, goal_statement: str) -> str:
         """A truthful annotation of what Jarvis has learned about reaching a goal.
@@ -2594,13 +2343,11 @@ class Jarvis:
         reachability from the derived confidence -- never asserting more than the
         evidence supports (mirrors the grounded threshold, D14).
         """
-        from jarvis.introspection import _reachability_note as _fun
-        return _fun(self, goal_statement)
+        return self._goal_surface._reachability_note(goal_statement)
 
     def _progress_note(self, goal_statement: str) -> str:
         """A truthful annotation of how many of a goal's known parts are reached."""
-        from jarvis.introspection import _progress_note as _fun
-        return _fun(self, goal_statement)
+        return self._goal_surface._progress_note(goal_statement)
 
     def recommend_action_by_description(self, description: str) -> ActionRecommendation:
         """Recommend a stance for a *remembered* kind of action (Vision §28).
