@@ -12,6 +12,7 @@ with no Google environment configured stays offline.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -420,7 +421,28 @@ class TestGoogleCalendarCommand:
     ) -> None:
         monkeypatch.delenv(gc.ENV_CLIENT_ID, raising=False)
         result = handle(_google_env_jarvis(), "google_calendar", {"action": "auth"})
-        assert "isn't configured" in str(result["reply"])
+        assert "credentials first" in str(result["reply"])
+        assert result["redirect_uri"].endswith("/api/auth/google/callback")
+
+    def test_auth_accepts_and_saves_credentials_without_echoing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("JARVIS_ENV_FILE", str(tmp_path / ".env"))
+        monkeypatch.delenv(gc.ENV_CLIENT_ID, raising=False)
+        monkeypatch.delenv(gc.ENV_CLIENT_SECRET, raising=False)
+        secret = "gsec_do_not_leak_me"
+        result = handle(
+            _google_env_jarvis(),
+            "google_calendar",
+            {"action": "auth", "client_id": "my-client-id", "client_secret": secret},
+        )
+        assert "https://accounts.google.com" in str(result["reply"])
+        assert result["saved"] is True
+        env_text = (tmp_path / ".env").read_text(encoding="utf-8")
+        assert "JARVIS_GOOGLE_CALENDAR_CLIENT_ID=my-client-id" in env_text
+        assert f"JARVIS_GOOGLE_CALENDAR_CLIENT_SECRET={secret}" in env_text
+        assert secret not in json.dumps(result)
+        assert os.environ.get(gc.ENV_CLIENT_ID) == "my-client-id"
 
     def test_auth_returns_consent_url_when_configured(
         self, monkeypatch: pytest.MonkeyPatch

@@ -31,7 +31,9 @@ from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.document_meta import DocumentMeta
+from jarvis.domain.value_objects.email_message import EmailMessage
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.note import Note
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
@@ -2038,6 +2040,236 @@ class TestConversationsCommand:
         episodes = cast("list[dict[str, object]]", sessions[0]["episodes"])
         assert len(episodes) == 2
         assert all(e["trigger"] and e["outcome"] for e in episodes)
+
+
+class _FakeNotesStore:
+    """An in-memory notes store for the notes command tests."""
+
+    def __init__(self) -> None:
+        self.notes: dict[str, Note] = {}
+
+    def list_notes(self, *, limit: int = 100) -> tuple[Note, ...]:
+        return tuple(sorted(
+            self.notes.values(), key=lambda n: n.created_at, reverse=True,
+        )[:limit])
+
+    def get_note(self, note_id: str) -> Note:
+        return self.notes[note_id]
+
+    def create_note(
+        self, *, title: str, body: str = "", tags: tuple[str, ...] = ()
+    ) -> Note:
+        note = Note(
+            id=f"n{len(self.notes) + 1}", title=title, body=body, tags=tags,
+        )
+        self.notes[note.id] = note
+        return note
+
+    def update_note(
+        self, note_id: str, *, title: str, body: str, tags: tuple[str, ...]
+    ) -> Note:
+        note = Note(id=note_id, title=title, body=body, tags=tags)
+        self.notes[note_id] = note
+        return note
+
+    def delete_note(self, note_id: str) -> None:
+        self.notes.pop(note_id, None)
+
+    def search_notes(self, query: str, *, limit: int = 10) -> tuple[Note, ...]:
+        words = query.lower().split()
+        return tuple(
+            n for n in self.notes.values()
+            if any(w in (n.title + " " + n.body).lower() for w in words)
+        )[:limit]
+
+
+def _notes_able_jarvis() -> Jarvis:
+    """A Jarvis with a wired notes store and the earned capability."""
+    jarvis = Jarvis(notes_store=_FakeNotesStore())  # type: ignore[arg-type]
+    jarvis.remember_capability(
+        Capability(
+            name="manage notes",
+            description="keep notes, todos and reminders",
+            requirement="a wired notes store at the edge (NotesStore)",
+            provenance="test harness",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )
+    return jarvis
+
+
+class _FakeMailBox:
+    """An in-memory mailbox for the mail command tests (no network)."""
+
+    def __init__(self) -> None:
+        self.inbox: dict[str, EmailMessage] = {
+            "m1": EmailMessage(
+                subject="hello", body="hi there", sender="a@example.com",
+                recipients=("me@example.com",), message_id="m1",
+            )
+        }
+        self.sent: list[EmailMessage] = []
+
+    def list_messages(
+        self, *, folder: str = "inbox", limit: int = 10
+    ) -> tuple[EmailMessage, ...]:
+        if folder != "inbox":
+            return ()
+        return tuple(list(self.inbox.values())[:limit])
+
+    def read_message(self, message_id: str, *, folder: str = "inbox") -> EmailMessage:
+        return self.inbox[message_id]
+
+    def send_message(
+        self, *, to: tuple[str, ...], subject: str, body: str
+    ) -> EmailMessage:
+        sent = EmailMessage(
+            subject=subject, body=body, sender="me@example.com",
+            recipients=to, message_id=f"s{len(self.sent) + 1}", folder="sent",
+        )
+        self.sent.append(sent)
+        return sent
+
+
+def _mail_able_jarvis() -> Jarvis:
+    """A Jarvis with a wired mailbox and the earned capability."""
+    jarvis = Jarvis(mail_source=_FakeMailBox())  # type: ignore[arg-type]
+    jarvis.remember_capability(
+        Capability(
+            name="send and read email",
+            description="read, triage and send email through a mailbox",
+            requirement="a configured IMAP/SMTP mailbox",
+            provenance="test harness",
+            status=CapabilityStatus.ACQUIRED,
+        )
+    )
+    return jarvis
+
+
+class TestNotesCommand:
+    def test_list_is_empty_but_honest_when_fresh(self) -> None:
+        result = handle(_notes_able_jarvis(), "notes", {"action": "list"})
+        assert "No notes yet" in result["reply"]
+
+    def test_full_crud_round_trip(self) -> None:
+        jarvis = _notes_able_jarvis()
+        created = handle(jarvis, "notes", {
+            "action": "create", "title": "ideas", "body": "build it", "tags": "a, b",
+        })
+        assert "ideas" in created["reply"]
+        listed = handle(jarvis, "notes", {"action": "list"})
+        assert listed["count"] == 1
+        assert listed["notes"][0]["tags"] == ["a", "b"]
+        note_id = listed["notes"][0]["id"]
+        got = handle(jarvis, "notes", {"action": "get", "id": note_id})
+        assert got["note"]["body"] == "build it"
+        updated = handle(jarvis, "notes", {
+            "action": "update", "id": note_id, "title": "ideas2",
+            "body": "build it well", "tags": "c",
+        })
+        assert "ideas2" in updated["reply"]
+        found = handle(jarvis, "notes", {"action": "search", "query": "well"})
+        assert found["count"] == 1
+        deleted = handle(jarvis, "notes", {"action": "delete", "id": note_id})
+        assert "Deleted" in deleted["reply"]
+        assert handle(jarvis, "notes", {"action": "list"})["reply"].startswith("No notes")
+
+    def test_create_needs_content(self) -> None:
+        result = handle(_notes_able_jarvis(), "notes", {"action": "create"})
+        assert "title" in result["reply"].lower()
+
+    def test_offline_and_unearned_are_honest(self) -> None:
+        assert "notes capability" in handle(Jarvis(), "notes", {"action": "list"})["reply"]
+        jarvis = Jarvis(notes_store=_FakeNotesStore())  # type: ignore[arg-type]
+        assert "capability" in handle(jarvis, "notes", {"action": "list"})["reply"]
+
+    def test_snapshot_notes_block_counts(self) -> None:
+        jarvis = _notes_able_jarvis()
+        assert snapshot(jarvis)["notes"] == {"total": 0, "recent": []}
+        handle(jarvis, "notes", {"action": "create", "title": "t", "body": "b"})
+        block = cast("dict[str, object]", snapshot(jarvis)["notes"])
+        assert block["total"] == 1
+        recent = cast("list[dict[str, object]]", block["recent"])
+        assert recent[0]["title"] == "t"
+
+
+class TestMailCommand:
+    def test_list_and_read(self) -> None:
+        jarvis = _mail_able_jarvis()
+        listed = handle(jarvis, "mail", {"action": "list"})
+        assert listed["count"] == 1
+        assert "hello" in listed["reply"]
+        read = handle(jarvis, "mail", {"action": "read", "message_id": "m1"})
+        assert "hi there" in read["reply"]
+
+    def test_send_needs_explicit_approval(self) -> None:
+        jarvis = _mail_able_jarvis()
+        declined = handle(jarvis, "mail", {
+            "action": "send", "to": "a@example.com", "subject": "hi", "body": "yo",
+        })
+        assert "Nothing was sent" in declined["reply"]
+        assert jarvis.mail_source.sent == []  # type: ignore[union-attr]
+        sent = handle(jarvis, "mail", {
+            "action": "send", "to": "a@example.com", "subject": "hi", "body": "yo",
+            "approved": True,
+        })
+        assert "Sent to a@example.com" in sent["reply"]
+        assert len(jarvis.mail_source.sent) == 1  # type: ignore[union-attr]
+
+    def test_send_needs_recipients_and_content(self) -> None:
+        jarvis = _mail_able_jarvis()
+        assert "recipient" in handle(
+            jarvis, "mail", {"action": "send", "subject": "hi"}
+        )["reply"].lower()
+        assert "subject" in handle(
+            jarvis, "mail", {"action": "send", "to": "a@example.com"}
+        )["reply"].lower()
+
+    def test_offline_unearned_and_snapshot(self) -> None:
+        assert "mail capability" in handle(Jarvis(), "mail", {"action": "list"})["reply"]
+        jarvis = Jarvis(mail_source=_FakeMailBox())  # type: ignore[arg-type]
+        assert "capability" in handle(jarvis, "mail", {"action": "list"})["reply"]
+        assert snapshot(Jarvis())["mail"] == {"configured": False}
+        assert snapshot(_mail_able_jarvis())["mail"] == {"configured": True}
+
+
+class TestConfigEdgesCommand:
+    def test_embeddings_reports_lexical_when_offline(self) -> None:
+        result = handle(Jarvis(), "embeddings", {})
+        assert result["mode"] == "lexical"
+        assert "lexical" in result["reply"]
+        assert snapshot(Jarvis())["recall"] == {"mode": "lexical"}
+
+    def test_embeddings_reload_without_config_is_honest(self) -> None:
+        result = handle(Jarvis(), "embeddings", {"action": "reload"})
+        assert "No embedder configured" in result["reply"]
+
+    def test_speech_reports_the_browser_ear_by_default(self) -> None:
+        from jarvis.infrastructure.speech_perception import EchoSpeechPerception
+
+        jarvis = Jarvis()
+        jarvis.set_speech_perception(EchoSpeechPerception())
+        result = handle(jarvis, "speech", {})
+        assert "Browser ear" in result["reply"]
+        assert result["live"] is False
+
+    def test_speech_reload_rewires_from_the_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("JARVIS_STT_PROVIDER", raising=False)
+        monkeypatch.delenv("JARVIS_STT_MODEL", raising=False)
+        result = handle(Jarvis(), "speech", {"action": "reload"})
+        assert "Browser ear" in result["reply"]
+
+    def test_tool_origins_are_reported_honestly(self) -> None:
+        from jarvis.infrastructure.echo_tool import EchoTool
+
+        jarvis = Jarvis()
+        jarvis.register_tool(EchoTool())
+        assert jarvis.tool_origin("echo") == "local"
+        assert jarvis.tool_origin("ghost") == "unknown"
+        tools = cast("list[dict[str, object]]", snapshot(jarvis)["tools"])
+        assert [t for t in tools if t["name"] == "echo"][0]["origin"] == "local"
 
 
 class TestRoute:

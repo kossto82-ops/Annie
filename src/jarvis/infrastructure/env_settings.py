@@ -25,13 +25,19 @@ from jarvis.domain.perception.speech_perception import SpeechPerceptionSource
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_model
-from jarvis.infrastructure.provider_settings import ProviderSettings, SttSettings
+from jarvis.infrastructure.provider_settings import (
+    OpenBotSettings,
+    ProviderSettings,
+    SttSettings,
+)
 from jarvis.infrastructure.speech_perception_registry import build_speech_perception
 
 _PREFIX = "JARVIS_LLM_"
 _OFFLINE_PROVIDERS = frozenset({"scripted", "stub"})
 _STT_PREFIX = "JARVIS_STT_"
 _STT_OFFLINE_PROVIDERS = frozenset({"echo", "stub", "scripted"})
+_OPENBOT_PREFIX = "JARVIS_OPENBOT_"
+_DISABLED = frozenset({"", "0", "false", "no", "off", "disabled"})
 
 
 def settings_from_env(environ: Mapping[str, str] | None = None) -> ProviderSettings:
@@ -86,3 +92,26 @@ def speech_perception_from_env(
 ) -> SpeechPerceptionSource:
     """Build the configured ear from the environment (the offline echo by default)."""
     return build_speech_perception(stt_settings_from_env(environ))
+
+
+def openbot_settings_from_env(
+    environ: Mapping[str, str] | None = None,
+) -> OpenBotSettings | None:
+    """Assemble ``OpenBotSettings`` from ``JARVIS_OPENBOT_*``, or ``None``.
+
+    ``None`` when OpenBot is disabled or no endpoint is configured (D8): an
+    offline Jarvis stays fully functional.  ``JARVIS_OPENBOT_ENABLED=0|false|no``
+    disables the capability even when an endpoint is present.
+    """
+    env = environ if environ is not None else os.environ
+    enabled = env.get(f"{_OPENBOT_PREFIX}ENABLED", "1").strip().lower()
+    if enabled in _DISABLED:
+        return None
+    endpoint = env.get(f"{_OPENBOT_PREFIX}ENDPOINT", "").strip()
+    if not endpoint:
+        return None
+    return OpenBotSettings(
+        endpoint=endpoint.rstrip("/"),
+        agent_token=(env.get(f"{_OPENBOT_PREFIX}AGENT_TOKEN") or None),
+        timeout=float(env.get(f"{_OPENBOT_PREFIX}TIMEOUT", "120")),
+    )

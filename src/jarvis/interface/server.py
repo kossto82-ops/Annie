@@ -28,6 +28,7 @@ from jarvis.infrastructure.agent_reach_source import build_web_source, llm_searc
 from jarvis.infrastructure.calendar_store import build_calendar_store
 from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.env_settings import (
+    openbot_settings_from_env,
     settings_from_env,
     speech_perception_from_env,
 )
@@ -41,6 +42,7 @@ from jarvis.infrastructure.mail_source import build_mail_source
 from jarvis.infrastructure.model_compare_source import build_model_compare_source
 from jarvis.infrastructure.notes_store import build_notes_store
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
+from jarvis.infrastructure.openbot_task_agent import build_openbot_task_agent
 from jarvis.infrastructure.perceiver_factory import (
     build_embedder,
     companion_perceiver_from_settings,
@@ -155,6 +157,12 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
         instruction_agent = InstrumentedTaskAgent(
             instruction_agent, instrumentation=instrumentation
         )
+    # OpenBot (Increment 161): an optional external computer/browser execution
+    # environment behind the same delegation contract.  ``None`` when disabled or
+    # unconfigured, so Jarvis stays fully offline (D8); ``can_do("execute on
+    # computer")`` reflects whether the endpoint is actually reachable, never
+    # configuration alone.
+    openbot_agent = build_openbot_task_agent(openbot_settings_from_env())
     if home is None:
         jarvis = Jarvis(
             perception=perception,
@@ -168,6 +176,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             mail_source=mail_source,
             task_agent=task_agent,
             instruction_agent=instruction_agent,
+            openbot_agent=openbot_agent,
             notes_store=notes_store,
             documents_store=documents_store,
             instrumentation=instrumentation,
@@ -198,6 +207,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             mail_source=mail_source,
             task_agent=task_agent,
             instruction_agent=instruction_agent,
+            openbot_agent=openbot_agent,
             notes_store=notes_store,
             documents_store=documents_store,
             instrumentation=instrumentation,
@@ -289,6 +299,10 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(response.status)
         self.send_header("Content-Type", response.content_type)
         self.send_header("Content-Length", str(len(response.body)))
+        # Local UI: always fresh bytes, never a cached copy (the console is
+        # a live window onto Jarvis, and a stale copy blanks panels silently).
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
         self.end_headers()
         self.wfile.write(response.body)
 

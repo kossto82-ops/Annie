@@ -1181,6 +1181,16 @@
         Knowledge Base
         <span class="nav-badge" id="docCount">0</span>
       </div>
+      <div class="nav-item" data-nav="notes">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        Notas
+        <span class="nav-badge" id="notesCount">0</span>
+      </div>
+      <div class="nav-item" data-nav="mail">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        Correo
+        <span class="nav-badge" id="mailCount">✉</span>
+      </div>
     </div>
 
     <div class="sidebar-section-title">Tools</div>
@@ -1375,6 +1385,7 @@
                 <div class="muted">Cargando agenda…</div>
               </div>
               <div style="text-align: right; margin-top: 8px;">
+                <span class="panel-link" id="googleConnectLink" style="display:none">Conectar Google ›</span>
                 <span class="panel-link" data-nav="cal">View Full Schedule ›</span>
               </div>
             </div>
@@ -1559,6 +1570,9 @@
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"/></svg>
           <span id="footProv">Home · SQLite</span>
         </div>
+        <div class="footer-info-item">
+          <span id="buildTag" title="Marca de la copia servida">build F10</span>
+        </div>
       </div>
 
       <div class="talk-bar" id="talkBar">
@@ -1636,6 +1650,52 @@
       </div>
     </div>
 
+    <!-- Notes panel: the notes edge itself -->
+    <div id="panel-notes" class="pane">
+      <div class="card2">
+        <h3>Notas — lo que me pides guardar</h3>
+        <div class="hint">Texto sin verificar que me pides conservar. Leer es recuperar; escribir es reversible.</div>
+        <div class="docsearch">
+          <input id="noteQuery" type="search" placeholder="Buscar en notas…" autocomplete="off">
+          <button type="button" class="switch" id="noteSearchBtn">Buscar</button>
+          <button type="button" class="switch" id="noteList">Listar</button>
+        </div>
+        <div id="notesbody"><div class="muted">cargando…</div></div>
+      </div>
+      <div class="card2 tune">
+        <h3>Crear / editar nota</h3>
+        <input type="hidden" id="noteEditId" value="">
+        <label>title <input type="text" id="noteTitle" placeholder="e.g. ideas" /></label>
+        <label>body <textarea id="noteBody" rows="3" placeholder="contenido…"></textarea></label>
+        <label>tags <input type="text" id="noteTags" placeholder="coma, separadas (opcional)" /></label>
+        <button type="button" id="noteCreate" class="switch">Create note</button>
+        <button type="button" id="noteSave" class="switch" style="display:none">Save changes</button>
+        <button type="button" id="noteCancel" class="switch" style="display:none">Cancel</button>
+        <div class="muted" id="noteOut"></div>
+      </div>
+    </div>
+
+    <!-- Mail panel: the mailbox edge itself -->
+    <div id="panel-mail" class="pane">
+      <div class="card2">
+        <h3>Correo — buzón y envíos</h3>
+        <div class="hint">Leer es recuperar contexto; enviar es un acto externo y pide confirmación explícita.</div>
+        <div class="docsearch">
+          <label>carpeta <input type="text" id="mailFolder" value="inbox" autocomplete="off"></label>
+          <button type="button" class="switch" id="mailRefresh">Leer</button>
+        </div>
+        <div id="mailbody"><div class="muted">cargando…</div></div>
+      </div>
+      <div class="card2 tune">
+        <h3>Escribir correo</h3>
+        <label>to <input type="text" id="mailTo" placeholder="destino@ejemplo.com (coma para varios)" /></label>
+        <label>subject <input type="text" id="mailSubject" placeholder="asunto" /></label>
+        <label>body <textarea id="mailBody" rows="4" placeholder="cuerpo…"></textarea></label>
+        <button type="button" id="mailSend" class="switch">Send (pide confirmación)</button>
+        <div class="muted" id="mailOut"></div>
+      </div>
+    </div>
+
     <!-- Agents panel: the wired edge seams, honestly reported -->
     <div id="panel-agents" class="pane">
       <div class="card2">
@@ -1699,6 +1759,10 @@
       <div class="card2 tune">
         <h3>Google Calendar — conectar</h3>
         <div class="muted" id="calGoogleState">estado: …</div>
+        <div class="muted">Crea un <b>OAuth client ID</b> (tipo app de escritorio) en Google Cloud Console y registra esta redirect URI:</div>
+        <div class="muted" id="calGoogleRedirect" style="word-break:break-all">http://127.0.0.1:8765/api/auth/google/callback</div>
+        <label>client ID <input type="text" id="calGoogleId" placeholder="….apps.googleusercontent.com" autocomplete="off"></label>
+        <label>client secret <input type="password" id="calGoogleSecret" placeholder="pegar para guardar — nunca se muestra" autocomplete="off"></label>
         <button type="button" id="calGoogleConnect" class="switch">Conectar Google Calendar</button>
         <button type="button" id="calGoogleDisconnect" class="switch" style="display:none">Desconectar</button>
         <div id="calGoogleCodeRow" style="display:none">
@@ -1829,6 +1893,20 @@
         <button type="button" id="applyreasoner" class="switch">Aplicar al razonador</button>
         <div class="muted" id="reasonerOut"></div>
       </div>
+      <div class="card2 tune">
+        <h3>Recuerdo — léxico o por significado</h3>
+        <div class="hint">Por significado necesita un embedder (<b>JARVIS_EMBED_MODEL</b>, endpoint local Ollama por defecto). Recargar relee el entorno.</div>
+        <div class="muted" id="recallState">recuerdo: …</div>
+        <button type="button" id="recallReload" class="switch">Recargar desde el entorno</button>
+        <div class="muted" id="recallOut"></div>
+      </div>
+      <div class="card2 tune">
+        <h3>Oído — qué oreja escucha</h3>
+        <div class="hint">El oído vivo es un transcriptor Whisper-compatible (<b>JARVIS_STT_*</b> en el .env del servidor; la clave nunca pasa por aquí). Recargar relee el entorno.</div>
+        <div class="muted" id="sttState">oído: …</div>
+        <button type="button" id="sttReload" class="switch">Recargar desde el entorno</button>
+        <div class="muted" id="sttOut"></div>
+      </div>
       <div class="card2">
         <h3>Proveedor — uso real</h3>
         <div class="hint">Contabilidad observada de llamadas vivas (instrumentación, no cognición).</div>
@@ -1906,6 +1984,7 @@ function showChat() {
 let activePanel = null;
 const PANEL_TITLES = {
   cap: "Capacidades", tool: "Herramientas", set: "AI Core", doc: "Documentos",
+  notes: "Notas", mail: "Correo",
   agents: "Agentes", task: "Tareas", cal: "Calendario", mem: "Memoria", wf: "Workflows",
 };
 function openPanel(name) {
@@ -1913,12 +1992,14 @@ function openPanel(name) {
   $("drawerTitle").textContent = PANEL_TITLES[name] || "Panel";
   document.querySelectorAll(".pane").forEach((p) => p.style.display = "none");
   const pane = $("panel-" + name);
-  if (pane) pane.style.display = "";
+  if (pane) pane.style.display = "block";
   drawer(true);
   if (lastState) {
     if (name === "cap") { renderCapabilityPanels(lastState); renderNeeds(lastState); }
     if (name === "tool") renderTools(lastState);
     if (name === "doc") renderDocuments(lastState);
+    if (name === "notes") loadNotes();
+    if (name === "mail") loadMails();
     if (name === "agents") renderAgentsPanel(lastState);
     if (name === "mem") loadMemoryPanel();
     if (name === "task") renderTasksPanel(lastState);
@@ -1944,6 +2025,8 @@ document.querySelectorAll("[data-nav]").forEach((el) =>
   }));
 $("backHome").addEventListener("click", showHome);
 $("btnHome").addEventListener("click", showHome);
+const googleLink = $("googleConnectLink");
+if (googleLink) googleLink.addEventListener("click", openGoogleConnect);
 $("goalwrap").addEventListener("click", (ev) => {
   if (ev.target.tagName === "INPUT" || ev.target.tagName === "BUTTON") return;
   const drop = $("goalsDrop");
@@ -2087,6 +2170,8 @@ function renderState(s) {
   renderProviderStats(s);
   renderProviderBanner(s);
   renderReasonerState(s);
+  renderRecallState(s);
+  renderSttState(s);
   if (activePanel === "cap") renderCapabilityPanels(s);
   renderTools(s);
   renderDocuments(s);
@@ -2105,6 +2190,24 @@ function renderState(s) {
   renderWorkflows(s);
   renderGoalsDrop(s);
   renderOperator(s);
+  renderGoogleLink(s);
+}
+
+/* ---- home shortcut to Google connect (only when it is missing) ----------- */
+function renderGoogleLink(s) {
+  const link = $("googleConnectLink");
+  if (!link) return;
+  const cal = (s && s.calendar) || {};
+  link.style.display = cal.source === "google" ? "none" : "";
+}
+function openGoogleConnect() {
+  openPanel("cal");
+  const card = $("calGoogleConnect");
+  if (!card) return;
+  card.scrollIntoView({ block: "center" });
+  const prev = card.style.boxShadow;
+  card.style.boxShadow = "0 0 0 2px var(--cyan)";
+  setTimeout(() => { card.style.boxShadow = prev; }, 2500);
 }
 
 /* ---- goals + learned actions dropdown on the energy strip ---------------- */
@@ -2578,6 +2681,14 @@ function renderCapabilityCards(s) {
   if (taskCount) {
     taskCount.textContent = (s.upcoming_tasks || []).filter((t) => t.enabled).length;
   }
+  const notesCount = $("notesCount");
+  if (notesCount) notesCount.textContent = (s.notes && s.notes.total) || 0;
+  const mailCount = $("mailCount");
+  if (mailCount) {
+    const configured = !!(s.mail && s.mail.configured);
+    mailCount.textContent = configured ? "●" : "—";
+    mailCount.title = configured ? "buzón cableado" : "sin buzón";
+  }
 }
 function renderTools(s) {
   const specs = s.tools || [];
@@ -2625,7 +2736,7 @@ function renderTools(s) {
       const row = document.createElement("div"); row.className = "row";
       const lbl = document.createElement("div"); lbl.className = "lbl";
       lbl.textContent = (t.name || "?") + " — " + (t.description || "");
-      lbl.title = "permiso: " + (t.permission || "?");
+      lbl.title = "origen: " + (t.origin || "?") + " · permiso: " + (t.permission || "?");
       if (t.args && Object.keys(t.args).length) {
         const d = document.createElement("div");
         d.style.cssText = "font-size:11px;color:var(--text-dim);margin-top:3px";
@@ -2639,7 +2750,7 @@ function renderTools(s) {
       } else {
         status.className = "statuschip ready"; status.textContent = "activa";
       }
-      status.title = "política: " + (t.permission || "?");
+      status.title = "origen: " + (t.origin || "?") + " · política: " + (t.permission || "?");
       row.appendChild(status);
       const run = document.createElement("button");
       run.type = "button"; run.className = "switch"; run.textContent = "Run";
@@ -2650,6 +2761,45 @@ function renderTools(s) {
       out.className = "muted"; out.id = "toolout-" + (t.name || "").replace(/[^a-zA-Z0-9_-]/g, "_");
       out.style.cssText = "font-size:11px;margin:2px 0 6px;white-space:pre-wrap";
       box.appendChild(out);
+    });
+  }
+  renderToolOrigins(box, specs);
+}
+/* ---- tool origins: MCP servers and shared project folders ---------------- */
+function renderToolOrigins(box, specs) {
+  const mcp = specs.filter((t) => t.origin === "mcp");
+  const servers = [...new Set(mcp.map((t) => (t.name || "").split(".")[0]))];
+  const h3 = document.createElement("h4");
+  h3.textContent = "MCP — bordes externos (" + mcp.length + ")";
+  h3.style.marginTop = "12px";
+  box.appendChild(h3);
+  if (!mcp.length) {
+    const m = document.createElement("div"); m.className = "muted";
+    m.textContent = "Sin servidores MCP (JARVIS_MCP_CONFIG). Sus tools entrarían aquí con aprobación requerida.";
+    box.appendChild(m);
+  } else {
+    const d = document.createElement("div");
+    d.style.cssText = "font-size:11px;color:var(--text-dim);margin:2px 0 6px";
+    d.textContent = "servidores: " + servers.join(", ");
+    box.appendChild(d);
+  }
+  const projects = specs.filter((t) => t.origin === "project");
+  const h4 = document.createElement("h4");
+  h4.textContent = "Proyectos — carpetas compartidas (" + projects.length + ")";
+  h4.style.marginTop = "12px";
+  box.appendChild(h4);
+  if (!projects.length) {
+    const m = document.createElement("div"); m.className = "muted";
+    m.textContent = "Sin carpetas (JARVIS_PROJECT_ROOTS). Cada una expone una tool project:<carpeta>.";
+    box.appendChild(m);
+  } else {
+    projects.forEach((t) => {
+      const row = document.createElement("div"); row.className = "row";
+      const lbl = document.createElement("div"); lbl.className = "lbl";
+      lbl.textContent = (t.name || "").replace(/^project:/, "");
+      lbl.title = t.description || "";
+      row.appendChild(lbl);
+      box.appendChild(row);
     });
   }
 }
@@ -2813,6 +2963,165 @@ async function readDocument(name) {
   const reply = data.error ? name + ": " + data.error : data.reply;
   bubble("jarvis", reply);
   renderState(data.state);
+}
+
+/* ---- notes panel: the plain-text edge ------------------------------------ */
+function renderNotesList(entries) {
+  const box = $("notesbody");
+  if (!box || activePanel !== "notes") return;
+  if (!entries.length) {
+    box.innerHTML = "<div class=\"muted\">Sin notas — escribe una debajo.</div>";
+    return;
+  }
+  box.innerHTML = "";
+  entries.forEach((n) => {
+    const title = n.title || "(sin título)";
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("div"); lbl.className = "lbl";
+    lbl.textContent = title; lbl.title = title;
+    if (n.tags && n.tags.length) {
+      const sub = document.createElement("div");
+      sub.style.cssText = "font-size:11px;color:var(--text-dim);margin-top:3px";
+      sub.textContent = n.tags.join(", ");
+      lbl.appendChild(sub);
+    }
+    row.appendChild(lbl);
+    const mkBtn = (text, title, fn) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "switch"; b.textContent = text; b.title = title;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    row.appendChild(mkBtn("Abrir", "Leer la nota", () => openNote(n.id, title)));
+    row.appendChild(mkBtn("Editar", "Cargar en el formulario", () => editNote(n.id)));
+    row.appendChild(mkBtn("Eliminar", "Eliminar con confirmación", () => deleteNote(n.id, title)));
+    box.appendChild(row);
+  });
+}
+async function loadNotes() {
+  const box = $("notesbody");
+  if (box && activePanel === "notes") box.innerHTML = "<div class=\"muted\">leyendo…</div>";
+  let data;
+  try {
+    data = await api("notes", { action: "list", limit: 50 });
+  } catch (e) {
+    if (box) box.innerHTML = "<div class=\"muted\">No pude leer: " + e + "</div>";
+    return;
+  }
+  if (data.error) {
+    if (box) box.innerHTML = "<div class=\"muted\">" + data.error + "</div>";
+    return;
+  }
+  renderNotesList(data.notes || []);
+  bubble("jarvis", data.reply);
+  renderState(data.state);
+}
+async function openNote(id, title) {
+  const data = await api("notes", { action: "get", id });
+  bubble("jarvis", data.error ? "No pude leer «" + title + "»: " + data.error : data.reply);
+  renderState(data.state);
+}
+function setNoteEditing(id) {
+  $("noteEditId").value = id || "";
+  $("noteCreate").style.display = id ? "none" : "";
+  $("noteSave").style.display = id ? "" : "none";
+  $("noteCancel").style.display = id ? "" : "none";
+}
+async function editNote(id) {
+  if (!id) return;
+  const data = await api("notes", { action: "get", id });
+  if (data.error || !data.note) { bubble("jarvis", "No pude leer la nota: " + (data.error || "?")); return; }
+  $("noteTitle").value = data.note.title || "";
+  $("noteBody").value = data.note.body || "";
+  $("noteTags").value = (data.note.tags || []).join(", ");
+  setNoteEditing(id);
+  if (data.state) renderState(data.state);
+}
+async function deleteNote(id, title) {
+  if (!id) return;
+  if (!window.confirm("Eliminar la nota «" + (title || id) + "»?")) return;
+  const out = $("noteOut");
+  const data = await api("notes", { action: "delete", id });
+  out.textContent = data.error ? "No pude eliminar: " + data.error : data.reply;
+  bubble("jarvis", out.textContent);
+  renderState(data.state);
+  loadNotes();
+}
+async function searchNotes() {
+  const query = ($("noteQuery").value || "").trim();
+  if (!query) return;
+  const data = await api("notes", { action: "search", query });
+  if (data.error) { bubble("jarvis", "No pude buscar: " + data.error); return; }
+  renderNotesList(data.notes || []);
+  bubble("jarvis", data.reply);
+  renderState(data.state);
+}
+
+/* ---- mail panel: the mailbox edge ----------------------------------------- */
+async function loadMails() {
+  const box = $("mailbody");
+  if (box && activePanel === "mail") box.innerHTML = "<div class=\"muted\">leyendo el buzón…</div>";
+  const folder = ($("mailFolder").value || "inbox").trim() || "inbox";
+  let data;
+  try {
+    data = await api("mail", { action: "list", folder, limit: 10 });
+  } catch (e) {
+    if (box) box.innerHTML = "<div class=\"muted\">No pude leer: " + e + "</div>";
+    return;
+  }
+  if (data.error) {
+    if (box) box.innerHTML = "<div class=\"muted\">" + data.error + "</div>";
+    return;
+  }
+  if (activePanel !== "mail") return;
+  const text = data.reply || "";
+  if (/No (mail capability|messages in)/i.test(text)) {
+    box.innerHTML = "<div class=\"muted\">" + text + "</div>";
+  } else {
+    box.innerHTML = "";
+    const pre = document.createElement("div");
+    pre.style.cssText = "font-size:11px;white-space:pre-wrap;margin-bottom:6px";
+    pre.textContent = text.length > 2000 ? text.slice(0, 2000) + "…" : text;
+    box.appendChild(pre);
+  }
+  bubble("jarvis", data.reply);
+  renderState(data.state);
+}
+async function sendMail(approved) {
+  const out = $("mailOut");
+  const data = await api("mail", {
+    action: "send",
+    to: $("mailTo").value.trim(),
+    subject: $("mailSubject").value.trim(),
+    body: $("mailBody").value.trim(),
+    approved: !!approved,
+  });
+  const text = data.error ? "No pude enviar: " + data.error : data.reply;
+  out.textContent = text;
+  bubble("jarvis", text);
+  renderState(data.state);
+}
+async function sendMailFlow() {
+  if (!$("mailTo").value.trim()) { $("mailOut").textContent = "Indica al menos un destinatario."; return; }
+  const first = await api("mail", {
+    action: "send",
+    to: $("mailTo").value.trim(),
+    subject: $("mailSubject").value.trim(),
+    body: $("mailBody").value.trim(),
+    approved: false,
+  });
+  if (first.error) { $("mailOut").textContent = first.error; return; }
+  if (/confirm it explicitly|Nothing was sent/i.test(first.reply || "")) {
+    if (!window.confirm("Enviar este correo a «" + $("mailTo").value.trim() + "»? Es un acto externo.")) {
+      $("mailOut").textContent = "Envío cancelado — nada salió del buzón.";
+      return;
+    }
+    sendMail(true);
+  } else {
+    $("mailOut").textContent = first.reply;
+    bubble("jarvis", first.reply);
+    renderState(first.state);
+  }
 }
 const STATUS_TEXT = {
   ready: "lista", acquired: "adquirida", proposed: "propuesta",
@@ -3352,7 +3661,14 @@ async function loadGoogleStatus() {
 }
 async function googleConnect() {
   const out = $("calGoogleOut");
-  const data = await api("google_calendar", { action: "auth" });
+  const data = await api("google_calendar", {
+    action: "auth",
+    client_id: $("calGoogleId").value.trim(),
+    client_secret: $("calGoogleSecret").value,
+  });
+  $("calGoogleSecret").value = "";
+  if (data.error) { out.textContent = "No pude iniciar: " + data.error; return; }
+  if (data.redirect_uri) $("calGoogleRedirect").textContent = data.redirect_uri;
   if (data.error) { out.textContent = "No pude iniciar: " + data.error; return; }
   const url = data.authorize_url || "";
   if (!url) { out.textContent = data.reply || "(sin URL)"; return; }
@@ -3596,6 +3912,41 @@ function renderReasonerState(s) {
   if (!r) { el.textContent = "razonador: …"; return; }
   el.textContent = "razonador: " + (r.active ? "vivo" : "silencioso (offline)") +
     (r.reason ? " — " + r.reason : "");
+}
+function renderRecallState(s) {
+  const el = $("recallState");
+  if (!el) return;
+  const mode = (s && s.recall && s.recall.mode) || "?";
+  const edges = (s && s.agents) || [];
+  const m = edges.find((e) => e.label === "Memoria");
+  el.textContent = "recuerdo: " + (mode === "meaning" ? "por significado (vivo)" : "léxico (offline)") +
+    (m && m.reason && mode !== "meaning" ? " — " + m.reason : "");
+}
+function renderSttState(s) {
+  const el = $("sttState");
+  if (!el) return;
+  const sp = (s && s.speech) || {};
+  if (!sp.provider && !sp.live) { el.textContent = "oído: sin configurar"; return; }
+  el.textContent = "oído: " + (sp.live ? "vivo" : "navegador") +
+    (sp.provider ? " · " + sp.provider : "") + (sp.model ? " — " + sp.model : "");
+}
+async function reloadEmbeddings() {
+  const out = $("recallOut");
+  out.textContent = "Recargando…";
+  const data = await api("embeddings", { action: "reload" });
+  const text = data.error ? "No pude recargar: " + data.error : data.reply;
+  out.textContent = text;
+  bubble("jarvis", text);
+  renderState(data.state);
+}
+async function reloadEar() {
+  const out = $("sttOut");
+  out.textContent = "Recargando…";
+  const data = await api("speech", { action: "reload" });
+  const text = data.error ? "No pude recargar: " + data.error : data.reply;
+  out.textContent = text;
+  bubble("jarvis", text);
+  renderState(data.state);
 }
 async function probeProvider() {
   const out = $("provOut");
@@ -3916,6 +4267,8 @@ $("applyperceiver").addEventListener("click", applyPerceiver);
 $("provider").addEventListener("change", onProviderChange);
 $("probeprovider").addEventListener("click", probeProvider);
 $("applyreasoner").addEventListener("click", applyReasoner);
+$("recallReload").addEventListener("click", reloadEmbeddings);
+$("sttReload").addEventListener("click", reloadEar);
 $("providerReset").addEventListener("click", resetProviderStats);
 $("deliberation").addEventListener("change", applyDeliberation);
 
@@ -3985,6 +4338,44 @@ $("calDay").addEventListener("change", loadCalDay);
 $("calGoogleConnect").addEventListener("click", googleConnect);
 $("calGoogleComplete").addEventListener("click", googleComplete);
 $("calGoogleDisconnect").addEventListener("click", googleDisconnect);
+$("noteList").addEventListener("click", loadNotes);
+$("noteSearchBtn").addEventListener("click", searchNotes);
+$("noteQuery").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") searchNotes();
+});
+$("noteCreate").addEventListener("click", async () => {
+  const out = $("noteOut");
+  const data = await api("notes", {
+    action: "create",
+    title: $("noteTitle").value.trim(),
+    body: $("noteBody").value.trim(),
+    tags: $("noteTags").value.trim(),
+  });
+  out.textContent = data.error ? "No pude guardar: " + data.error : data.reply;
+  bubble("jarvis", out.textContent);
+  renderState(data.state);
+  loadNotes();
+});
+$("noteSave").addEventListener("click", async () => {
+  const id = $("noteEditId").value.trim();
+  if (!id) return;
+  const out = $("noteOut");
+  const data = await api("notes", {
+    action: "update",
+    id,
+    title: $("noteTitle").value.trim(),
+    body: $("noteBody").value.trim(),
+    tags: $("noteTags").value.trim(),
+  });
+  out.textContent = data.error ? "No pude guardar: " + data.error : data.reply;
+  bubble("jarvis", out.textContent);
+  renderState(data.state);
+  setNoteEditing("");
+  loadNotes();
+});
+$("noteCancel").addEventListener("click", () => setNoteEditing(""));
+$("mailRefresh").addEventListener("click", loadMails);
+$("mailSend").addEventListener("click", sendMailFlow);
 $("taskList").addEventListener("click", () => runToolPanel("tasks", { action: "list" }, "taskOut"));
 $("taskDue").addEventListener("click", () => runToolPanel("tasks", { action: "due" }, "taskOut"));
 $("taskCreate").addEventListener("click", () => {
@@ -4281,7 +4672,25 @@ function frame(now) {
 async function boot() {
   resize();
   requestAnimationFrame(frame);
-  const d = await api("state", {});
+  if (window.location.protocol === "file:") {
+    noserver(true);
+    bubble("jarvis", "Esta copia no tiene servidor: abre http://127.0.0.1:8765 en el navegador.");
+    return;
+  }
+  let d = null;
+  try {
+    d = await api("state", {});
+  } catch (e0) {
+    noserver(true);
+    bubble("jarvis", "No hay servidor detrás (¿caído o URL errónea?). Revisa que sea http://127.0.0.1:8765.");
+    return;
+  }
+  if (!d || !d.state) {
+    noserver(true);
+    bubble("jarvis", "El servidor no devolvió estado. Revisa que sea http://127.0.0.1:8765.");
+    return;
+  }
+  noserver(false);
   renderState(d.state);
   try {
     const g = await api("greeting", {});
@@ -4289,6 +4698,19 @@ async function boot() {
   } catch (e9) {
     bubble("jarvis", "Hi — I'm Jarvis.");
   }
+}
+function noserver(show) {
+  let banner = $("noserver");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "noserver";
+    banner.style.cssText = "background:#3a0d0d;color:#ffd7d7;padding:8px 12px;font-size:13px;text-align:center";
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+  banner.style.display = show ? "" : "none";
+  banner.textContent = show
+    ? "Sin servidor: abre http://127.0.0.1:8765 (esta copia suelta no tiene cerebro detrás)."
+    : "";
 }
 boot();
 </script>

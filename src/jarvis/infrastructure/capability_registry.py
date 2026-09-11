@@ -65,6 +65,7 @@ def build_default_registry(
     speech: CapabilityProvider | None = None,
     documents_store: DocumentStore | None = None,
     project_files: CapabilityProvider | None = None,
+    openbot_agent: TaskAgent | None = None,
 ) -> CapabilityRegistry:
     """The built-in edge: the ExternalSource backs the Internet capabilities.
 
@@ -113,6 +114,8 @@ def build_default_registry(
         by_name["work with files"] = DocumentsCapability(documents_store)
     if project_files is not None:
         by_name["edit project files"] = project_files
+    if openbot_agent is not None:
+        by_name["execute on computer"] = OpenBotCapability(openbot_agent)
     return StaticCapabilityRegistry(_by_name=by_name)
 
 
@@ -409,3 +412,28 @@ class ProjectFilesCapability:
     def set_live(self, live: bool) -> None:
         """Mark whether project folders are wired right now."""
         self._live = live
+
+
+class OpenBotCapability:
+    """'execute on computer' backed by the OpenBot AG-UI seam (D7).
+
+    Reports whether Jarvis has a live OpenBot execution environment.  The
+    capability is available only when the adapter's transport is reachable --
+    merely having configuration does not count (D37).
+    """
+
+    def __init__(self, agent: TaskAgent, capability: str = "execute on computer") -> None:
+        self._agent = agent
+        self._capability = capability
+
+    @property
+    def capability(self) -> str:
+        return self._capability
+
+    def is_available(self) -> bool:  # noqa: C901
+        """Reachable when the adapter's transport reports live."""
+        from jarvis.infrastructure.openbot_task_agent import OpenBotTaskAgent
+
+        if isinstance(self._agent, OpenBotTaskAgent):
+            return self._agent.transport.is_reachable()
+        return False

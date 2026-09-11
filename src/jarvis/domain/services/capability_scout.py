@@ -135,6 +135,15 @@ _TEMPLATES: tuple[_Template, ...] = (
             {"agent", "delegate", "do it", "execute", "run it", "agente", "delegar", "hazlo"}
         ),
     ),
+    _Template(
+        name="execute on computer",
+        description="interact with a browser or computer through a governed execution environment",
+        requirement="a running OpenBot instance (JARVIS_OPENBOT_ENDPOINT)",
+        cues=frozenset(
+            {"browser", "website", "navigate", "click", "computer", "screen",
+             "navegar", "pantalla", "ordenador"}
+        ),
+    ),
 )
 
 

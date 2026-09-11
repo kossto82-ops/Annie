@@ -139,6 +139,7 @@ from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
+from jarvis.infrastructure.mcp_tools import McpTool
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
 from jarvis.infrastructure.provider_stats import (
     InMemoryInstrumentation,
@@ -232,6 +233,7 @@ class Jarvis:
         mail_source: MailBox | None = None,
         task_agent: TaskAgent | None = None,
         instruction_agent: TaskAgent | None = None,
+        openbot_agent: TaskAgent | None = None,
         notes_store: NotesStore | None = None,
         calendar_store: CalendarStore | None = None,
         task_scheduler: TaskScheduler | None = None,
@@ -328,6 +330,11 @@ class Jarvis:
         # refuse honestly through the gate. None by default -> a bare Jarvis
         # "understands but cannot act", exactly as before.
         self._instruction_agent: TaskAgent | None = instruction_agent
+        # OpenBot (Increment 161): an external computer/browser execution
+        # environment behind the same delegation contract.  None by default ->
+        # offline; wired only when JARVIS_OPENBOT_ENDPOINT is set and the adapter
+        # is built, and ``can_do("execute on computer")`` reflects liveness.
+        self._openbot_agent: TaskAgent | None = openbot_agent
         # Notes (Odysseus #8): a local store that lists/searches/creates/updates
         # and deletes notes on request. None by default -> offline. It only keeps
         # and returns plain note content with provenance; reasoning over notes
@@ -390,6 +397,7 @@ class Jarvis:
                 calendar_store,
                 task_scheduler,
                 documents_store,
+                openbot_agent,
             )
         self._speech_perception: SpeechPerceptionSource | None = speech_perception
         if speech_perception is not None and self._speech_capability is not None:
@@ -771,6 +779,7 @@ class Jarvis:
             self._calendar_store,
             self._task_scheduler,
             self._documents_store,
+            self._openbot_agent,
         )
 
     def _build_auto_registry(
@@ -784,6 +793,7 @@ class Jarvis:
         calendar: CalendarStore | None = None,
         tasks: TaskScheduler | None = None,
         documents: DocumentStore | None = None,
+        openbot: TaskAgent | None = None,
     ) -> CapabilityRegistry:
         """The default edge registry: the wired sources + Jarvis's reasoner seams.
 
@@ -809,6 +819,7 @@ class Jarvis:
             speech=self._speech_capability,
             documents_store=documents,
             project_files=self._project_files_capability,
+            openbot_agent=openbot,
         )
 
     def read_external(self, url: str) -> RetrievedDocument:
@@ -968,6 +979,43 @@ class Jarvis:
         if self._task_agent is None:
             raise RuntimeError("no agent capability configured; set_task_agent")
         return self._task_agent.run_task(task)
+
+    @property
+    def openbot_agent(self) -> TaskAgent | None:
+        """The OpenBot execution capability, or ``None`` when not wired.
+
+        Read-only so a surface can report whether Jarvis has a computer-use
+        execution environment (``can_do("execute on computer")``). The adapter
+        only *acts* on a decided bounded task and returns plain outcomes; it
+        never reasons (D6), and what to delegate stays gated in the caller.
+        """
+        return self._openbot_agent
+
+    def set_openbot_agent(self, agent: TaskAgent | None) -> None:
+        """Wire (or clear) the OpenBot execution capability at runtime.
+
+        ``None`` disables it: Jarvis simply stays offline to computer use.
+        Wired or not, the adapter runs only a were-decided bounded task with the
+        Jarvis policy boundary intact (external/destructive acts refuse
+        upstream, never reinterpreted as safe).
+        """
+        self._openbot_agent = agent
+        if self._external_providers_auto:
+            self._refresh_providers()
+
+    def execute_on_computer(self, task: str) -> TaskResult:
+        """Delegate one bounded computer/browser task to OpenBot.
+
+        The material action must already be permitted by the Jarvis boundary:
+        the adapter preserves the ordinary approval semantics -- an external or
+        destructive computer action is never implicitly approved. Raises a clear
+        error when no OpenBot execution environment is wired.
+        """
+        if self._openbot_agent is None:
+            raise RuntimeError(
+                "no OpenBot execution capability configured; set_openbot_agent"
+            )
+        return self._openbot_agent.run_task(task)
 
     @property
     def instruction_agent(self) -> TaskAgent | None:
@@ -1588,6 +1636,23 @@ class Jarvis:
         return tuple(
             spec for name in self._tools.tool_names() if (spec := self._tools.spec(name))
         )
+
+    def tool_origin(self, name: str) -> str:
+        """Where the tool ``name`` comes from: ``mcp``, ``project`` or ``local``.
+
+        An MCP-backed edge tool reports ``mcp``; a bounded project-folder tool
+        (registered as ``project:<folder>``) reports ``project``; anything else
+        registered locally reports ``local``. Unknown names report ``unknown``.
+        Read-only introspection for surfaces; it never executes.
+        """
+        tool = self._tools.tool(name)
+        if tool is None:
+            return "unknown"
+        if isinstance(tool, McpTool):
+            return "mcp"
+        if name.startswith("project:"):
+            return "project"
+        return "local"
 
     # -- Odysseus: capability acquisition (Vision §34, §28) -------------------
 

@@ -568,6 +568,13 @@ def test_f6_console_wires_task_runs_and_calendar_depth() -> None:
         'action: "range"',
         'action: "complete"',
         'action: "disconnect"',
+        'id="calGoogleId"',
+        'id="calGoogleSecret"',
+        'id="calGoogleRedirect"',
+        "client_secret",
+        'id="googleConnectLink"',
+        "openGoogleConnect(",
+        "renderGoogleLink(",
     ):
         assert marker in html, f"F6 wiring lost its {marker!r}"
 
@@ -615,3 +622,77 @@ def test_f7_snapshot_carries_platform_and_companion_name() -> None:
     state = snapshot(Jarvis())
     assert state["environment"]["platform"] == __import__("os").name
     assert state["companion_name"] is None
+
+
+def test_f8_console_wires_notes_and_mail_panels() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        '"panel-notes"',
+        '"panel-mail"',
+        'id="notesbody"',
+        'id="mailbody"',
+        'id="notesCount"',
+        'id="mailCount"',
+        'data-nav="notes"',
+        'data-nav="mail"',
+        "loadNotes(",
+        "renderNotesList(",
+        "openNote(",
+        "editNote(",
+        "deleteNote(",
+        "searchNotes(",
+        "loadMails(",
+        "sendMailFlow(",
+        'api("notes"',
+        'api("mail"',
+        'action: "send"',
+        "approved:true",
+    ):
+        assert marker in html, f"notes/mail panels lost their {marker!r}"
+
+
+def test_f8_snapshot_carries_notes_and_mail_blocks() -> None:
+    assert _snapshot_block("notes") == {"total": 0, "recent": []}
+    assert _snapshot_block("mail") == {"configured": False}
+
+
+def test_f9_console_wires_config_edges() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "renderToolOrigins(",
+        "MCP — bordes externos",
+        "Proyectos — carpetas compartidas",
+        'id="recallState"',
+        'id="recallReload"',
+        'id="recallOut"',
+        'id="sttState"',
+        'id="sttReload"',
+        'id="sttOut"',
+        "renderRecallState(",
+        "renderSttState(",
+        "reloadEmbeddings(",
+        "reloadEar(",
+        'api("embeddings"',
+        'api("speech"',
+    ):
+        assert marker in html, f"config edges lost their {marker!r}"
+
+
+def test_f9_snapshot_carries_recall_mode_and_tool_origins() -> None:
+    from jarvis.interface.command_center import snapshot
+    from jarvis.jarvis import Jarvis
+
+    state = snapshot(Jarvis())
+    assert state["recall"] == {"mode": "lexical"}
+
+
+def test_openpanel_really_shows_the_pane() -> None:
+    """Tripwire: the drawer pane must become visible, not fall back to CSS-hidden.
+
+    ``.pane`` is ``display: none`` by stylesheet, so clearing the inline style
+    (``""``) keeps it invisible and every drawer opens blank. The target pane
+    must be set to ``block`` explicitly.
+    """
+    html = _CONSOLE.read_text(encoding="utf-8")
+    assert 'pane.style.display = "block"' in html
+    assert 'pane.style.display = ""' not in html

@@ -50,6 +50,14 @@ class ToolRegistry:
         """Every registered tool name, in registration order."""
         return tuple(self._tools.keys())
 
+    def tool(self, name: str) -> Tool | None:
+        """The registered tool ``name`` itself, or None when it is not registered.
+
+        Read-only introspection so surfaces can report *what kind* of tool a
+        name is (e.g. an MCP-backed edge vs a local one); it never executes.
+        """
+        return self._tools.get(name)
+
     def spec(self, name: str) -> ToolSpec | None:
         """The declaration of tool ``name``, or None when it is not registered."""
         tool = self._tools.get(name)

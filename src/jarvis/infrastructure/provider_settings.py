@@ -42,3 +42,18 @@ class SttSettings:
     base_url: str | None = None  # overrides the provider's default endpoint
     api_key: str | None = None  # bearer credential; omit for keyless local engines
     timeout: float = 30.0
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class OpenBotSettings:
+    """Everything needed to build the OpenBot execution adapter (Increment 161).
+
+    OpenBot is an optional external computer/browser execution environment.  The
+    endpoint is the AG-UI base URL of a running OpenBot Bot (or the deployment's
+    own endpoint); configuration alone never makes the capability live -- the
+    adapter must actually reach the endpoint for ``can_do`` to report it usable.
+    """
+
+    endpoint: str  # e.g. "http://localhost:4600"
+    agent_token: str | None = None  # the AGENT_TOOL_TOKEN the server expects
+    timeout: float = 120.0

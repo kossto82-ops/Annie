@@ -53,12 +53,13 @@ from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure import google_calendar, llm_config_store
-from jarvis.infrastructure.env_settings import settings_from_env
+from jarvis.infrastructure.env_settings import settings_from_env, speech_perception_from_env
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.perceiver_factory import (
     available_providers,
     build_companion_perceiver,
     build_document_editor,
+    build_embedder,
     build_perceiver,
     build_reasoner,
     build_renderer,
@@ -177,6 +178,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
                 "requires_approval": spec.requires_approval,
                 "permission": spec.permission.name,
                 "args": dict(spec.args),
+                "origin": jarvis.tool_origin(spec.name),
             }
             for spec in jarvis.tool_channels()
         ],
@@ -196,6 +198,9 @@ def snapshot(jarvis: Jarvis) -> Reply:
         "calendar_events": _upcoming_events(jarvis),
         "calendar": _calendar_block(jarvis),
         "upcoming_tasks": _upcoming_tasks(jarvis),
+        "notes": _notes_block(jarvis),
+        "mail": _mail_block(jarvis),
+        "recall": _recall_block(jarvis),
         "workflows": _workflows_block(jarvis),
         "memory": _memory_block(jarvis, summary),
     }
@@ -366,6 +371,8 @@ def _agents_block(jarvis: Jarvis) -> list[Reply]:
          jarvis.task_agent is not None, "JARVIS_AGENT_ROOT"),
         ("Ejecutor", None, "Ejecuta instrucciones materiales (agency)",
          jarvis.instruction_agent is not None, "JARVIS_AGENT_ROOT"),
+        ("OpenBot", "execute on computer", "Ejecuta en un entorno de computación gobernado",
+         jarvis.openbot_agent is not None, "JARVIS_OPENBOT_ENDPOINT"),
         ("Notas", "manage notes", "Notas locales",
          jarvis.notes_store is not None, "JARVIS_NOTES_ROOT"),
         ("Calendario", "manage calendar", "Agenda y eventos",
@@ -529,6 +536,45 @@ def _calendar_block(jarvis: Jarvis) -> Reply:
     if isinstance(store, google_calendar.GoogleCalendarStore):
         return {"source": "google", "connected": True}
     return {"source": "local", "connected": True}
+
+
+def _notes_block(jarvis: Jarvis, limit: int = 5) -> Reply:
+    """How many notes Jarvis keeps plus the latest handful (cheap, local).
+
+    The surface lists them and opens the Notes panel; searching/reading go
+    through the ``notes`` command.
+    """
+    store = jarvis.notes_store
+    if store is None:
+        return {"total": 0, "recent": []}
+    try:
+        kept = list(store.list_notes(limit=200))
+    except Exception:  # noqa: BLE001 - the store boundary
+        return {"total": 0, "recent": []}
+    return {
+        "total": len(kept),
+        "recent": [{"id": note.id, "title": note.title} for note in kept[:limit]],
+    }
+
+
+def _mail_block(jarvis: Jarvis) -> Reply:
+    """Whether a mailbox is wired -- never a network read in the snapshot.
+
+    Listing or reading mail always hits the mailbox, so the snapshot only
+    reports ``configured``; the Mail panel fetches on demand.
+    """
+    return {"configured": jarvis.mail_source is not None}
+
+
+def _recall_block(jarvis: Jarvis) -> Reply:
+    """How recall works right now: by meaning or by surface tokens (F9).
+
+    ``meaning`` is live only when the embedding edge is wired and earned
+    (``can_do``); otherwise recall stays lexical. No scores here -- candidates
+    surface through the ``recall`` command.
+    """
+    mode = "meaning" if jarvis.can_do("recall by meaning") else "lexical"
+    return {"mode": mode}
 
 
 def _episode_series(jarvis: Jarvis, limit: int = 24) -> list[str]:
@@ -1337,6 +1383,74 @@ def _provider_reset(jarvis: Jarvis, _payload: Reply) -> Reply:
     }
 
 
+def _embeddings(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Report or rewire meaning-based recall from ``JARVIS_EMBED_*`` (F9).
+
+    With no action it reports whether recall runs by meaning or stays lexical.
+    ``reload`` re-reads the environment and, when an embedder is configured,
+    upgrades recall to it at runtime (lexical stays the fallback); when nothing
+    is configured it says so honestly instead of pretending. Runtime-only: a
+    restart rebuilds from the environment again.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if action and action != "reload":
+        return {"reply": "Use embeddings with action 'reload' or none.", "speak": False}
+    if not action:
+        mode = _recall_block(jarvis)["mode"]
+        detail = (
+            "recall by meaning is live"
+            if mode == "meaning"
+            else "recall is lexical (set JARVIS_EMBED_MODEL, then reload)"
+        )
+        return {"reply": f"Recall mode: {mode} — {detail}.", "speak": False, "mode": mode}
+    embedder = build_embedder()
+    if embedder is None:
+        return {
+            "reply": "No embedder configured (JARVIS_EMBED_MODEL is empty) — recall stays lexical.",
+            "speak": False,
+        }
+    jarvis.enable_embedding_recall(embedder)
+    live = jarvis.can_do("recall by meaning")
+    if live:
+        return {"reply": "Recall upgraded to meaning-based.", "speak": False}
+    return {
+        "reply": "Embedder wired but the capability is not earned yet — "
+        "recall stays lexical until acquired.",
+        "speak": False,
+    }
+
+
+def _speech(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Report or rewire the ear from ``JARVIS_STT_*`` (F9).
+
+    With no action it reports which ear hears (a live transcriber or the
+    browser echo) and which model it claims. ``reload`` re-reads the
+    environment and swaps the ear at runtime; secrets stay in ``.env``
+    (this command never takes or echoes a key). Runtime-only.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if action and action != "reload":
+        return {"reply": "Use speech with action 'reload' or none.", "speak": False}
+    if not action:
+        return {"reply": _speech_status(jarvis), "speak": False, **_speech_block(jarvis)}
+    try:
+        jarvis.set_speech_perception(speech_perception_from_env())
+    except ValueError as error:
+        return {"reply": f"Couldn't rewire the ear: {error}", "speak": False}
+    return {"reply": _speech_status(jarvis), "speak": False, **_speech_block(jarvis)}
+
+
+def _speech_status(jarvis: Jarvis) -> str:
+    """One honest line about which ear hears right now."""
+    source = jarvis.speech_perception
+    if source is None:
+        return "No ear wired — voice input is off."
+    if source.can_hear_audio:
+        model = f" ({source.model})" if source.model else ""
+        return f"Live ear: {source.provider or 'server'}{model} — the mic records to it."
+    return "Browser ear (Web Speech) — transcription happens in the page."
+
+
 def _learn(jarvis: Jarvis, payload: Reply) -> Reply:
     """Teach Jarvis about the companion from a pasted profile/notes (Vision §5, §38).
 
@@ -1973,6 +2087,11 @@ def _google_calendar(jarvis: Jarvis, payload: Reply) -> Reply:
     URL to open in a browser), ``complete`` (hands back the authorisation code to
     exchange for a refresh token and wire the store), and ``disconnect`` (clear the
     saved token and go offline to Google).
+
+    ``auth`` also accepts ``client_id``/``client_secret``: when given they are
+    applied to the live process and saved to ``.env`` (write-only, never echoed
+    back), so the panel itself asks for the credentials instead of sending the
+    companion to edit a file.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
@@ -1997,21 +2116,40 @@ def _google_calendar(jarvis: Jarvis, payload: Reply) -> Reply:
             "connected": True,
         }
     if action == "auth":
-        client_id = google_calendar.client_id_from_environ()
+        # Credentials from the panel are write-only: staged into the live
+        # process and persisted to .env, never echoed back anywhere.
+        given_id = str(payload.get("client_id", "")).strip()
+        given_secret = str(payload.get("client_secret", "")).strip()
+        saved = False
+        if given_id or given_secret:
+            updates: dict[str, str] = {}
+            if given_id:
+                os.environ[google_calendar.ENV_CLIENT_ID] = given_id
+                updates[google_calendar.ENV_CLIENT_ID] = given_id
+            if given_secret:
+                os.environ[google_calendar.ENV_CLIENT_SECRET] = given_secret
+                updates[google_calendar.ENV_CLIENT_SECRET] = given_secret
+            llm_config_store.persist(updates)
+            saved = True
+        client_id = given_id or google_calendar.client_id_from_environ()
         if not client_id:
             return {
-                "reply": "Google Calendar isn't configured: set "
-                "JARVIS_GOOGLE_CALENDAR_CLIENT_ID and "
-                "JARVIS_GOOGLE_CALENDAR_CLIENT_SECRET in .env first.",
+                "reply": "Google Calendar needs its OAuth credentials first: paste the "
+                "client ID and secret (Google Cloud Console → OAuth client ID), then "
+                "connect again. They are saved to the server's .env and never shown back.",
                 "speak": False,
+                "redirect_uri": _GOOGLE_REDIRECT_URI,
             }
         url = google_calendar.authorize_url(
             client_id, redirect_uri=_GOOGLE_REDIRECT_URI
         )
         return {
-            "reply": "Open this URL in your browser to authorise: " + url,
+            "reply": ("Credentials saved to .env. " if saved else "")
+            + "Open this URL in your browser to authorise: " + url,
             "speak": False,
             "authorize_url": url,
+            "redirect_uri": _GOOGLE_REDIRECT_URI,
+            "saved": saved,
         }
     if action == "complete":
         code = str(payload.get("code", "")).strip()
@@ -2024,9 +2162,8 @@ def _google_calendar(jarvis: Jarvis, payload: Reply) -> Reply:
         client_secret = os.environ.get(google_calendar.ENV_CLIENT_SECRET, "")
         if not client_id or not client_secret:
             return {
-                "reply": "Google Calendar isn't configured: set "
-                "JARVIS_GOOGLE_CALENDAR_CLIENT_ID and "
-                "JARVIS_GOOGLE_CALENDAR_CLIENT_SECRET in .env first.",
+                "reply": "Google Calendar needs its OAuth credentials first: run "
+                "`google_calendar auth` with the client ID and secret.",
                 "speak": False,
             }
         try:
@@ -2325,6 +2462,255 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
     except Exception as error:  # noqa: BLE001 - the store boundary
         return {"reply": f"I couldn't do that ({type(error).__name__}).", "speak": False}
     return {"reply": "Unknown tasks action.", "speak": False}
+
+
+def _format_note(note: object) -> str:
+    """A readable summary of one stored note."""
+    from jarvis.domain.value_objects.note import Note
+
+    if not isinstance(note, Note):
+        return str(note)
+    lines = [f"Title: {note.title}"]
+    if note.tags:
+        lines.append(f"Tags: {', '.join(note.tags)}")
+    if note.body:
+        body = note.body if len(note.body) <= 500 else note.body[:500].rstrip() + "…"
+        lines.append(body)
+    lines.append(f"ID: {note.id}")
+    return "\n".join(lines)
+
+
+def _note_tags(raw: object) -> tuple[str, ...]:
+    """Tags from a comma string or a list, cleaned and de-duplicated."""
+    if isinstance(raw, list):
+        items = [str(v).strip() for v in cast("list[object]", raw)]
+    else:
+        items = [item.strip() for item in str(raw or "").split(",")]
+    seen: list[str] = []
+    for item in items:
+        if item and item not in seen:
+            seen.append(item)
+    return tuple(seen)
+
+
+def _notes(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Keep plain-text notes through the notes capability (Odysseus #8).
+
+    Actions: ``list``, ``get``, ``create``, ``update``, ``delete``, ``search``.
+    Notes are unvetted material the companion asked to keep -- reading one is
+    retrieval, never a verdict; writing one is reversible and gated in the
+    caller, never a decision Jarvis makes on its own.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {
+            "reply": "Use notes with action 'list', 'get', 'create', "
+            "'update', 'delete', or 'search'.",
+            "speak": False,
+        }
+    if jarvis.notes_store is None:
+        return {
+            "reply": "No notes capability is wired up right now.",
+            "speak": False,
+        }
+    if not jarvis.can_do("manage notes"):
+        return _capability_not_ready(jarvis, "manage notes")
+    try:
+        if action == "list":
+            limit_raw = payload.get("limit", 20)
+            try:
+                limit = int(limit_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                limit = 20
+            found = jarvis.list_notes(limit=limit)
+            if not found:
+                return {"reply": "No notes yet — jot one down.", "speak": False}
+            lines = [_format_note(n) for n in found]
+            return {
+                "reply": "Notes:\n\n" + "\n\n".join(lines),
+                "speak": False,
+                "count": len(found),
+                "notes": [
+                    {"id": n.id, "title": n.title, "tags": list(n.tags)}
+                    for n in found
+                ],
+            }
+        if action == "get":
+            note_id = str(payload.get("id", "")).strip()
+            if not note_id:
+                return {"reply": "Provide a note id.", "speak": False}
+            note = jarvis.get_note(note_id)
+            return {
+                "reply": _format_note(note),
+                "speak": False,
+                "note": {
+                    "id": note.id,
+                    "title": note.title,
+                    "body": note.body,
+                    "tags": list(note.tags),
+                },
+            }
+        if action == "create":
+            title = str(payload.get("title", "")).strip()
+            body = str(payload.get("body", "")).strip()
+            if not title and not body:
+                return {"reply": "Provide a title and/or a body.", "speak": False}
+            note = jarvis.create_note(
+                title=title, body=body, tags=_note_tags(payload.get("tags"))
+            )
+            return {
+                "reply": f"Kept note: {note.title} (ID: {note.id})",
+                "speak": False,
+            }
+        if action == "update":
+            note_id = str(payload.get("id", "")).strip()
+            if not note_id:
+                return {"reply": "Provide the note id to update.", "speak": False}
+            current = jarvis.get_note(note_id)
+            title = str(payload.get("title", "")).strip() or current.title
+            body = str(payload.get("body", "")).strip() or current.body
+            tags = (
+                _note_tags(payload.get("tags"))
+                if "tags" in payload
+                else current.tags
+            )
+            note = jarvis.update_note(note_id, title=title, body=body, tags=tags)
+            return {
+                "reply": f"Updated note: {note.title} (ID: {note.id})",
+                "speak": False,
+            }
+        if action == "delete":
+            note_id = str(payload.get("id", "")).strip()
+            if not note_id:
+                return {"reply": "Provide the note id to delete.", "speak": False}
+            jarvis.delete_note(note_id)
+            return {"reply": f"Deleted note {note_id}.", "speak": False}
+        if action == "search":
+            query = str(payload.get("query", "")).strip()
+            if not query:
+                return {"reply": "Provide a query to search notes.", "speak": False}
+            limit_raw = payload.get("limit", 10)
+            try:
+                limit = int(limit_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                limit = 10
+            found = jarvis.search_notes(query, limit=limit)
+            if not found:
+                return {
+                    "reply": f"Nothing in notes matches {query!r}.",
+                    "speak": False,
+                    "count": 0,
+                }
+            lines = [_format_note(n) for n in found]
+            return {
+                "reply": f"Notes matching {query!r}:\n\n" + "\n\n".join(lines),
+                "speak": False,
+                "count": len(found),
+                "notes": [
+                    {"id": n.id, "title": n.title, "tags": list(n.tags)}
+                    for n in found
+                ],
+            }
+    except Exception as error:  # noqa: BLE001 - the store boundary
+        return {"reply": f"I couldn't do that ({type(error).__name__}).", "speak": False}
+    return {"reply": "Unknown notes action.", "speak": False}
+
+
+def _format_email(message: object) -> str:
+    """A readable summary of one email, body truncated for the surface."""
+    from jarvis.domain.value_objects.email_message import EmailMessage
+
+    if not isinstance(message, EmailMessage):
+        return str(message)
+    lines = [
+        f"From: {message.sender or '(unknown)'}",
+        f"Subject: {message.subject or '(no subject)'}",
+    ]
+    if message.recipients:
+        lines.append(f"To: {', '.join(message.recipients)}")
+    body = message.body if len(message.body) <= 800 else message.body[:800].rstrip() + "…"
+    lines.append(body)
+    lines.append(f"ID: {message.message_id or '(none)'}")
+    return "\n".join(lines)
+
+
+def _mail(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Read and send email through the mailbox capability (Odysseus email).
+
+    Actions: ``list`` (``folder``, ``limit``), ``read`` (``message_id``,
+    ``folder``), ``send`` (``to``, ``subject``, ``body``). Reading is
+    retrieval -- candidate context, never adopted fact. Sending is an external
+    material act: it needs the earned capability *and* an explicit
+    ``approved: true`` per send, so nothing ever leaves the outbox by
+    accident; without it the reply asks for approval and sends nothing.
+    """
+    action = str(payload.get("action", "")).strip().lower()
+    if not action:
+        return {
+            "reply": "Use mail with action 'list', 'read', or 'send'.",
+            "speak": False,
+        }
+    if jarvis.mail_source is None:
+        return {
+            "reply": "No mail capability is wired up right now.",
+            "speak": False,
+        }
+    if not jarvis.can_do("send and read email"):
+        return _capability_not_ready(jarvis, "send and read email")
+    try:
+        if action == "list":
+            folder = str(payload.get("folder", "inbox")).strip() or "inbox"
+            limit_raw = payload.get("limit", 10)
+            try:
+                limit = int(limit_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                limit = 10
+            messages = jarvis.list_emails(folder=folder, limit=limit)
+            if not messages:
+                return {"reply": f"No messages in {folder}.", "speak": False}
+            lines = [_format_email(m) for m in messages]
+            return {
+                "reply": f"Messages in {folder}:\n\n" + "\n\n".join(lines),
+                "speak": False,
+                "count": len(messages),
+            }
+        if action == "read":
+            message_id = str(payload.get("message_id", "")).strip()
+            if not message_id:
+                return {"reply": "Provide a message id.", "speak": False}
+            folder = str(payload.get("folder", "inbox")).strip() or "inbox"
+            return {
+                "reply": _format_email(jarvis.read_email(message_id, folder=folder)),
+                "speak": False,
+            }
+        if action == "send":
+            raw_to = payload.get("to", "")
+            recipients = _note_tags(raw_to)
+            if not recipients:
+                return {"reply": "Provide at least one recipient.", "speak": False}
+            subject = str(payload.get("subject", "")).strip()
+            body = str(payload.get("body", "")).strip()
+            if not subject and not body:
+                return {"reply": "Provide a subject and/or a body.", "speak": False}
+            approved = payload.get("approved", False)
+            if isinstance(approved, str):
+                approved = approved.strip().lower() in ("true", "1", "yes")
+            if not approved:
+                return {
+                    "reply": (
+                        "Sending email is an external act — confirm it explicitly "
+                        "by sending again with approved: true. Nothing was sent."
+                    ),
+                    "speak": False,
+                }
+            sent = jarvis.send_email(to=recipients, subject=subject, body=body)
+            return {
+                "reply": f"Sent to {', '.join(sent.recipients)}: {sent.subject or '(no subject)'}",
+                "speak": False,
+            }
+    except Exception as error:  # noqa: BLE001 - the mailbox boundary
+        return {"reply": f"I couldn't do that ({type(error).__name__}).", "speak": False}
+    return {"reply": "Unknown mail action.", "speak": False}
 
 
 def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -3098,6 +3484,8 @@ _COMMANDS: dict[str, Command] = {
     "provider_health": _provider_health,
     "reasoner": _reasoner,
     "provider_reset": _provider_reset,
+    "embeddings": _embeddings,
+    "speech": _speech,
     "learn": _learn,
     "greeting": _greeting,
     "state": _state,
@@ -3109,6 +3497,8 @@ _COMMANDS: dict[str, Command] = {
     "calendar": _calendar,
     "google_calendar": _google_calendar,
     "tasks": _tasks,
+    "notes": _notes,
+    "mail": _mail,
     "documents": _documents,
     "workflow": _workflow,
     "belief": _belief,
