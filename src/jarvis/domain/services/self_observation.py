@@ -10,6 +10,10 @@ belief.
 The single tendency measured here: does Jarvis habitually conclude without
 enough evidence? Each episode that ended ungrounded supports that belief; each
 grounded episode contradicts it. More tendencies can be added the same way.
+
+Second-order reflection (Phase 5) adds meta-observations about reasoning
+strategies, retrieval quality, and attention patterns via the
+``jarvis.domain.services.meta_observation`` module.
 """
 
 from __future__ import annotations
