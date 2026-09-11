@@ -51,6 +51,16 @@ Read these files only when relevant:
 
 ## Current priority
 
+The architectural audit is complete (Phases 0-5, 2026-09-11). All 5 phases implemented:
+- Phase 0: God Object Split (jarvis.py → 7 modules)
+- Phase 1: Semantic Memory
+- Phase 2: Temporal Reasoning
+- Phase 3: Knowledge Graph
+- Phase 4: Persistent Conversation
+- Phase 5: Second-Order Reflection (Meta-Knowledge)
+
+1647 tests passing, ruff clean, pyright strict 0 errors.
+
 The current project is around Increment 160 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for

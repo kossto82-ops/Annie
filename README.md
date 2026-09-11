@@ -55,11 +55,11 @@ trigger (+ evidence)
 ```
 
 - **Value objects:** `Confidence` (validated [0,1]), `Evidence` (weighted, supports/contradicts).
-- **Entities:** `Belief`, `Hypothesis` (evidence-derived confidence).
+- **Entities:** `Belief`, `Hypothesis`, `SemanticMemory`, `KnowledgeNode`, `KnowledgeEdge`, `MetaKnowledge`.
 - **Aggregates:** `CognitiveEpisode`, `HypothesisSet` (competing explanations, no premature collapse).
 - **Events:** immutable cognitive events (`EpisodeStarted`, `EvidenceAdded`, `BeliefStrengthened/Weakened`,
   `ContradictionDetected`, `HypothesisCreated`, ...).
-- **Infrastructure:** `InMemoryBeliefStore`.
+- **Infrastructure:** In-memory stores (default), JSON stores (`Jarvis.persistent()`), SQLite stores (`Jarvis.database()`).
 
 ## Vocabulary
 
@@ -69,6 +69,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 **Construct**
 - `Jarvis()` — ephemeral (in-memory).
 - `Jarvis.persistent(directory)` — all memory (beliefs, episodes, companion, actions, reversibility, goals) on disk under one dir.
+- `Jarvis.database(directory)` — SQLite-backed memory (beliefs, episodes, companion, actions, goals, capabilities, refutations, trace, semantic memory, knowledge graph, conversation).
 
 **Perceive**
 - `perceive(observation, trigger=None, goal=None)` — turn a raw observation into evidence (via the injected `PerceptionSource`) and reason over it; unknown input yields honest silence.
@@ -90,7 +91,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 **Model of itself**
 - `observe_self()`, `observe_overconfidence()`, `observe_prediction_accuracy()` — one self-tendency each, or None.
 - `self_beliefs()` — every self-tendency it has enough history to judge.
-- `feel_curious()` — an impulse to reduce the most confident weakness, or None.
+- `feel_curious()` — an impulse to reduce the most confident weakness, or None. Also considers meta-knowledge (second-order reflection on reasoning strategies, retrieval quality, and attention patterns).
 - `pursue(impulse)` — run the self-triggered corrective episode.
 - `introspect()` — a plain-language account of who it is, from real state.
 - `state_summary()` — a compact, immutable snapshot of everything it currently holds.
@@ -100,6 +101,30 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - MCP client direction — tools from a live MCP server (`JARVIS_MCP_CONFIG`) join the gated `ToolRegistry` as `EXTERNAL_ACTION` specs, namespaced (`repo.status`) and approval-gated like any other tool.
 - Live STT in the console — when `JARVIS_STT_*` wires a Whisper-class ear, the hold-to-talk mic records (`getUserMedia`/`MediaRecorder`) and transcribes through `POST /api/speech/transcribe`; the browser's Web Speech push-to-talk stays the offline default.
 - Real instruction execution (earned agency) — a material directive in conversation ("escribe un archivo", "run the tests") is classified as an act and *performed* through the sandboxed `ToolRegistry` at `approved=False` (`Jarvis.execute`): sandbox reads/writes run, external/destructive tools refuse at the gate, and the reply narrates the real outcome or an honest decline.
+
+**Semantic Memory**
+- Patterns and abstractions derived from multiple episodes/beliefs. Confidence and stability are derived from the supporting evidence, never set directly.
+- `MemoryKind.SEMANTIC` — semantic memories appear in recall alongside beliefs and episodes.
+- Abstraction service identifies patterns across episodes and creates `SemanticMemory` entities.
+
+**Knowledge Graph**
+- `KnowledgeNode` — entities (people, projects, concepts, decisions, events) with properties and evidence.
+- `KnowledgeEdge` — directed relationships between nodes (works_on, knows, caused, etc.) with derived weight.
+- `KnowledgeGraphRepository` — CRUD, edges_from/edges_to, neighbors (BFS traversal), path_between.
+- Entity extraction service discovers nodes and edges from text.
+- `MemoryKind.GRAPH_NODE` / `MemoryKind.GRAPH_EDGE` — graph entities appear in recall.
+
+**Conversation Persistence**
+- `PersistedTurn` — a single conversation turn with timestamp, intent, and outcome.
+- `ConversationRepository` — stores and retrieves conversation history.
+- `MemoryKind.CONVERSATION` — conversation turns appear in recall for continuity.
+- `Jarvis.database()` persists conversations across restarts.
+
+**Second-Order Reflection (Meta-Knowledge)**
+- `MetaKnowledge` — knowledge about one's own cognitive process (reasoning strategies, retrieval quality, attention patterns).
+- `MetaKnowledgeKind` — REASONING_STRATEGY, RETRIEVAL_QUALITY, ATTENTION_PATTERN.
+- Meta-observation service detects patterns in how Jarvis knows, not just what it knows.
+- Curiosity system considers meta-knowledge as a source of impulses.
 
 **Model of its companion**
 - `observe_companion(trait, evidence)` — evolve a belief about the companion.
@@ -149,6 +174,9 @@ so none of it costs a dependency. Set `JARVIS_LLM_*` (see below) for a real lang
 perception, and `JARVIS_HOME=./.jarvis` to keep memory on disk. Everything the page shows traces to
 real state — it is a window onto the core, never a second brain that invents replies.
 
+Panels: beliefs, goals, energy, reasoning trace, capabilities/tools, documents, memory (semantic memory,
+knowledge graph nodes/edges, conversation history), provider stats, and meta-knowledge insights.
+
 ### A real language model (optional)
 
 Perception can be backed by any OpenAI-compatible provider (cloud or a local SLM) — chosen entirely by
@@ -170,9 +198,9 @@ the decider. The API secret lives only in `JARVIS_LLM_API_KEY`, never in code.
 Requires Python 3.13+.
 
 ```bash
-python -m pytest -q        # tests
-python -m ruff check .     # lint
-python -m pyright          # type check (strict)
+python -m pytest -q        # tests (1647 tests, all passing)
+python -m ruff check .     # lint (clean)
+python -m pyright          # type check (strict, 0 errors)
 ```
 
 Built incrementally: the smallest correct system first, then evolved — every step preserving the

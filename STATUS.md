@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-10 (Increment 160)
+Last updated: 2026-09-11 (Architectural Audit Phases 0-5)
 
 ---
 
@@ -66,35 +66,44 @@ ep.working_belief.explain()        # provenance: why it concluded (Vision §8)
 ```
 src/jarvis/
   jarvis.py                              Jarvis composition root (public API, ~110 methods)
+  cognitive.py                           think(), perceive(), consider(), reason(), confirm(), resolve()
+  companion.py                           observe_companion(), explain_companion(), companion model
+  goals.py                               mark_goal_reached(), recurring_goals(), goal reflection
+  actions.py                             act(), record_outcome(), belief_about_action()
+  curiosity.py                           feel_curious(), pursue(), reflect_cycle(), meta-observation
+  introspection.py                       observe_self(), self_beliefs(), state_summary()
+  persistence.py                         persistent(), database() factories
   nervous_system/nervous_system.py       subscribe / publish / dispatch (sync)
   observability/episode_trace.py          EpisodeTrace — cognitive events grouped by episode (Vision §26)
   executive/executive_controller.py      orchestrates one episode's lifecycle + recall/reason/consult seams
-  infrastructure/                         stores, perceivers, models, edges, tools, adapters
+  infrastructure/                         stores, perceivers, models, edges, tools, adapters (JSON + SQLite)
   interface/                              command_center.py (pure brain) + server.py + console.html (web UI)
   domain/
     aggregates/                            CognitiveEpisode, HypothesisSet, CompanionModel
     conversation/                          intent (bilingual classify) + short-term ConversationContext
-    entities/                              Belief, Hypothesis
-    enums/                                 episode/evidence/attention/action/capability/permission/memory kinds
-    events/                                domain + episode + evidence + belief + hypothesis + action + tool events
+    entities/                              Belief, Hypothesis, SemanticMemory, KnowledgeNode, KnowledgeEdge, MetaKnowledge
+    enums/                                 episode/evidence/attention/action/capability/permission/memory/meta_knowledge kinds
+    events/                                domain + episode + evidence + belief + hypothesis + action + tool + semantic events
     perception/                            PerceptionSource, CompanionPerceptionSource, SpeechPerceptionSource
-    reasoning/                             Reasoner Protocol + Inference
-    repositories/                          Belief/Episode/Refutation/Capability repository Protocols
+    reasoning/                             Reasoner Protocol + Inference + ReasoningSpan
+    repositories/                          Belief/Episode/Refutation/Capability/KnowledgeGraph/Conversation repository Protocols
     retrieval/                             MemoryRetriever, NotesStore, CalendarStore, TaskScheduler,
-                                           MailBox, TaskAgent, ExternalSource, ResearchSource
+                                           MailBox, TaskAgent, ExternalSource, ResearchSource, DocumentEditor
     services/                              evidence weighting, self-observation, curiosity, action advisor,
                                            goal reflection, reflection, hypothesis generation, association,
-                                           capability scout/evaluator/gap-observer, knowledge source, model compare
+                                           capability scout/evaluator/gap-observer, knowledge source, model compare,
+                                           abstraction, meta_observation
     tools/                                 Tool Protocol + ToolRegistry + ToolPolicy
     value_objects/                          evidence/confidence/goal/action/… + recalled memory, inference,
                                            capability, note, email, calendar event, scheduled task, tool specs,
-                                           retrieved document, research report, model run
+                                           retrieved document, research report, model run, episode_record,
+                                           persisted_turn, knowledge_graph
 (Jarvis.persistent wires JSON stores: beliefs, episodes, companion, actions, reversibility,
     goals, subgoals, refutations, capabilities, needs + trace.jsonl + capability/edge config;
     Jarvis.database wires the whole memory *and* the trace into one jarvis.db -- docs stay as bytes)
 examples/                                8 runnable tours (main_loop, goal_arc, goal_parts, perceiving,
                                          conversation, resolving, reflecting, command_center)
-tests/                                   75 test modules / 1002 tests mirroring the above
+tests/                                   80+ test modules / 1647 tests mirroring the above
                                          (+ public-surface, console-asset & example guards)
 ```
 
@@ -2467,7 +2476,57 @@ edge seams and the decision-provenance trace (Increments 150-152), an opt-in liv
 the speech seam (Increment 154), and the console mic actually using that live ear when wired
 (Increment 159), and real instruction execution: material directives in conversation perform through
 the earned-agency executor behind the same sandboxed registry, with external/destructive acts
-refusing at the gate (Increment 160).
+refusing at the gate (Increment 160). Architectural audit complete: God Object split (Phase 0),
+Semantic Memory (Phase 1), Temporal Reasoning (Phase 2), Knowledge Graph (Phase 3), Persistent
+Conversation (Phase 4), Second-Order Reflection (Phase 5).
+
+### Architectural Audit Phase 0 — God Object Split ✅ (2026-09-11)
+- Split `jarvis.py` (3336 lines) into 7 focused modules: `cognitive.py`, `companion.py`, `goals.py`, `actions.py`, `curiosity.py`, `introspection.py`, `persistence.py`.
+- `jarvis.py` reduced to ~2688 lines (composition root + public API surface only).
+- All 1538 tests passing, no behavior changes.
+
+### Architectural Audit Phase 1 — Semantic Memory ✅ (2026-09-11)
+- `SemanticMemory` entity: patterns/abstractions derived from multiple episodes/beliefs.
+- `semantic_events.py`: domain events for semantic memory creation/updates.
+- `abstraction` service: identifies patterns across episodes and creates semantic memories.
+- `SemanticMemoryRepository` protocol + InMemory/SQLite stores.
+- `MemoryKind.SEMANTIC` added to memory kinds.
+- Semantic memories appear in recall via `memory_candidates.py`.
+- 34 new tests (1572 total).
+
+### Architectural Audit Phase 2 — Temporal Reasoning ✅ (2026-09-11)
+- `EpisodeRecord` gains belief timestamps (`belief_formed_at`, `belief_confidence_at_end`).
+- `RecalledMemory` gains `observed_at` timestamp.
+- `history_in_range(since, until)` and `history_about(trigger)` on `EpisodeRepository`.
+- `beliefs_formed_between(since, until)` and `beliefs_about(subject)` on `BeliefRepository`.
+- `since`/`until` parameters on `MemoryRetriever.recall()`.
+- Temporal filtering in all stores (JSON, SQLite, in-memory) and retrievers.
+- 9 new tests (1581 total).
+
+### Architectural Audit Phase 3 — Knowledge Graph ✅ (2026-09-11)
+- `KnowledgeNode` entity: people, projects, concepts, decisions, events with properties and evidence.
+- `KnowledgeEdge` entity: directed relationships between nodes with derived weight.
+- `NodeKind` enum: PERSON, PROJECT, CONCEPT, DECISION, EVENT.
+- `KnowledgeGraphRepository` protocol: CRUD, edges_from/edges_to, neighbors (BFS), path_between.
+- `entity_extraction` service: discovers nodes and edges from text.
+- `InMemoryKnowledgeGraphStore` + `SqliteKnowledgeGraphStore`.
+- `MemoryKind.GRAPH_NODE` / `MemoryKind.GRAPH_EDGE` in recall.
+- 32 new tests (1613 total).
+
+### Architectural Audit Phase 4 — Persistent Conversation ✅ (2026-09-11)
+- `PersistedTurn` value object: a single conversation turn with timestamp, intent, outcome.
+- `ConversationRepository` protocol: store/retrieve/search conversation history.
+- `InMemoryConversationStore` + `SqliteConversationStore`.
+- `ConversationContext` optional persistence (saves turns to repository).
+- `MemoryKind.CONVERSATION` in recall.
+- 17 new tests (1630 total).
+
+### Architectural Audit Phase 5 — Second-Order Reflection ✅ (2026-09-11)
+- `MetaKnowledgeKind` enum: REASONING_STRATEGY, RETRIEVAL_QUALITY, ATTENTION_PATTERN.
+- `MetaKnowledge` entity: knowledge about one's own cognitive process with evidence-derived confidence.
+- `meta_observation` service: `observe_reasoning_effectiveness()`, `observe_retrieval_quality()`, `observe_attention_allocation()`.
+- Curiosity system considers meta-knowledge as a source of impulses.
+- 15 new tests (1645 total).
 
 ---
 
