@@ -9,6 +9,8 @@ offline Jarvis (no store) recalls exactly as before, so the default is unchanged
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.document_memory_retriever import DocumentMemoryRetriever
@@ -37,7 +39,14 @@ class _StubRetriever:
     def __init__(self, memories: tuple[RecalledMemory, ...]) -> None:
         self._memories = memories
 
-    def recall(self, query: str, *, limit: int = 5) -> tuple[RecalledMemory, ...]:
+    def recall(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> tuple[RecalledMemory, ...]:
         return self._memories[: max(0, limit)]
 
 

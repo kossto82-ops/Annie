@@ -12,6 +12,7 @@ that evidence, so "memory" never becomes "truth" (Vision §22).
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 from jarvis.domain.entities.belief import Belief
@@ -30,4 +31,14 @@ class BeliefRepository(Protocol):
 
     def all_beliefs(self) -> tuple[Belief, ...]:
         """Every belief currently stored."""
+        ...
+
+    def beliefs_formed_between(
+        self, start: datetime, end: datetime
+    ) -> tuple[Belief, ...]:
+        """Beliefs whose ``formed_at`` falls within the given range (inclusive)."""
+        ...
+
+    def beliefs_about(self, subject_pattern: str) -> tuple[Belief, ...]:
+        """Beliefs whose statement contains the given subject pattern (case-insensitive)."""
         ...

@@ -33,6 +33,10 @@ class EpisodeRecord:
     structured signals (not the decision text) so later self-observation can
     measure Jarvis's own tendencies, e.g. overconfidence on thin evidence
     (Vision §6, §31).
+
+    ``belief_formed_at`` records when the working belief was first created
+    (if it existed before this episode).  ``belief_confidence_at_end`` records
+    the belief's derived confidence at the moment the episode completed.
     """
 
     episode_id: str
@@ -45,5 +49,7 @@ class EpisodeRecord:
     origin: TriggerOrigin
     kind: EpisodeKind
     goal: str | None = None  # what the episode was toward (Vision §26), if any
+    belief_formed_at: datetime | None = None  # when the working belief was created
+    belief_confidence_at_end: Confidence | None = None  # belief confidence at episode end
     recorded_at: datetime = field(default_factory=_now)
     record_id: str = field(default_factory=lambda: str(uuid.uuid4()))

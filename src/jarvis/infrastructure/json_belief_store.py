@@ -96,6 +96,21 @@ class JsonBeliefStore:
     def all_beliefs(self) -> tuple[Belief, ...]:
         return tuple(self._by_statement.values())
 
+    def beliefs_formed_between(
+        self, start: datetime, end: datetime
+    ) -> tuple[Belief, ...]:
+        return tuple(
+            b for b in self._by_statement.values()
+            if start <= b.formed_at <= end
+        )
+
+    def beliefs_about(self, subject_pattern: str) -> tuple[Belief, ...]:
+        pattern_lower = subject_pattern.lower()
+        return tuple(
+            b for b in self._by_statement.values()
+            if pattern_lower in b.statement.lower()
+        )
+
     def _load(self) -> None:
         if not self._path.exists():
             return

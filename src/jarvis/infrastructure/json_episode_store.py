@@ -33,12 +33,20 @@ def serialise_record(record: EpisodeRecord) -> dict[str, Any]:
         "origin": record.origin.value,
         "kind": record.kind.value,
         "goal": record.goal,
+        "belief_formed_at": record.belief_formed_at.isoformat() if record.belief_formed_at is not None else None,
+        "belief_confidence_at_end": record.belief_confidence_at_end.value if record.belief_confidence_at_end is not None else None,
         "recorded_at": record.recorded_at.isoformat(),
         "record_id": record.record_id,
     }
 
 
 def deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
+    belief_formed_at = None
+    if data.get("belief_formed_at") is not None:
+        belief_formed_at = datetime.fromisoformat(data["belief_formed_at"])
+    belief_confidence_at_end = None
+    if data.get("belief_confidence_at_end") is not None:
+        belief_confidence_at_end = Confidence(data["belief_confidence_at_end"])
     return EpisodeRecord(
         episode_id=data["episode_id"],
         trigger=data["trigger"],
@@ -50,6 +58,8 @@ def deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
         origin=TriggerOrigin(data["origin"]),
         kind=EpisodeKind(data["kind"]),
         goal=data.get("goal"),
+        belief_formed_at=belief_formed_at,
+        belief_confidence_at_end=belief_confidence_at_end,
         recorded_at=datetime.fromisoformat(data["recorded_at"]),
         record_id=data["record_id"],
     )
@@ -69,6 +79,29 @@ class JsonEpisodeStore:
 
     def history(self) -> tuple[EpisodeRecord, ...]:
         return tuple(self._records)
+
+    def history_in_range(
+        self, start: datetime, end: datetime
+    ) -> tuple[EpisodeRecord, ...]:
+        return tuple(
+            r for r in self._records
+            if start <= r.recorded_at <= end
+        )
+
+    def history_about(
+        self, subject: str, start: datetime | None = None, end: datetime | None = None
+    ) -> tuple[EpisodeRecord, ...]:
+        subject_lower = subject.lower()
+        results = []
+        for r in self._records:
+            if subject_lower not in r.trigger.lower():
+                continue
+            if start is not None and r.recorded_at < start:
+                continue
+            if end is not None and r.recorded_at > end:
+                continue
+            results.append(r)
+        return tuple(results)
 
     def _load(self) -> None:
         if not self._path.exists():

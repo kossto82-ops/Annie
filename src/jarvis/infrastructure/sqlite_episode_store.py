@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 from typing import Any
 
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
@@ -50,6 +51,29 @@ class SqliteEpisodeStore:
 
     def history(self) -> tuple[EpisodeRecord, ...]:
         return tuple(self._records)
+
+    def history_in_range(
+        self, start: datetime, end: datetime
+    ) -> tuple[EpisodeRecord, ...]:
+        return tuple(
+            r for r in self._records
+            if start <= r.recorded_at <= end
+        )
+
+    def history_about(
+        self, subject: str, start: datetime | None = None, end: datetime | None = None
+    ) -> tuple[EpisodeRecord, ...]:
+        subject_lower = subject.lower()
+        results = []
+        for r in self._records:
+            if subject_lower not in r.trigger.lower():
+                continue
+            if start is not None and r.recorded_at < start:
+                continue
+            if end is not None and r.recorded_at > end:
+                continue
+            results.append(r)
+        return tuple(results)
 
     def _load(self) -> None:
         rows: list[tuple[Any, ...]] = self._conn.execute(

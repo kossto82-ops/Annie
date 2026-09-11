@@ -19,6 +19,7 @@ episode, and deriving any confidence from it, stays the executive's job.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.repositories.belief_repository import BeliefRepository
@@ -61,14 +62,25 @@ class LexicalMemoryRetriever:
         self._companion = companion
         self._goals = goals
 
-    def recall(self, query: str, *, limit: int = 5) -> tuple[RecalledMemory, ...]:
+    def recall(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> tuple[RecalledMemory, ...]:
         query_tokens = _tokens(query)
         if not query_tokens:
             return ()
         scored: list[RecalledMemory] = []
-        for match_text, content, kind, provenance, confidence in gather_candidates(
+        for match_text, content, kind, provenance, confidence, observed_at in gather_candidates(
             self._beliefs, self._episodes, self._companion, self._goals
         ):
+            if since is not None and (observed_at is None or observed_at < since):
+                continue
+            if until is not None and (observed_at is None or observed_at > until):
+                continue
             relevance = _relevance(query_tokens, match_text)
             if relevance <= 0.0:
                 continue
@@ -79,6 +91,7 @@ class LexicalMemoryRetriever:
                     provenance=provenance,
                     relevance=relevance,
                     source_confidence=confidence,
+                    observed_at=observed_at,
                 )
             )
         # Most relevant first; ties broken by the more confident memory, then by

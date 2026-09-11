@@ -7,6 +7,7 @@ history in order; concrete storage lives in ``jarvis.infrastructure``.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
@@ -21,4 +22,16 @@ class EpisodeRepository(Protocol):
 
     def history(self) -> tuple[EpisodeRecord, ...]:
         """All recorded episodes, oldest first."""
+        ...
+
+    def history_in_range(
+        self, start: datetime, end: datetime
+    ) -> tuple[EpisodeRecord, ...]:
+        """Episodes recorded between ``start`` and ``end`` (inclusive)."""
+        ...
+
+    def history_about(
+        self, subject: str, start: datetime | None = None, end: datetime | None = None
+    ) -> tuple[EpisodeRecord, ...]:
+        """Episodes whose trigger contains ``subject``, optionally within a time range."""
         ...

@@ -17,11 +17,13 @@ So this value object carries only what a retriever can honestly report:
                           item is belief-backed (a world belief, companion trait,
                           goal, or an episode's conclusion), else ``None``. Reported,
                           never re-derived here.
+* ``observed_at``      -- when the underlying memory was recorded (if known).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from jarvis.domain.enums.memory_kind import MemoryKind
 
@@ -35,3 +37,4 @@ class RecalledMemory:
     provenance: str
     relevance: float
     source_confidence: float | None = None
+    observed_at: datetime | None = None

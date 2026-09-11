@@ -18,6 +18,7 @@ on returns an empty result rather than a forced match.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
@@ -27,9 +28,18 @@ from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 class MemoryRetriever(Protocol):
     """Surfaces the memories most relevant to a query, most relevant first."""
 
-    def recall(self, query: str, *, limit: int = 5) -> tuple[RecalledMemory, ...]:
+    def recall(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> tuple[RecalledMemory, ...]:
         """Return up to ``limit`` remembered items bearing on ``query``.
 
         Ordered most-relevant first; empty when nothing bears on the query.
+        When ``since`` or ``until`` are given, only items whose ``observed_at``
+        falls within the range are returned.
         """
         ...

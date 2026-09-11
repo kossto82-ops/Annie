@@ -11,6 +11,7 @@ shared keeps the lexical and the embedding retriever in lockstep.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
@@ -29,8 +30,8 @@ _GOAL_PREFIX = "The goal '"
 _GOAL_SUFFIX = "' is reachable"
 
 # One raw candidate before scoring: the text to match against, the text to show, its
-# kind, a provenance note, and the underlying belief's confidence if any.
-Candidate = tuple[str, str, MemoryKind, str, float | None]
+# kind, a provenance note, the underlying belief's confidence if any, and when observed.
+Candidate = tuple[str, str, MemoryKind, str, float | None, datetime | None]
 
 
 def looks_like_question(text: str) -> bool:
@@ -57,7 +58,7 @@ def gather_candidates(
     goals: BeliefRepository,
     semantic_memories: SemanticMemoryRepository | None = None,
 ) -> Iterator[Candidate]:
-    """Every memory that could match, as (match_text, content, kind, note, conf).
+    """Every memory that could match, as (match_text, content, kind, note, conf, observed_at).
 
     Belief-backed memories match on both their statement and the words that formed
     them (the evidence). Question-shaped memories are skipped.
@@ -72,6 +73,7 @@ def gather_candidates(
             MemoryKind.WORLD_BELIEF,
             "world belief",
             belief.confidence.value,
+            belief.formed_at,
         )
     for record in episodes.history():
         if looks_like_question(record.trigger):
@@ -87,6 +89,7 @@ def gather_candidates(
             MemoryKind.EPISODE,
             "episode",
             record.conclusion_confidence.value,
+            record.recorded_at,
         )
     for belief in companion.beliefs():
         yield (
@@ -95,6 +98,7 @@ def gather_candidates(
             MemoryKind.COMPANION_TRAIT,
             "companion trait",
             belief.confidence.value,
+            belief.formed_at,
         )
     for belief in goals.all_beliefs():
         subject = _goal_subject(belief.statement)
@@ -104,6 +108,7 @@ def gather_candidates(
             MemoryKind.GOAL,
             "goal",
             belief.confidence.value,
+            belief.formed_at,
         )
     if semantic_memories is not None:
         for memory in semantic_memories.all_memories():
@@ -113,4 +118,5 @@ def gather_candidates(
                 MemoryKind.SEMANTIC,
                 "semantic pattern",
                 memory.confidence.value,
+                memory.formed_at,
             )

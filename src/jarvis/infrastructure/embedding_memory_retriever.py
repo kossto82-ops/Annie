@@ -19,6 +19,7 @@ and if the embedder is unreachable (ollama down) it falls back to a wrapped retr
 from __future__ import annotations
 
 import math
+from datetime import datetime
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.repositories.belief_repository import BeliefRepository
@@ -68,7 +69,14 @@ class EmbeddingMemoryRetriever:
         self._fallback = fallback
         self._cache: dict[str, tuple[float, ...]] = {}
 
-    def recall(self, query: str, *, limit: int = 5) -> tuple[RecalledMemory, ...]:
+    def recall(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> tuple[RecalledMemory, ...]:
         if not query.strip():
             return ()
         candidates = list(
@@ -80,11 +88,15 @@ class EmbeddingMemoryRetriever:
             query_vector = self._embed(query)
             vectors = self._embed_all(tuple(match_text for match_text, *_ in candidates))
         except Exception:  # noqa: BLE001 - embedder/network boundary; degrade, don't break
-            return self._fallback.recall(query, limit=limit) if self._fallback else ()
+            return self._fallback.recall(query, limit=limit, since=since, until=until) if self._fallback else ()
         scored: list[RecalledMemory] = []
-        for (_, content, kind, provenance, confidence), vector in zip(
+        for (_, content, kind, provenance, confidence, observed_at), vector in zip(
             candidates, vectors, strict=True
         ):
+            if since is not None and (observed_at is None or observed_at < since):
+                continue
+            if until is not None and (observed_at is None or observed_at > until):
+                continue
             similarity = _cosine(query_vector, vector)
             if similarity < _MIN_SIMILARITY:
                 continue
@@ -95,6 +107,7 @@ class EmbeddingMemoryRetriever:
                     provenance=provenance,
                     relevance=max(0.0, min(1.0, similarity)),
                     source_confidence=confidence,
+                    observed_at=observed_at,
                 )
             )
         scored.sort(key=lambda m: (-m.relevance, -(m.source_confidence or 0.0), m.content))

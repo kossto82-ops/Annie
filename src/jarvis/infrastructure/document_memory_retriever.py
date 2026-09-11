@@ -16,6 +16,8 @@ offline, and honest about a file whose bytes never meant anything to rank.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from collections.abc import Callable
 
 from jarvis.domain.enums.memory_kind import MemoryKind
@@ -38,8 +40,15 @@ class DocumentMemoryRetriever:
         self._base = base
         self._source = source
 
-    def recall(self, query: str, *, limit: int = 5) -> tuple[RecalledMemory, ...]:
-        memories = list(self._base.recall(query, limit=limit))
+    def recall(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> tuple[RecalledMemory, ...]:
+        memories = list(self._base.recall(query, limit=limit, since=since, until=until))
         store = self._source()
         if store is None:
             return tuple(memories[: max(0, limit)])
