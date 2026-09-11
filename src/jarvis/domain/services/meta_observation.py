@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from jarvis.domain.entities.meta_knowledge import MetaKnowledge
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.meta_knowledge_kind import MetaKnowledgeKind
-from jarvis.domain.entities.meta_knowledge import MetaKnowledge
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence

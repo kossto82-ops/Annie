@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
-
-import pytest
+from datetime import UTC, datetime
 
 from jarvis.domain.conversation.conversation_context import ConversationContext
 from jarvis.domain.conversation.intent import ConversationIntent
-from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.value_objects.persisted_turn import PersistedTurn
 from jarvis.infrastructure.in_memory_conversation_store import InMemoryConversationStore
 from jarvis.infrastructure.sqlite_conversation_store import SqliteConversationStore
-
-from datetime import UTC, datetime, timedelta
 
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 _JAN_15 = datetime(2026, 1, 15, tzinfo=UTC)

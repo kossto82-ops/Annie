@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
-import pytest
+from datetime import UTC, datetime
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.entities.belief import Belief
-from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord

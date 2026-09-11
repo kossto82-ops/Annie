@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import sqlite3
 
-import pytest
-
+from jarvis.domain.entities.belief import Belief
 from jarvis.domain.entities.knowledge_edge import KnowledgeEdge
 from jarvis.domain.entities.knowledge_node import KnowledgeNode
-from jarvis.domain.enums.node_kind import NodeKind
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.node_kind import NodeKind
 from jarvis.domain.services.entity_extraction import extract_entities
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.in_memory_knowledge_graph_store import InMemoryKnowledgeGraphStore
 from jarvis.infrastructure.sqlite_knowledge_graph_store import SqliteKnowledgeGraphStore
-from jarvis.domain.entities.belief import Belief
 
 
 def _node(kind: NodeKind = NodeKind.CONCEPT, name: str = "test") -> KnowledgeNode:

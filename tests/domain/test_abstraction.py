@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import pytest
+from datetime import UTC, datetime
 
-from jarvis.domain.services.abstraction import abstract_patterns
-from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.services.abstraction import abstract_patterns
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
-from datetime import UTC, datetime
 
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 

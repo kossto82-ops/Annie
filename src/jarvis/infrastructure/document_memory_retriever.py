@@ -16,9 +16,8 @@ offline, and honest about a file whose bytes never meant anything to rank.
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from collections.abc import Callable
+from datetime import datetime
 
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.retrieval.document_store import DocumentStore

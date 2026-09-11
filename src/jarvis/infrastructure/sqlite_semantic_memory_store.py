@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from jarvis.domain.entities.semantic_memory import SemanticMemory
@@ -19,7 +19,6 @@ from jarvis.domain.services.evidence_weighting import (
 )
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
-from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 
 def _serialise_memory(memory: SemanticMemory) -> dict[str, Any]:

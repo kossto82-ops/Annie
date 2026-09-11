@@ -14,7 +14,7 @@ conversation history survives restarts and can be recalled across sessions.
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from jarvis.domain.conversation.intent import ConversationIntent
@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from jarvis.domain.repositories.conversation_repository import (
         ConversationRepository,
     )
-    from jarvis.domain.value_objects.persisted_turn import PersistedTurn
 
 
 @dataclass(frozen=True, slots=True)

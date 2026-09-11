@@ -66,7 +66,10 @@ class KnowledgeGraphRepository(Protocol):
     def neighbors(
         self, node_id: str, relation: str | None = None, depth: int = 1
     ) -> tuple[KnowledgeNode, ...]:
-        """Nodes reachable from ``node_id`` up to ``depth`` hops, optionally filtered by relation."""
+        """Nodes reachable from ``node_id`` up to ``depth`` hops.
+
+        Optionally filtered by relation type.
+        """
         ...
 
     def path_between(

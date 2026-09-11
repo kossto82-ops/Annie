@@ -88,7 +88,11 @@ class EmbeddingMemoryRetriever:
             query_vector = self._embed(query)
             vectors = self._embed_all(tuple(match_text for match_text, *_ in candidates))
         except Exception:  # noqa: BLE001 - embedder/network boundary; degrade, don't break
-            return self._fallback.recall(query, limit=limit, since=since, until=until) if self._fallback else ()
+            if self._fallback:
+                return self._fallback.recall(
+                    query, limit=limit, since=since, until=until
+                )
+            return ()
         scored: list[RecalledMemory] = []
         for (_, content, kind, provenance, confidence, observed_at), vector in zip(
             candidates, vectors, strict=True

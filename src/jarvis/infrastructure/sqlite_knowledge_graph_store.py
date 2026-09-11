@@ -16,9 +16,6 @@ from typing import Any
 from jarvis.domain.entities.knowledge_edge import KnowledgeEdge
 from jarvis.domain.entities.knowledge_node import KnowledgeNode
 from jarvis.domain.enums.node_kind import NodeKind
-from jarvis.domain.services.evidence_weighting import DEFAULT_WEIGHTING
-from jarvis.domain.value_objects.confidence import Confidence
-from jarvis.domain.value_objects.evidence import Evidence
 
 
 def _serialise_node(node: KnowledgeNode) -> dict[str, Any]:

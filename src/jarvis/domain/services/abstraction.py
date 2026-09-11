@@ -9,13 +9,12 @@ evidence.
 from __future__ import annotations
 
 import re
-from collections import Counter
 from collections.abc import Sequence
 
 from jarvis.domain.entities.semantic_memory import SemanticMemory
 from jarvis.domain.value_objects.confidence import Confidence
-from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.evidence import Evidence
 
 _WORD = re.compile(r"\w+")
 

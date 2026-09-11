@@ -11,6 +11,8 @@
                     ┌─────────────────────────────┐
                     │ Public API / Jarvis         │
                     │ ExecutiveController         │
+                    │ (cognitive, companion, goals │
+                    │  actions, curiosity, etc.)  │
                     └──────────────┬──────────────┘
                                    │
                                    ▼
@@ -18,6 +20,9 @@
                     │ Domain / Cognition          │
                     │ Episodes                    │
                     │ Beliefs / Hypotheses        │
+                    │ Semantic Memory             │
+                    │ Knowledge Graph             │
+                    │ Meta-Knowledge              │
                     │ Reflection / Curiosity      │
                     │ Goals / Actions              │
                     │ Capabilities (Odysseus)      │
@@ -28,7 +33,7 @@
                                     ▼
                     ┌─────────────────────────────┐
                     │ Infrastructure              │
-                    │ JSON / memory stores        │
+                    │ JSON / SQLite / in-memory   │
                     │ Perception                  │
                     │ Language models             │
                     │ Provider registry           │
@@ -40,26 +45,34 @@
 ```text
 src/jarvis/
 ├── jarvis.py                 Jarvis composition root (public API + persistent() wiring)
+├── cognitive.py              think(), perceive(), consider(), reason(), confirm(), resolve()
+├── companion.py              observe_companion(), explain_companion(), companion model
+├── goals.py                  mark_goal_reached(), recurring_goals(), goal reflection
+├── actions.py                act(), record_outcome(), belief_about_action()
+├── curiosity.py              feel_curious(), pursue(), reflect_cycle(), meta-observation
+├── introspection.py          observe_self(), self_beliefs(), state_summary()
+├── persistence.py            persistent(), database() factories
 ├── domain/
 │   ├── aggregates/           CognitiveEpisode, HypothesisSet, CompanionModel
 │   ├── conversation/         IntentClassifier (bilingual) + ConversationContext
-│   ├── entities/             Belief, Hypothesis
-│   ├── enums/                episode / evidence / attention / action / capability / memory / permission kinds
-│   ├── events/               domain + episode + evidence + belief + hypothesis + action + tool events
+│   ├── entities/             Belief, Hypothesis, SemanticMemory, KnowledgeNode, KnowledgeEdge, MetaKnowledge
+│   ├── enums/                episode / evidence / attention / action / capability / memory / permission / meta_knowledge kinds
+│   ├── events/               domain + episode + evidence + belief + hypothesis + action + tool + semantic events
 │   ├── perception/           PerceptionSource, CompanionPerceptionSource, SpeechPerceptionSource
-│   ├── reasoning/            Reasoner Protocol + Inference
-│   ├── repositories/         Belief / Episode / Refutation / Capability protocols
+│   ├── reasoning/            Reasoner Protocol + Inference + ReasoningSpan
+│   ├── repositories/         Belief / Episode / Refutation / Capability / KnowledgeGraph / Conversation protocols
 │   ├── retrieval/            MemoryRetriever, ExternalSource, ResearchSource, NotesStore,
-│   │                         CalendarStore, TaskScheduler, MailBox, TaskAgent, DocumentStore
+│   │                         CalendarStore, TaskScheduler, MailBox, TaskAgent, DocumentStore, DocumentEditor
 │   ├── services/             weighting, self-observation, curiosity, action advisor, goal reflection,
 │   │                         reflection, hypothesis generation, association, capability scout/evaluator/
-│   │                         gap-observer, knowledge source, model compare
+│   │                         gap-observer, knowledge source, model compare, abstraction, meta_observation
 │   ├── tools/                Tool Protocol, ToolRegistry, ToolPolicy
 │   └── value_objects/        evidence, confidence, goals, actions, capabilities, notes, email,
 │                             calendar events, scheduled tasks, tool specs/calls/results, recalled
-│                             memory, inference, retrieved documents, research reports, model runs…
+│                             memory, inference, retrieved documents, research reports, model runs,
+│                             episode_record, persisted_turn, knowledge_graph…
 ├── executive/                ExecutiveController (recall / consult / reason seams before deciding)
-├── infrastructure/           JSON + in-memory stores, trace (JSONL), perceivers, language models,
+├── infrastructure/           JSON + SQLite + in-memory stores, trace (JSONL), perceivers, language models,
 │                             provider registry, embedder, edge adapters (Agent-Reach, SearXNG, notes,
 │                             mail IMAP/SMTP, calendar local/Google, task scheduler, task agent,
 │                             LocalDocumentStore, DocumentMemoryRetriever), tools

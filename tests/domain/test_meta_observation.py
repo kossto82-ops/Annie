@@ -4,24 +4,22 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 from jarvis.domain.entities.meta_knowledge import MetaKnowledge
-from jarvis.domain.enums.meta_knowledge_kind import MetaKnowledgeKind
 from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.memory_kind import MemoryKind
+from jarvis.domain.enums.meta_knowledge_kind import MetaKnowledgeKind
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.meta_observation import (
+    observe_attention_allocation,
     observe_reasoning_effectiveness,
     observe_retrieval_quality,
-    observe_attention_allocation,
 )
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
-from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)

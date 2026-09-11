@@ -14,7 +14,6 @@ from jarvis.domain.entities.belief import Belief
 from jarvis.domain.entities.knowledge_edge import KnowledgeEdge
 from jarvis.domain.entities.knowledge_node import KnowledgeNode
 from jarvis.domain.enums.node_kind import NodeKind
-from jarvis.domain.value_objects.evidence import Evidence
 
 # Simple heuristics for entity detection
 _UPPERCASED = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b")

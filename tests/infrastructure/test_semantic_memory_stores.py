@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 
-import pytest
-
 from jarvis.domain.entities.semantic_memory import SemanticMemory
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence

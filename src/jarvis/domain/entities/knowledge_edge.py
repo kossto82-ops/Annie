@@ -7,17 +7,18 @@ never set directly.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from jarvis.domain.entities.belief import derive_confidence
+from jarvis.domain.services.evidence_weighting import DEFAULT_WEIGHTING
 
 if TYPE_CHECKING:
+    from jarvis.domain.events.domain_event import CognitiveEvent
     from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
     from jarvis.domain.value_objects.confidence import Confidence
     from jarvis.domain.value_objects.evidence import Evidence
-    from jarvis.domain.events.domain_event import CognitiveEvent
 
 
 def _new_id() -> str:
@@ -25,7 +26,7 @@ def _new_id() -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _empty_evidence() -> list[Evidence]:
@@ -34,9 +35,6 @@ def _empty_evidence() -> list[Evidence]:
 
 def _empty_event_buffer() -> list[CognitiveEvent]:
     return []
-
-
-from jarvis.domain.services.evidence_weighting import DEFAULT_WEIGHTING
 
 
 class KnowledgeEdge:

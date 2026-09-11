@@ -33,8 +33,14 @@ def serialise_record(record: EpisodeRecord) -> dict[str, Any]:
         "origin": record.origin.value,
         "kind": record.kind.value,
         "goal": record.goal,
-        "belief_formed_at": record.belief_formed_at.isoformat() if record.belief_formed_at is not None else None,
-        "belief_confidence_at_end": record.belief_confidence_at_end.value if record.belief_confidence_at_end is not None else None,
+        "belief_formed_at": (
+            record.belief_formed_at.isoformat() if record.belief_formed_at is not None else None
+        ),
+        "belief_confidence_at_end": (
+            record.belief_confidence_at_end.value
+            if record.belief_confidence_at_end is not None
+            else None
+        ),
         "recorded_at": record.recorded_at.isoformat(),
         "record_id": record.record_id,
     }

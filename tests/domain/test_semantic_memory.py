@@ -6,9 +6,7 @@ evidence, never set directly; events are emitted on mutation.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
-import pytest
+from datetime import UTC, datetime
 
 from jarvis.domain.entities.semantic_memory import SemanticMemory
 from jarvis.domain.enums.evidence_source import EvidenceSource

@@ -242,6 +242,17 @@ Increments 111–112).
   staying the offline default. Streaming/VAD remains unwired (one blob per hold).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 
+### Architectural Audit (Phases 0-5)
+
+The deep architectural audit is complete. All 5 phases implemented:
+
+- **Phase 0** — God Object Split: `jarvis.py` split into 7 focused modules (cognitive, companion, goals, actions, curiosity, introspection, persistence)
+- **Phase 1** — Semantic Memory: `SemanticMemory` entity, `semantic_events.py`, abstraction service, `SemanticMemoryRepository`, `SEMANTIC` in `MemoryKind`
+- **Phase 2** — Temporal Reasoning: belief timestamps, `history_in_range`/`history_about`, temporal filtering in retrievers
+- **Phase 3** — Knowledge Graph: `KnowledgeNode`/`KnowledgeEdge`, `NodeKind`, `KnowledgeGraphRepository`, BFS traversal, `path_between`
+- **Phase 4** — Persistent Conversation: `PersistedTurn`, `ConversationRepository`, `CONVERSATION` in `MemoryKind`, SQLite stores
+- **Phase 5** — Second-Order Reflection: `MetaKnowledgeKind`, `MetaKnowledge` entity, `meta_observation` service (reasoning effectiveness, retrieval quality, attention allocation), curiosity integration
+
 ## Known technical debt / future directions
 
 - Reset the audit gates at HEAD: 5 ruff errors + 44 pyright errors (all in newer tests; see STATUS.md). *(DONE — Increment 135: ruff clean · pyright strict 0 errors.)*
