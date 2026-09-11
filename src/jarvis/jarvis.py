@@ -13,6 +13,141 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+from jarvis.actions import (
+    _action_description as _action_description_fn,
+)
+from jarvis.actions import (
+    _action_statement as _action_statement_fn,
+)
+from jarvis.actions import (
+    _remember_reversibility as _remember_reversibility_fn,
+)
+from jarvis.actions import (
+    _reversibility_statement as _reversibility_statement_fn,
+)
+from jarvis.actions import (
+    act as _act,
+)
+from jarvis.actions import (
+    belief_about_action as _belief_about_action_fn,
+)
+from jarvis.actions import (
+    believed_reversible as _believed_reversible_fn,
+)
+from jarvis.actions import (
+    recommend_action as _recommend_action_fn,
+)
+from jarvis.actions import (
+    record_outcome as _record_outcome_fn,
+)
+from jarvis.cognitive import (
+    act_on_insight as _act_on_insight_fn,
+)
+from jarvis.cognitive import (
+    challenge as _challenge_fn,
+)
+from jarvis.cognitive import (
+    charge as _charge_fn,
+)
+from jarvis.cognitive import (
+    connections as _connections_fn,
+)
+from jarvis.cognitive import (
+    consider as _consider_fn,
+)
+from jarvis.cognitive import (
+    energy_remaining as _energy_remaining_fn,
+)
+from jarvis.cognitive import (
+    energy_spent as _energy_spent_fn,
+)
+from jarvis.cognitive import (
+    hypothesise as _hypothesise_fn,
+)
+from jarvis.cognitive import (
+    is_conserving as _is_conserving_fn,
+)
+from jarvis.cognitive import (
+    learn_from_reflection as _learn_from_reflection_fn,
+)
+from jarvis.cognitive import (
+    perceive as _perceive_fn,
+)
+from jarvis.cognitive import (
+    perceive_all as _perceive_all_fn,
+)
+from jarvis.cognitive import (
+    reflect as _reflect_fn,
+)
+from jarvis.cognitive import (
+    reflect_cycle as _reflect_cycle_fn,
+)
+from jarvis.cognitive import (
+    refute as _refute_fn,
+)
+from jarvis.cognitive import (
+    related_beliefs_fn as _related_beliefs_fn,
+)
+from jarvis.cognitive import (
+    rest as _rest_fn,
+)
+from jarvis.cognitive import (
+    run_episode as _run_episode_fn,
+)
+from jarvis.cognitive import (
+    set_energy_budget as _set_energy_budget_fn,
+)
+from jarvis.cognitive import (
+    should_conserve as _should_conserve_fn,
+)
+from jarvis.cognitive import (
+    think as _think_fn,
+)
+from jarvis.companion import (
+    _record_companion as _record_companion_fn,
+)
+from jarvis.companion import (
+    acknowledge_companion as _acknowledge_companion_fn,
+)
+from jarvis.companion import (
+    explain_companion as _explain_companion_fn,
+)
+from jarvis.companion import (
+    note_companion as _note_companion_fn,
+)
+from jarvis.companion import (
+    observe_companion as _observe_companion_fn,
+)
+from jarvis.companion import (
+    perceive_about_companion as _perceive_about_companion_fn,
+)
+from jarvis.companion import (
+    perceive_all_about_companion as _perceive_all_about_companion_fn,
+)
+from jarvis.curiosity import (
+    _already_mined as _already_mined_fn,
+)
+from jarvis.curiosity import (
+    _contested_working_belief as _contested_working_belief_fn,
+)
+from jarvis.curiosity import (
+    _is_contested as _is_contested_fn,
+)
+from jarvis.curiosity import (
+    _unmined_load_bearing as _unmined_load_bearing_fn,
+)
+from jarvis.curiosity import (
+    ask_about as _ask_about_fn,
+)
+from jarvis.curiosity import (
+    feel_curious as _feel_curious_fn,
+)
+from jarvis.curiosity import (
+    pursue as _pursue_fn,
+)
+from jarvis.curiosity import (
+    resolve as _resolve_fn,
+)
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
@@ -24,9 +159,6 @@ from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.enums.trigger_origin import TriggerOrigin
-from jarvis.domain.events.action_events import ActionOutcomeRecorded
-from jarvis.domain.events.belief_events import ContradictionDetected
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.tool_events import ToolCallRecorded
 from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
@@ -48,29 +180,19 @@ from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.retrieval.task_scheduler import TaskScheduler
-from jarvis.domain.services.action_advisor import recommend as recommend_stance
-from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.capability_evaluator import recommend as recommend_capability
 from jarvis.domain.services.capability_gap_observation import (
     CapabilityGap,
     detect_capability_gaps,
 )
 from jarvis.domain.services.capability_scout import catalog, scout
-from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.evidence_weighting import (
     DEFAULT_WEIGHTING,
     EvidenceWeightingPolicy,
 )
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
-from jarvis.domain.services.hypothesis_generation import generate_hypotheses
 from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.model_compare import ModelComparator, ModelRun
-from jarvis.domain.services.reflection import find_reflections
-from jarvis.domain.services.self_observation import (
-    observe_evidence_habit,
-    observe_overconfidence,
-    observe_prediction_accuracy,
-)
 from jarvis.domain.tools.tool import Tool
 from jarvis.domain.tools.tool_policy import ToolPolicy
 from jarvis.domain.tools.tool_registry import ToolRegistry
@@ -108,12 +230,40 @@ from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.executive.executive_controller import (
     ExecutiveController,
-    subject_of,
     working_statement,
 )
-from jarvis.infrastructure.agent_reach_source import (
-    build_web_source,
-    llm_search_from_model,
+from jarvis.goals import (
+    _goal_statement as _goal_statement_fn,
+)
+from jarvis.goals import (
+    ask_for_help as _ask_for_help_fn,
+)
+from jarvis.goals import (
+    belief_about_goal as _belief_about_goal_fn,
+)
+from jarvis.goals import (
+    goal_progress as _goal_progress_fn,
+)
+from jarvis.goals import (
+    is_exhausted_stuck_goal as _is_exhausted_stuck_goal_fn,
+)
+from jarvis.goals import (
+    is_open_stuck_goal as _is_open_stuck_goal_fn,
+)
+from jarvis.goals import (
+    is_stuck_goal as _is_stuck_goal_fn,
+)
+from jarvis.goals import (
+    mark_goal_reached as _mark_goal_reached_fn,
+)
+from jarvis.goals import (
+    receive_help as _receive_help_fn,
+)
+from jarvis.goals import (
+    stuck_goals as _stuck_goals_fn,
+)
+from jarvis.goals import (
+    sub_goals as _sub_goals_fn,
 )
 from jarvis.infrastructure.capability_registry import (
     CapabilityRegistry,
@@ -124,23 +274,14 @@ from jarvis.infrastructure.capability_registry import (
     build_default_registry,
 )
 from jarvis.infrastructure.document_memory_retriever import DocumentMemoryRetriever
-from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
-from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_capability_store import InMemoryCapabilityStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.in_memory_refutation_store import InMemoryRefutationStore
-from jarvis.infrastructure.json_belief_store import JsonBeliefStore
-from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
-from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
-from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
-from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.keyword_perception import KeywordPerception
-from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
 from jarvis.infrastructure.mcp_tools import McpTool
-from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
 from jarvis.infrastructure.provider_stats import (
     InMemoryInstrumentation,
     InstrumentationStore,
@@ -149,12 +290,34 @@ from jarvis.infrastructure.provider_stats import (
 from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRenderer
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
-from jarvis.infrastructure.speech_perception import EchoSpeechPerception
-from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
-from jarvis.infrastructure.sqlite_episode_trace import SqliteEpisodeTrace
 from jarvis.infrastructure.text_embedder import TextEmbedder
+from jarvis.introspection import (
+    _summarise_action as _summarise_action_fn,
+)
+from jarvis.introspection import (
+    introspect as _introspect,
+)
+from jarvis.introspection import (
+    observe_oc as _observe_oc,
+)
+from jarvis.introspection import (
+    observe_prediction_accuracy as _observe_prediction_accuracy,
+)
+from jarvis.introspection import (
+    observe_self as _observe_self,
+)
+from jarvis.introspection import (
+    recommend_action_by_description as _recommend_action_by_description_fn,
+)
+from jarvis.introspection import (
+    self_beliefs as _self_beliefs,
+)
+from jarvis.introspection import (
+    state_summary as _state_summary,
+)
 from jarvis.nervous_system.nervous_system import NervousSystem
 from jarvis.observability.episode_trace import EpisodeTrace, EpisodeTraceSink
+from jarvis.persistence import build_database_kwargs, build_persistent_kwargs
 
 # The goal-reflection cap and the insight threshold now live in ``CognitiveKnobs``
 # (defaults 3 and 0.5, the historical constants), validated at the value level
@@ -738,11 +901,7 @@ class Jarvis:
         touched (empty when the utterance revealed nothing, §37). It only *produces*
         evidence; confidence is still derived and the belief remains contradictable.
         """
-        learned: list[Belief] = []
-        for observation in self._companion_perception.read_companion(utterance):
-            belief, _ = self._record_companion(observation.trait, observation.evidence)
-            learned.append(belief)
-        return tuple(learned)
+        return _note_companion_fn(self, utterance)
 
     @property
     def external_source(self) -> ExternalSource | None:
@@ -1947,40 +2106,7 @@ class Jarvis:
         under ``directory``, so a single call gives full continuity across restarts
         (Vision §3, §21, §26). It composes the JSON stores and the JSONL trace log.
         """
-        base = Path(directory)
-        # The persistent edge: web read via the free Jina Reader and web search via
-        # the configured chat model (e.g. the local OmniRoute gateway, no package and
-        # no JINA_API_KEY needed) when a real provider is set -- else offline. The ear
-        # is the browser's Web Speech path, live by default.
-        settings = settings_from_env()
-        search_model = (
-            build_language_model(settings)
-            if settings.model and settings.provider not in _OFFLINE_PROVIDERS
-            else None
-        )
-        source = build_web_source(
-            llm_search_from_model(search_model) if search_model is not None else None
-        )
-        research = build_odysseus_search_source()
-        return cls(
-            beliefs=JsonBeliefStore(base / "beliefs.json", weighting_policy),
-            episodes=JsonEpisodeStore(base / "episodes.json"),
-            companion_store=JsonBeliefStore(base / "companion.json"),
-            actions_store=JsonBeliefStore(base / "actions.json"),
-            reversibility_store=JsonBeliefStore(base / "reversibility.json"),
-            goals_store=JsonBeliefStore(base / "goals.json"),
-            subgoals_store=JsonBeliefStore(base / "subgoals.json"),
-            capabilities_store=JsonCapabilityStore(base / "capabilities.json"),
-            needs_store=JsonBeliefStore(base / "needs.json"),
-            refutations_store=JsonRefutationStore(base / "refutations.json"),
-            trace=JsonEpisodeTrace(base / "trace.jsonl"),
-            weighting_policy=weighting_policy,
-            default_belief_policy=default_belief_policy,
-            external_source=source,
-            research_source=research,
-            speech_perception=EchoSpeechPerception(),
-            documents_store=build_document_store(base / "docs"),
-        )
+        return cls(**build_persistent_kwargs(directory, weighting_policy, default_belief_policy))
 
     @classmethod
     def database(
@@ -2001,39 +2127,7 @@ class Jarvis:
         contracts; confidence and stability are still re-derived from stored
         evidence on every read, never persisted as assertions.
         """
-        base = Path(directory)
-        base.mkdir(parents=True, exist_ok=True)
-        wide = base / "jarvis.db"
-        repositories = build_sqlite_repositories(wide, weighting_policy)
-        settings = settings_from_env()
-        search_model = (
-            build_language_model(settings)
-            if settings.model and settings.provider not in _OFFLINE_PROVIDERS
-            else None
-        )
-        source = build_web_source(
-            llm_search_from_model(search_model) if search_model is not None else None
-        )
-        research = build_odysseus_search_source()
-        return cls(
-            beliefs=repositories.beliefs,
-            episodes=repositories.episodes,
-            companion_store=repositories.companion,
-            actions_store=repositories.actions,
-            reversibility_store=repositories.reversibility,
-            goals_store=repositories.goals,
-            subgoals_store=repositories.subgoals,
-            capabilities_store=repositories.capabilities,
-            needs_store=repositories.needs,
-            refutations_store=repositories.refutations,
-            trace=SqliteEpisodeTrace(repositories.connection),
-            weighting_policy=weighting_policy,
-            default_belief_policy=default_belief_policy,
-            external_source=source,
-            research_source=research,
-            speech_perception=EchoSpeechPerception(),
-            documents_store=build_document_store(base / "docs"),
-        )
+        return cls(**build_database_kwargs(directory, weighting_policy, default_belief_policy))
 
     def think(
         self,
@@ -2058,8 +2152,7 @@ class Jarvis:
         routes depth -- it never changes what Jarvis concludes. When ``None``, the
         stance set last via :meth:`set_deliberation_value` applies (``NORMAL``).
         """
-        episode = CognitiveEpisode(trigger=trigger, goal=goal)
-        return self._run(episode, evidence, conversation=conversation, value=value)
+        return _think_fn(self, trigger, evidence, goal, conversation, value)
 
     def _run(
         self,
@@ -2068,70 +2161,36 @@ class Jarvis:
         conversation: tuple[Turn, ...] = (),
         value: DeliberationValue | None = None,
     ) -> CognitiveEpisode:
-        """Run an episode through the executive and charge its cognitive cost
-        (Vision §15). Every episode-running path goes through here so spent energy
-        reflects all the thinking Jarvis actually did.
-        """
-        depth = self._deliberation_value if value is None else value
-        result = self._executive.run(
-            episode,
-            evidence,
-            conserve=self._should_conserve(),
-            conversation=conversation,
-            value=depth,
-        )
-        self._charge(episode.attention)
-        return result
+        """Run an episode through the executive and charge its cognitive cost."""
+        return _run_episode_fn(self, episode, evidence, conversation, value)
 
     def _charge(self, attention: Attention) -> None:
         """Charge an episode's cognitive cost (Vision §15) and update the budget."""
-        cost = self._energy_costs.for_attention(attention)
-        self._energy_spent += cost
-        if self._energy_budget is not None:
-            self._energy_available = max(0, self._energy_available - cost)
+        return _charge_fn(self, attention)
 
     def _should_conserve(self) -> bool:
         """True when the budget is low enough that a full episode should be avoided."""
-        return (
-            self._energy_budget is not None
-            and self._energy_available < self._energy_costs.full
-        )
+        return _should_conserve_fn(self)
 
     def energy_spent(self) -> int:
-        """Total cognitive energy spent so far (Vision §15) — the accumulated cost of
-        every episode run, FULL costing more than BRIEF. Read-only; zero for a fresh
-        Jarvis. This is the lifetime tally, separate from the recoverable budget.
-        """
-        return self._energy_spent
+        """Total cognitive energy spent so far (Vision §15)."""
+        return _energy_spent_fn(self)
 
     def energy_remaining(self) -> int | None:
-        """Current energy left in the recoverable budget (Vision §15), or None when
-        no budget is set. Depletes as episodes run; restored by :meth:`rest`.
-        """
-        return self._energy_available if self._energy_budget is not None else None
+        """Current energy left in the recoverable budget (Vision §15), or None."""
+        return _energy_remaining_fn(self)
 
     def is_conserving(self) -> bool:
         """True when Jarvis is low enough on energy to answer briefly to conserve."""
-        return self._should_conserve()
+        return _is_conserving_fn(self)
 
     def rest(self) -> None:
-        """Restore energy to full (Vision §15) — this is fatigue, not a hard cap.
-        A no-op when no budget is set.
-        """
-        if self._energy_budget is not None:
-            self._energy_available = self._energy_budget
+        """Restore energy to full (Vision §15)."""
+        return _rest_fn(self)
 
     def set_energy_budget(self, budget: int | None) -> None:
-        """Set (or clear) the recoverable energy budget at runtime (Vision §15, §40).
-
-        The seam a command center tunes to say how hard Jarvis should be willing to
-        think: a smaller budget makes it conserve sooner (answering briefly), a
-        larger one lets it run the full lifecycle for longer, and ``None`` clears the
-        budget so nothing constrains attention. Available energy is refilled to the
-        new budget — this sets capacity, it does not spend or penalise.
-        """
-        self._energy_budget = budget
-        self._energy_available = budget if budget is not None else 0
+        """Set (or clear) the recoverable energy budget at runtime (Vision §15, §40)."""
+        return _set_energy_budget_fn(self, budget)
 
     def deliberation_value(self) -> DeliberationValue:
         """The value Jarvis charges deliberations by default (Vision §15).
@@ -2191,16 +2250,8 @@ class Jarvis:
     def perceive(
         self, observation: str, trigger: str | None = None, goal: Goal | None = None
     ) -> CognitiveEpisode:
-        """Perceive a raw observation and reason over what it yields (Vision §32, §8).
-
-        The observation is turned into evidence by the injected `PerceptionSource`
-        (a dumb rule by default; a smarter perceiver drops in behind the same
-        Protocol without touching the core, Vision §38), then reasoned over exactly
-        like hand-supplied evidence. When the source makes nothing of it, the
-        episode honestly concludes there is insufficient evidence (Vision §37).
-        """
-        evidence = self._perception.perceive(observation)
-        return self.think(trigger or observation, evidence=evidence, goal=goal)
+        """Perceive a raw observation and reason over what it yields (Vision §32, §8)."""
+        return _perceive_fn(self, observation, trigger, goal)
 
     def perceive_all(
         self,
@@ -2208,33 +2259,8 @@ class Jarvis:
         trigger: str | None = None,
         goal: Goal | None = None,
     ) -> CognitiveEpisode:
-        """Perceive a stream of observations and reason over all of it at once
-        (Vision §3, §8): a short exchange grounds one belief from everything it
-        yields, weaker or contradicting lines pulling against stronger ones.
-
-        Each observation is turned into evidence by the `PerceptionSource`; lines it
-        makes nothing of contribute nothing. The trigger defaults to the first
-        observation.
-        """
-        seen = list(observations)
-        evidence = tuple(
-            piece for observation in seen for piece in self._perception.perceive(observation)
-        )
-        resolved = trigger if trigger is not None else (seen[0] if seen else "")
-        return self.think(resolved, evidence=evidence, goal=goal)
-
-    def perceive_all_about_companion(
-        self, trait: str, observations: Iterable[str]
-    ) -> Belief | None:
-        """Perceive a stream of observations about the companion, folding each into
-        the lasting model of them (Vision §5, §3), or None if nothing is perceived.
-        """
-        belief: Belief | None = None
-        for observation in observations:
-            perceived = self.perceive_about_companion(trait, observation)
-            if perceived is not None:
-                belief = perceived
-        return belief
+        """Perceive a stream of observations and reason over all of it at once."""
+        return _perceive_all_fn(self, observations, trigger, goal)
 
     def observe_self(self) -> Belief | None:
         """Look back over past episodes and form a belief about Jarvis's own
@@ -2243,31 +2269,19 @@ class Jarvis:
         The self-belief is grounded in the episode history and revisable like any
         other belief -- it is not a fixed personality trait.
         """
-        return observe_evidence_habit(
-            self.episodes.history(),
-            knobs=self._knobs,
-            policy=self._default_belief_policy,
-        )
+        return _observe_self(self)
 
     def observe_overconfidence(self) -> Belief | None:
         """A belief about whether Jarvis concludes confidently on thin evidence
         (Vision §6, §11), or None if there is too little grounded history.
         """
-        return observe_overconfidence(
-            self.episodes.history(),
-            knobs=self._knobs,
-            policy=self._default_belief_policy,
-        )
+        return _observe_oc(self)
 
     def observe_prediction_accuracy(self) -> Belief | None:
         """A belief about whether Jarvis mispredicts its actions' outcomes
         (Vision §31), or None if it has judged too few kinds of action.
         """
-        return observe_prediction_accuracy(
-            self.actions.all_beliefs(),
-            knobs=self._knobs,
-            policy=self._default_belief_policy,
-        )
+        return _observe_prediction_accuracy(self)
 
     def recurring_goals(self) -> tuple[tuple[str, int], ...]:
         """The goals Jarvis keeps returning to, from its episodic memory
@@ -2293,11 +2307,7 @@ class Jarvis:
         it has learned are not reliably reachable *and* has already turned over to
         exhaustion. Ordered by recurrence (most-returned-to first). Empty when none.
         """
-        return tuple(
-            goal
-            for goal, _ in self.recurring_goals()
-            if self._is_exhausted_stuck_goal(goal)
-        )
+        return _stuck_goals_fn(self)
 
     def ask_for_help(self) -> str | None:
         """A spoken request for help with the most stuck goal, or None if there is
@@ -2307,39 +2317,13 @@ class Jarvis:
         goal it keeps returning to but has not found how to reach, and asks. It only
         asks -- it asserts nothing and takes no action.
         """
-        stuck = self.stuck_goals()
-        if not stuck:
-            return None
-        goal = stuck[0]
-        # The narrower the ask, the more actionable the help: if the stuck whole has
-        # an identifiable blocking part, name it rather than the vague whole (§26).
-        part = self._first_unreached_part(goal)
-        if part is not None:
-            reached, known = self.goal_progress(goal)
-            detail = (
-                f"I keep returning to {goal} — I've reached {reached} of {known} parts "
-                f"but can't get past '{part}'"
-            )
-        else:
-            detail = f"I keep returning to {goal} but haven't found how to reach it"
-        # The relationship shapes the request: if Jarvis has confidently learned
-        # this companion helps when it is stuck, the ask is warmer -- earned from
-        # real evidence, not assumed (Vision §5, §18). Otherwise it stays neutral.
-        helpful = self.companion.belief_about(HELPFUL_COMPANION_TRAIT)
-        if helpful is not None and helpful.confidence.value >= 0.5:
-            return f"You've helped me get unstuck before — {detail}; can you help again?"
-        return f"{detail} on my own — can you help?"
+        return _ask_for_help_fn(self)
 
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition
         (Vision §6): the ones it has enough history to judge.
         """
-        candidates = (
-            self.observe_self(),
-            self.observe_overconfidence(),
-            self.observe_prediction_accuracy(),
-        )
-        return tuple(belief for belief in candidates if belief is not None)
+        return _self_beliefs(self)
 
     def introspect(self) -> str:
         """A plain-language account of who Jarvis is, assembled from real state.
@@ -2349,58 +2333,7 @@ class Jarvis:
         companion, and an honest note about how little it may still know
         (Vision §30, §40). Every line traces to a real belief -- nothing invented.
         """
-        lines = ["This is what I currently understand about myself and my companion."]
-
-        tendencies = [
-            belief for belief in self.self_beliefs() if belief.confidence.value > 0.0
-        ]
-        if tendencies:
-            lines.append("About myself:")
-            for belief in sorted(
-                tendencies, key=lambda b: b.confidence.value, reverse=True
-            ):
-                lines.append("  - " + belief.explain().narrate())
-        else:
-            lines.append(
-                "About myself: I have not yet noticed any consistent tendencies."
-            )
-
-        companion = self.companion.summarise()
-        if companion:
-            lines.append("About my companion:")
-            lines.extend("  - " + line for line in companion)
-        else:
-            lines.append("About my companion: I do not yet know much about them.")
-
-        recurring = self.recurring_goals()
-        if recurring:
-            lines.append("What I keep returning to:")
-            for goal, count in recurring:
-                lines.append(
-                    f"  - {goal} ({count} times)"
-                    f"{self._reachability_note(goal)}{self._progress_note(goal)}"
-                )
-
-        acquired = [
-            capability
-            for capability in self._capabilities.all_capabilities()
-            if capability.status.value == "acquired"
-        ]
-        if acquired:
-            lines.append("What I can now do:")
-            for capability in acquired:
-                lines.append(f"  - {capability.description}")
-
-        episodes = len(self.episodes.history())
-        lines.append(
-            f"This rests on {episodes} past episode(s); everything here is "
-            "provisional and open to revision."
-        )
-        if self.is_conserving():
-            lines.append(
-                "I am low on energy right now, so I am thinking briefly to conserve."
-            )
-        return "\n".join(lines)
+        return _introspect(self)
 
     def state_summary(self) -> StateSummary:
         """A compact, immutable snapshot of everything Jarvis currently holds.
@@ -2408,40 +2341,10 @@ class Jarvis:
         Assembled from the existing read surfaces (episodes, self-model, companion
         model, action learning); every field traces to real state (Vision §21).
         """
-        return StateSummary(
-            episode_count=len(self.episodes.history()),
-            self_tendencies=tuple(
-                (belief.statement, belief.confidence.value)
-                for belief in self.self_beliefs()
-                if belief.confidence.value > 0.0
-            ),
-            companion_traits=tuple(
-                (belief.statement, belief.confidence.value)
-                for belief in self.companion.beliefs()
-            ),
-            learned_actions=tuple(
-                self._summarise_action(belief.statement, belief.confidence.value)
-                for belief in self.actions.all_beliefs()
-            ),
-            recurring_goals=self.recurring_goals(),
-            energy_spent=self._energy_spent,
-            capabilities=tuple(
-                (capability.name, capability.status.value)
-                for capability in self._capabilities.all_capabilities()
-            ),
-            capability_needs=tuple(
-                (statement.removeprefix(_NEED_PREFIX), confidence.value)
-                for statement, confidence in self.capability_needs()
-            ),
-        )
+        return _state_summary(self)
 
     def _summarise_action(self, statement: str, confidence: float) -> LearnedAction:
-        description = self._action_description(statement)
-        return LearnedAction(
-            description=description,
-            confidence=confidence,
-            stance=self.recommend_action_by_description(description).stance,
-        )
+        return _summarise_action_fn(self, statement, confidence)
 
     def feel_curious(self) -> CuriosityImpulse | None:
         """Decide whether any known self-tendency is worth investigating (Vision §16).
@@ -2450,149 +2353,18 @@ class Jarvis:
         confident weakness worth acting on -- a recommendation, not an action, or
         None if nothing is confident enough (Vision §28).
         """
-        by_confidence = sorted(
-            self.self_beliefs(), key=lambda belief: belief.confidence.value, reverse=True
-        )
-        for belief in by_confidence:
-            impulse = wonder(belief)
-            if impulse is not None:
-                return impulse
-
-        # A contested belief about the companion is a valuable unknown to reduce
-        # (Vision §16, §18): the tension itself warrants curiosity, whatever the
-        # exact confidence -- a balanced belief is the most worth resolving.
-        for belief in self.companion.beliefs():
-            explanation = belief.explain()
-            if explanation.supporting and explanation.contradicting:
-                return CuriosityImpulse(
-                    trigger=f"Find out whether my companion really: {belief.statement}",
-                    rationale=(
-                        f'my belief that my companion "{belief.statement}" is contested'
-                    ),
-                    prompted_by_belief_id=belief.id,
-                )
-
-        # A belief Jarvis has reasoned to that is *contested* -- carrying both
-        # supporting and contradicting evidence, e.g. from a mixed thing it perceived
-        # (Vision §18, §32) -- is a live tension worth resolving, just like a contested
-        # companion belief. The belief persists in the beliefs store under its trigger.
-        contested = self._contested_working_belief()
-        if contested is not None:
-            topic = subject_of(contested.statement)
-            return CuriosityImpulse(
-                trigger=f"Resolve the tension in what I concluded about: {topic}",
-                rationale=f'what I concluded about "{topic}" is contested by my evidence',
-                prompted_by_belief_id=contested.id,
-            )
-
-        # An un-mined load-bearing observation is a pattern in the belief web worth
-        # understanding (Vision §16, §31): several beliefs rest on one observation
-        # and Jarvis has not yet reflected it into an insight. Pursuing this impulse
-        # runs the reflective cycle. Prompted by a pattern in memory, not one belief.
-        unmined = self._unmined_load_bearing()
-        if unmined is not None:
-            return CuriosityImpulse(
-                trigger=f"Reflect on why several of my beliefs rest on: {unmined.observation}",
-                rationale=(
-                    f'"{unmined.observation}" underpins {unmined.load} of my beliefs '
-                    "and I have not yet understood why"
-                ),
-                reflect_on=unmined.observation,
-            )
-
-        # A goal Jarvis keeps returning to is worth turning inward on (Vision §26,
-        # §31): once self-reliability and companion tension are quiet, the pattern
-        # in its own purposes becomes the most interesting unknown. Prompted by a
-        # pattern in memory, not a single belief, so no belief id.
-        recurring = self.recurring_goals()
-        if recurring:
-            # Sharpest tension first: a goal it keeps returning to yet has learned
-            # it keeps *failing* to reach is more worth wondering about than one it
-            # already knows it can reach -- but only while it has not already been
-            # turned over to exhaustion (a stuck door worth one more push). `recurring`
-            # is count-ordered, so the first such goal is also the most recurrent.
-            for goal, count in recurring:
-                if self._is_open_stuck_goal(goal):
-                    # If the stuck whole has parts, the honest question is narrower:
-                    # which specific part is blocking it? (Vision §26). The impulse
-                    # still carries the parent goal, so effort accrues to the whole.
-                    part = self._first_unreached_part(goal)
-                    if part is not None:
-                        reached, known = self.goal_progress(goal)
-                        return CuriosityImpulse(
-                            trigger=(
-                                f"I've reached {reached} of {known} parts of {goal}; "
-                                f"why can't I reach '{part}'?"
-                            ),
-                            rationale=(
-                                f'the part "{part}" of goal "{goal}" is still unreached'
-                            ),
-                            goal=goal,
-                        )
-                    return CuriosityImpulse(
-                        trigger=f"Why do I keep returning to {goal} without reaching it?",
-                        rationale=(
-                            f'I have pursued the goal "{goal}" {count} times '
-                            "without reaching it"
-                        ),
-                        goal=goal,
-                    )
-            # Fallback: the most recurrent goal that is not an exhausted stuck goal
-            # (a reachable or as-yet-unjudged recurring purpose still bears wondering).
-            for goal, count in recurring:
-                if not self._is_exhausted_stuck_goal(goal):
-                    return CuriosityImpulse(
-                        trigger=f"Why do I keep returning to: {goal}?",
-                        rationale=f'I have pursued the goal "{goal}" {count} times',
-                        goal=goal,
-                    )
-
-        # A capability Jarvis confidently needs but does not yet have is a growth
-        # worth acting on (Odysseus, Vision §34, §28): the need is *earned* by
-        # evidence, not a random want, so pursuing it acquires a real tool. The
-        # evaluator's SUGGEST stance already encodes "confidently needed, not yet
-        # held", so this reuses the derived recommendation rather than re-deciding.
-        for need_statement, confidence in self.capability_needs():
-            if confidence.value < self._knobs.insight_confidence:
-                continue
-            need = self._needs.get_by_statement(need_statement)
-            for capability in self._capabilities.all_capabilities():
-                if (
-                    recommend_capability(need, capability).stance
-                    is CapabilityStance.SUGGEST
-                ):
-                    subject = need_statement.removeprefix(_NEED_PREFIX)
-                    return CuriosityImpulse(
-                        trigger=f"Acquire the capability to: {subject}",
-                        rationale=(
-                            f'I need "{subject}" (need confidence '
-                            f"{confidence.value:.2f}) and do not have "
-                            f"'{capability.name}' yet"
-                        ),
-                        capability_to_acquire=capability.name,
-                    )
-        return None
+        return _feel_curious_fn(self)
 
     @staticmethod
     def _is_contested(belief: Belief) -> bool:
         """True when a belief carries both supporting and contradicting evidence
-        *and* still leans neither way (confidence below the grounded threshold) --
-        a genuine live tension, not a belief that merely records an old doubt while
-        clearly settled (Vision §18). Strong enough guidance later resolves it.
+        *and* still leans neither way (confidence below the grounded threshold).
         """
-        explanation = belief.explain()
-        return bool(
-            explanation.supporting
-            and explanation.contradicting
-            and belief.confidence.value < 0.5
-        )
+        return _is_contested_fn(belief)
 
     def _contested_working_belief(self) -> Belief | None:
         """A working belief that is a live tension worth resolving (Vision §18)."""
-        for belief in self.beliefs.all_beliefs():
-            if self._is_contested(belief):
-                return belief
-        return None
+        return _contested_working_belief_fn(self)
 
     def ask_about(self, topic: str) -> str | None:
         """Voice an unresolved tension so the companion can settle it (Vision §18,
@@ -2602,16 +2374,7 @@ class Jarvis:
         names both sides it has heard and asks which holds -- it only asks; it
         asserts nothing. Feed the answer back with :meth:`resolve`.
         """
-        belief = self.beliefs.get_by_statement(working_statement(topic))
-        if belief is None or not self._is_contested(belief):
-            return None
-        explanation = belief.explain()
-        for_it = explanation.supporting[0].content
-        against_it = explanation.contradicting[0].content
-        return (
-            f'About "{topic}", I have heard both "{for_it}" and "{against_it}" — '
-            "which is it?"
-        )
+        return _ask_about_fn(self, topic)
 
     def resolve(self, topic: str, guidance: str, supports: bool = True) -> Belief | None:
         """Take the companion's guidance on a contested topic as evidence (Vision §18,
@@ -2622,19 +2385,7 @@ class Jarvis:
         the grounded threshold so it is no longer a live tension. Returns the updated
         working belief.
         """
-        episode = self.think(
-            topic,
-            evidence=[
-                Evidence(
-                    content=guidance,
-                    source=EvidenceSource.USER_STATEMENT,
-                    weight=Confidence(1.0),
-                    supports=supports,
-                    context="companion guidance on a contested topic",
-                )
-            ],
-        )
-        return episode.working_belief
+        return _resolve_fn(self, topic, guidance, supports)
 
     def confirm(self, trigger: str, affirm: bool = True) -> Belief | None:
         """Take the companion's confirmation (or correction) of a reasoned answer as
@@ -2674,189 +2425,52 @@ class Jarvis:
         Purely derived from shared evidence; stores nothing, asserts nothing. This
         is the raw material the reflective cycle's later stages work on.
         """
-        return find_connections(list(self.beliefs.all_beliefs()))
+        return _connections_fn(self)
 
     def related_beliefs(self, trigger: str) -> tuple[Connection, ...]:
         """The connections involving the belief Jarvis holds about ``trigger`` —
         what else it believes that rests on the same evidence (Vision §4).
         """
-        statement = working_statement(trigger)
-        return tuple(
-            connection
-            for connection in self.connections()
-            if connection.involves(statement)
-        )
+        return _related_beliefs_fn(self, trigger)
 
     def reflect(self) -> tuple[Reflection, ...]:
-        """Look across the belief web and notice load-bearing observations — a
-        single piece of evidence that several beliefs rest on (Vision §19, §31),
-        most load-bearing first. Cycle stage two, after Connect.
-
-        A pure read-model: it *notices*, it does not conclude. Empty when no
-        observation grounds more than one belief. Feeds autonomous hypotheses.
-        """
-        return find_reflections(list(self.beliefs.all_beliefs()), self._refutations.all())
+        """Look across the belief web and notice load-bearing observations."""
+        return _reflect_fn(self)
 
     def hypothesise(self) -> HypothesisSet | None:
-        """Brew a hypothesis from reflection (Vision §17, §31), or None when nothing
-        is load-bearing to explain. Cycle stage three, after Reflect.
-
-        Autonomously proposes that the most load-bearing observation may be a common
-        cause of the beliefs resting on it, against the null that it is coincidence —
-        a competing `HypothesisSet` whose confidence is derived, never asserted.
-        """
-        hypotheses = generate_hypotheses(self.reflect())
-        if hypotheses is not None:
-            hypotheses.pull_events()  # read-model: drain without dispatching
-        return hypotheses
+        """Brew a hypothesis from reflection (Vision §17, §31), or None."""
+        return _hypothesise_fn(self)
 
     def challenge(self) -> Challenge | None:
-        """Name what would refute the leading hypothesis (Vision §11, §17, §37), or
-        None when there is no hypothesis to challenge. Cycle stage four.
-
-        Self-adversarial: rather than seek only confirmation, Jarvis states the
-        concrete test — if a belief resting on the observation would still hold
-        without it, the common cause is wrong. It asserts nothing false; :meth:`refute`
-        records a counterexample, which removes that belief from the pattern and can
-        dethrone the hypothesis.
-        """
-        hypotheses = self.hypothesise()
-        if hypotheses is None:
-            return None
-        leading = hypotheses.leading()
-        if leading is None:
-            return None
-        finding = self.reflect()[0]
-        target = finding.beliefs[0]
-        falsifier = (
-            f'if "{target}" would still hold without "{finding.observation}", '
-            "then it is not the common cause after all."
-        )
-        return Challenge(
-            hypothesis=leading.statement,
-            observation=finding.observation,
-            falsifier=falsifier,
-            beliefs=finding.beliefs,
-            confidence=leading.confidence,
-            stability=leading.stability,
-        )
+        """Name what would refute the leading hypothesis (Vision §11, §17, §37)."""
+        return _challenge_fn(self)
 
     def learn_from_reflection(self) -> Belief | None:
-        """Adopt a reflective insight that survived challenge as a belief (Vision §20,
-        §31) — cycle stage five, where the loop closes on itself. Returns the adopted
-        belief, or None when nothing has earned it.
-
-        When `hypothesise()` still leads with a common-cause explanation confidently
-        (i.e. it was not dethroned by `refute`), Jarvis reasons a new belief stating
-        that common cause, grounded in the same evidence. That belief enters the
-        beliefs store like any conclusion — ordinary, derived, revisable — so the
-        next Connect/Reflect can build on it, and it can itself be challenged later.
-        """
-        hypotheses = self.hypothesise()
-        if hypotheses is None:
-            return None
-        leading = hypotheses.leading()
-        if (
-            leading is None
-            or "common cause" not in leading.statement
-            or leading.confidence.value < self._knobs.insight_confidence
-        ):
-            return None
-        finding = self.reflect()[0]
-        evidence = [
-            Evidence(
-                content=f"a belief rests on it: {statement}",
-                source=EvidenceSource.SYSTEM_OBSERVATION,
-                weight=Confidence(1.0),
-            )
-            for statement in finding.beliefs
-        ]
-        return self.think(
-            self._insight_trigger(finding.observation), evidence=evidence
-        ).working_belief
+        """Adopt a reflective insight that survived challenge as a belief."""
+        return _learn_from_reflection_fn(self)
 
     @staticmethod
     def _insight_trigger(observation: str) -> str:
         return f'"{observation}" is a common cause behind several of my beliefs'
 
     def act_on_insight(self) -> ActionRecommendation | None:
-        """Let a learned insight reach behaviour (Vision §27, §28, §31) — cycle stage
-        six, Act. When Jarvis has confidently learned that one observation is a common
-        cause, it proposes a graded action to verify that observation still holds and
-        returns the recommended stance, or None when there is no such insight.
-
-        It only *recommends* — it performs nothing (autonomy is earned, §28). The
-        stance is derived from the existing action machinery; a brand-new action kind
-        is asked-first, and experience with it can later earn a suggestion.
-        """
-        for finding in self.reflect():
-            statement = working_statement(self._insight_trigger(finding.observation))
-            belief = self.beliefs.get_by_statement(statement)
-            if belief is not None and belief.confidence.value >= self._knobs.insight_confidence:
-                action = Action(
-                    description=f'verify that "{finding.observation}" still holds',
-                    expected="the observation is confirmed",
-                    confidence=belief.confidence,
-                    reversible=True,
-                )
-                return self.recommend_action(action)
-        return None
+        """Let a learned insight reach behaviour (Vision §27, §28, §31)."""
+        return _act_on_insight_fn(self)
 
     def reflect_cycle(self) -> ReflectiveCycle:
-        """Run the whole reflective cycle once and report what it produced (Vision
-        §31): Connect → Reflect → Hypothesise → Challenge → Learn → Act → Scout
-        (Odysseus), end to end.
-
-        One honest action for "think about what I know" -- it *calls* the existing
-        stage methods in order (it does not re-implement them), and returns a
-        summary of each stage's result, empty where nothing was load-bearing. Note
-        it is not purely a read-model: the Learn stage adopts a surviving insight as
-        a belief. Act runs *after* Learn so the just-learned insight is the one it
-        acts on, and it only *recommends* (autonomy is earned, §28). After the
-        reflective stages, Jarvis notices what it keeps failing to answer and
-        auto-scouts capability gaps, so growth is self-initiated (Vision §34). This
-        is the seam a future autonomous trigger will call.
-        """
-        connections = self.connections()
-        reflections = self.reflect()
-        reflection = reflections[0] if reflections else None
-        hypotheses = self.hypothesise()
-        leading = hypotheses.leading() if hypotheses is not None else None
-        challenge = self.challenge()
-        learned = self.learn_from_reflection()
-        action = self.act_on_insight()
-        capability_proposals = tuple(
-            cap.name for cap in self.auto_scout_gaps()
-        )
-        return ReflectiveCycle(
-            connections=connections,
-            reflection=reflection,
-            hypothesis=leading.statement if leading is not None else None,
-            challenge=challenge,
-            learned=learned.statement if learned is not None else None,
-            action=action,
-            capability_proposals=capability_proposals,
-        )
+        """Run the whole reflective cycle once and report what it produced."""
+        return _reflect_cycle_fn(self)
 
     def _unmined_load_bearing(self) -> Reflection | None:
         """The top load-bearing observation not yet turned into a learned insight."""
-        for finding in self.reflect():
-            if not self._already_mined(finding.observation):
-                return finding
-        return None
+        return _unmined_load_bearing_fn(self)
 
     def _already_mined(self, observation: str) -> bool:
-        marker = f'"{observation}" is a common cause'
-        return any(marker in belief.statement for belief in self.beliefs.all_beliefs())
+        return _already_mined_fn(self, observation)
 
     def refute(self, observation: str, belief_statement: str) -> None:
-        """Record that a belief would hold *without* an observation (Vision §17, §37):
-        a counterexample answering :meth:`challenge`. The belief no longer rests on
-        the observation, weakening — and, when enough are refuted, dethroning — the
-        common-cause hypothesis. Derived, revisable; changes nothing about the belief
-        itself, only that it no longer counts toward this pattern.
-        """
-        self._refutations.add(observation, belief_statement)
+        """Record that a belief would hold *without* an observation."""
+        return _refute_fn(self, observation, belief_statement)
 
     def pursue(self, impulse: CuriosityImpulse) -> CognitiveEpisode:
         """Run a self-triggered episode for a curiosity impulse (Vision §16, §31).
@@ -2870,15 +2484,7 @@ class Jarvis:
         first (Increment 80) -- so Jarvis pursuing curiosity actually thinks about
         what it knows.
         """
-        if impulse.reflect_on is not None:
-            self.reflect_cycle()
-        if impulse.capability_to_acquire is not None:
-            self.acquire_capability(impulse.capability_to_acquire)
-        goal = Goal(statement=impulse.goal) if impulse.goal is not None else None
-        episode = CognitiveEpisode(
-            trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY, goal=goal
-        )
-        return self._run(episode)
+        return _pursue_fn(self, impulse)
 
     def consider(
         self,
@@ -2886,21 +2492,8 @@ class Jarvis:
         options: Mapping[str, Sequence[Evidence]],
         value: DeliberationValue | None = None,
     ) -> Deliberation:
-        """Weigh competing explanations for ``observation`` (Vision §17).
-
-        ``options`` maps each candidate explanation to the evidence bearing on it.
-        ``value`` (Vision §15) is how much this weighing is worth; it routes the
-        attention the deliberation is charged (``CHEAP`` answers briefly, ``HIGH``
-        keeps the full weighing even low on energy). When ``None``, the stance set
-        via :meth:`set_deliberation_value` applies (``NORMAL``). Runs as a
-        first-class deliberation episode (recorded and traceable) and returns the
-        ranking plus the leading explanation -- or, when the top two are tied, no
-        leader and a request for evidence that would decide.
-        """
-        depth = self._deliberation_value if value is None else value
-        deliberation = self._executive.deliberate(observation, options, value=depth)
-        self._charge(deliberation.attention)
-        return deliberation
+        """Weigh competing explanations for ``observation`` (Vision §17)."""
+        return _consider_fn(self, observation, options, value)
 
     def trace_of(self, episode: CognitiveEpisode) -> tuple[CognitiveEvent, ...]:
         """The ordered cognitive events of ``episode`` -- its decision provenance
@@ -2927,12 +2520,7 @@ class Jarvis:
         This only *records* the intention -- it performs nothing in the world.
         Close the loop later with :meth:`record_outcome`.
         """
-        return Action(
-            description=description,
-            expected=expected,
-            confidence=confidence or Confidence(0.5),
-            reversible=reversible,
-        )
+        return _act(description, expected, confidence=confidence, reversible=reversible)
 
     def record_outcome(
         self, action: Action, actual: str, met_expectation: bool
@@ -2942,36 +2530,11 @@ class Jarvis:
         The outcome becomes evidence for a belief about actions of this kind, so
         repeated matches build confidence and repeated mismatches erode it.
         """
-        statement = self._action_statement(action.description)
-        belief = self.actions.get_by_statement(statement) or self._fresh_belief(statement)
-        belief.add_evidence(
-            Evidence(
-                content=(
-                    f"acted '{action.description}': expected '{action.expected}', "
-                    f"got '{actual}'"
-                ),
-                source=EvidenceSource.ACTION_OUTCOME,
-                weight=Confidence(1.0),
-                supports=met_expectation,
-            )
-        )
-        self.actions.save(belief)
-        self._remember_reversibility(action)
-        for event in belief.pull_events():
-            self.nervous_system.publish(event)
-        self.nervous_system.publish(
-            ActionOutcomeRecorded(
-                action_id=action.id,
-                description=action.description,
-                met_expectation=met_expectation,
-            )
-        )
-        self.nervous_system.dispatch()
-        return belief
+        return _record_outcome_fn(self, action, actual, met_expectation)
 
     def belief_about_action(self, description: str) -> Belief | None:
         """What Jarvis believes about how actions of this kind turn out."""
-        return self.actions.get_by_statement(self._action_statement(description))
+        return _belief_about_action_fn(self, description)
 
     def mark_goal_reached(self, goal: Goal, reached: bool = True) -> Belief:
         """Record that a goal was (or was not) reached, and learn from it (Vision §26, §27).
@@ -2983,211 +2546,46 @@ class Jarvis:
         action-outcome learning). Reaching it also supplies the criterion, if any,
         as context.
         """
-        statement = self._goal_statement(goal.statement)
-        belief = self._goals.get_by_statement(statement) or self._fresh_belief(statement)
-        outcome = "reached" if reached else "not reached"
-        belief.add_evidence(
-            Evidence(
-                content=f"goal '{goal.statement}' was {outcome}",
-                source=EvidenceSource.ACTION_OUTCOME,
-                weight=Confidence(1.0),
-                supports=reached,
-                context=goal.success_criterion,
-            )
-        )
-        self._goals.save(belief)
-        for event in belief.pull_events():
-            self.nervous_system.publish(event)
-        self.nervous_system.dispatch()
-
-        # Progress on a part is honest evidence about the whole (Vision §12, §26):
-        # reaching a sub-goal credits its parent's reachability -- but softly (a
-        # DIRECT_OBSERVATION, weaker than reaching the whole directly), and the
-        # parent is never "done" because a child is; its reachability stays derived.
-        if goal.part_of is not None:
-            self._credit_parent(goal.part_of, goal.statement, reached)
-        return belief
-
-    def _credit_parent(self, parent: str, child: str, reached: bool) -> None:
-        statement = self._goal_statement(parent)
-        belief = self._goals.get_by_statement(statement) or self._fresh_belief(statement)
-        outcome = "reached" if reached else "not reached"
-        belief.add_evidence(
-            Evidence(
-                content=f"its part '{child}' was {outcome}",
-                source=EvidenceSource.DIRECT_OBSERVATION,
-                weight=Confidence(1.0),
-                supports=reached,
-            )
-        )
-        self._goals.save(belief)
-        for event in belief.pull_events():
-            self.nervous_system.publish(event)
-        self.nervous_system.dispatch()
-        self._record_subgoal_link(parent, child, reached)
-
-    def _record_subgoal_link(self, parent: str, child: str, reached: bool) -> None:
-        """Make the parent→child structure queryable (Vision §26). A bookkeeping
-        belief per link; its own confidence is unused -- what matters is the set of
-        known children and which have been reached at least once.
-        """
-        statement = self._subgoal_statement(parent, child)
-        belief = self._subgoals.get_by_statement(statement) or self._fresh_belief(statement)
-        outcome = "reached" if reached else "not reached"
-        belief.add_evidence(
-            Evidence(
-                content=f"'{child}' was {outcome}",
-                source=EvidenceSource.DIRECT_OBSERVATION,
-                weight=Confidence(1.0),
-                supports=reached,
-            )
-        )
-        belief.pull_events()  # bookkeeping link -- events are not dispatched
-        self._subgoals.save(belief)
-
-    @staticmethod
-    def _subgoal_statement(parent: str, child: str) -> str:
-        return f"The goal '{child}' is a part of '{parent}'"
+        return _mark_goal_reached_fn(self, goal, reached)
 
     def sub_goals(self, parent: str) -> tuple[str, ...]:
         """The parts recorded for ``parent`` (Vision §26), in the order first seen."""
-        prefix = "The goal '"
-        suffix = f"' is a part of '{parent}'"
-        return tuple(
-            belief.statement[len(prefix) : -len(suffix)]
-            for belief in self._subgoals.all_beliefs()
-            if belief.statement.endswith(suffix)
-        )
+        return _sub_goals_fn(self, parent)
 
     def _first_unreached_part(self, parent: str) -> str | None:
-        """The first recorded part of ``parent`` never yet reached, or None.
-
-        Consistent with :meth:`goal_progress`: a part counts as reached once it has
-        any supporting evidence, so an unreached part is one with none.
-        """
-        prefix = "The goal '"
-        suffix = f"' is a part of '{parent}'"
-        for belief in self._subgoals.all_beliefs():
-            if belief.statement.endswith(suffix) and not belief.explain().supporting:
-                return belief.statement[len(prefix) : -len(suffix)]
-        return None
+        """The first recorded part of ``parent`` never yet reached, or None."""
+        from jarvis.goals import _first_unreached_part as _fun
+        return _fun(self, parent)
 
     def goal_progress(self, parent: str) -> tuple[int, int]:
         """How far along a decomposed goal is, as ``(parts reached, parts known)``
-        (Vision §26, §30). A part counts as reached once it has been reached at
-        least once; truthful about partials -- it is not progress toward "done",
-        just a count over recorded structure.
+        (Vision §26, §30).
         """
-        suffix = f"' is a part of '{parent}'"
-        children = [
-            belief
-            for belief in self._subgoals.all_beliefs()
-            if belief.statement.endswith(suffix)
-        ]
-        reached = sum(1 for belief in children if belief.explain().supporting)
-        return (reached, len(children))
+        return _goal_progress_fn(self, parent)
 
     def receive_help(self, goal: Goal, helpful: bool = True) -> Belief:
-        """Take in the companion's guidance on a goal and learn from it (Vision §18, §26).
-
-        Closes the ask→answer→learn loop opened by :meth:`ask_for_help`: the
-        companion's guidance becomes strong-provenance evidence (a `USER_STATEMENT`,
-        the highest source weight) on the goal's reachability belief. Genuinely
-        helpful guidance can, over time, lift a goal Jarvis had given up on above
-        the reachable threshold and so clear the suppression. Help is *evidence*,
-        not a guarantee: an unhelpful answer contradicts, and reachability stays
-        derived, never set.
-        """
-        statement = self._goal_statement(goal.statement)
-        belief = self._goals.get_by_statement(statement) or self._fresh_belief(statement)
-        outcome = "helped" if helpful else "did not help"
-        belief.add_evidence(
-            Evidence(
-                content=f"the companion's guidance on '{goal.statement}' {outcome}",
-                source=EvidenceSource.USER_STATEMENT,
-                weight=Confidence(1.0),
-                supports=helpful,
-                context=goal.success_criterion,
-            )
-        )
-        self._goals.save(belief)
-        for event in belief.pull_events():
-            self.nervous_system.publish(event)
-        self.nervous_system.dispatch()
-
-        # The same act says something about the companion, not only the goal: help
-        # that worked is evidence they are helpful when Jarvis is stuck (Vision §5,
-        # §20). A distinct, revisable belief about the companion -- provenance-
-        # grounded relationship learning, not programmed gratitude. Unhelpful
-        # guidance contradicts it, exactly as any companion contradiction does.
-        self._record_companion(
-            HELPFUL_COMPANION_TRAIT,
-            Evidence(
-                content=f"the companion's guidance on '{goal.statement}' {outcome}",
-                source=EvidenceSource.USER_STATEMENT,
-                weight=Confidence(1.0),
-                supports=helpful,
-            ),
-        )
-
-        # If the ask named a specific blocking part (Increment 60), helpful guidance
-        # got Jarvis past *that* part: credit the part directly (Vision §26), so it
-        # stops being the unreached blocker. Only on real help, and only the one
-        # part that was actually named -- nothing is asserted "done".
-        if helpful:
-            part = self._first_unreached_part(goal.statement)
-            if part is not None:
-                self._credit_helped_part(goal.statement, part)
-        return belief
-
-    def _credit_helped_part(self, parent: str, part: str) -> None:
-        statement = self._goal_statement(part)
-        belief = self._goals.get_by_statement(statement) or self._fresh_belief(statement)
-        belief.add_evidence(
-            Evidence(
-                content=f"the companion's guidance helped reach the part '{part}'",
-                source=EvidenceSource.USER_STATEMENT,
-                weight=Confidence(1.0),
-                supports=True,
-            )
-        )
-        self._goals.save(belief)
-        for event in belief.pull_events():
-            self.nervous_system.publish(event)
-        self.nervous_system.dispatch()
-        # The link now counts as reached, so goal_progress advances and the part is
-        # no longer the blocker curiosity/ask fixate on.
-        self._record_subgoal_link(parent, part, True)
+        """Take in the companion's guidance on a goal and learn from it (Vision §18, §26)."""
+        return _receive_help_fn(self, goal, helpful)
 
     def belief_about_goal(self, goal: Goal | str) -> Belief | None:
-        """What Jarvis has learned about whether a goal of this kind is reachable,
-        or None if it has never been told an outcome for it (Vision §26).
-        """
-        statement = goal.statement if isinstance(goal, Goal) else goal
-        return self._goals.get_by_statement(self._goal_statement(statement))
+        """What Jarvis has learned about whether a goal of this kind is reachable (Vision §26)."""
+        return _belief_about_goal_fn(self, goal)
 
     @staticmethod
     def _goal_statement(goal_statement: str) -> str:
-        return f"The goal '{goal_statement}' is reachable"
+        return _goal_statement_fn(goal_statement)
 
     def _is_stuck_goal(self, goal_statement: str) -> bool:
         """True when Jarvis has *learned* this goal is not reliably reachable."""
-        belief = self.belief_about_goal(goal_statement)
-        return belief is not None and belief.confidence.value < 0.5
+        return _is_stuck_goal_fn(self, goal_statement)
 
     def _is_open_stuck_goal(self, goal_statement: str) -> bool:
-        """A stuck goal still worth wondering about: not yet turned over to exhaustion."""
-        return (
-            self._is_stuck_goal(goal_statement)
-            and self.reflection_effort(goal_statement) < self._knobs.max_goal_reflections
-        )
+        """A stuck goal still worth wondering about."""
+        return _is_open_stuck_goal_fn(self, goal_statement)
 
     def _is_exhausted_stuck_goal(self, goal_statement: str) -> bool:
-        """A stuck goal wondered about enough for now (suppressed until something changes)."""
-        return (
-            self._is_stuck_goal(goal_statement)
-            and self.reflection_effort(goal_statement) >= self._knobs.max_goal_reflections
-        )
+        """A stuck goal wondered about enough for now."""
+        return _is_exhausted_stuck_goal_fn(self, goal_statement)
 
     def _reachability_note(self, goal_statement: str) -> str:
         """A truthful annotation of what Jarvis has learned about reaching a goal.
@@ -3196,25 +2594,13 @@ class Jarvis:
         reachability from the derived confidence -- never asserting more than the
         evidence supports (mirrors the grounded threshold, D14).
         """
-        belief = self.belief_about_goal(goal_statement)
-        if belief is None:
-            return ""
-        confidence = belief.confidence.value
-        if confidence >= 0.5:
-            return f" — I have learned I can reach this (confidence {confidence:.2f})"
-        note = f" — I have not reliably reached this yet (confidence {confidence:.2f})"
-        effort = self.reflection_effort(goal_statement)
-        if effort > 0:
-            times = "time" if effort == 1 else "times"
-            note += f", and have turned it over {effort} {times}"
-        return note
+        from jarvis.introspection import _reachability_note as _fun
+        return _fun(self, goal_statement)
 
     def _progress_note(self, goal_statement: str) -> str:
         """A truthful annotation of how many of a goal's known parts are reached."""
-        reached, known = self.goal_progress(goal_statement)
-        if known == 0:
-            return ""
-        return f" ({reached} of {known} parts reached)"
+        from jarvis.introspection import _progress_note as _fun
+        return _fun(self, goal_statement)
 
     def recommend_action_by_description(self, description: str) -> ActionRecommendation:
         """Recommend a stance for a *remembered* kind of action (Vision §28).
@@ -3224,36 +2610,17 @@ class Jarvis:
         the stance survives a restart. Reversibility unknown is treated
         conservatively (not reversible → ask first).
         """
-        outcome = self.belief_about_action(description)
-        reversible = self._believed_reversible(description)
-        return recommend_stance(outcome, reversible=reversible)
+        return _recommend_action_by_description_fn(self, description)
 
     def _remember_reversibility(self, action: Action) -> None:
-        statement = self._reversibility_statement(action.description)
-        belief = self._reversibility.get_by_statement(statement) or self._fresh_belief(
-            statement
-        )
-        manner = "reversibly" if action.reversible else "irreversibly"
-        belief.add_evidence(
-            Evidence(
-                content=f"acted '{action.description}' ({manner})",
-                source=EvidenceSource.ACTION_OUTCOME,
-                weight=Confidence(1.0),
-                supports=action.reversible,
-            )
-        )
-        belief.pull_events()  # bookkeeping belief -- its events are not dispatched
-        self._reversibility.save(belief)
+        _remember_reversibility_fn(self, action)
 
     def _believed_reversible(self, description: str) -> bool:
-        belief = self._reversibility.get_by_statement(
-            self._reversibility_statement(description)
-        )
-        return belief is not None and belief.confidence.value >= 0.5
+        return _believed_reversible_fn(self, description)
 
     @staticmethod
     def _reversibility_statement(description: str) -> str:
-        return f"The action '{description}' is reversible"
+        return _reversibility_statement_fn(description)
 
     def recommend_action(self, action: Action) -> ActionRecommendation:
         """Recommend a stance toward ``action`` from experience (Vision §28).
@@ -3262,27 +2629,22 @@ class Jarvis:
         unproven or irreversible; withholds one the record contradicts. It only
         recommends -- it performs nothing (autonomy is earned).
         """
-        belief = self.belief_about_action(action.description)
-        return recommend_stance(belief, reversible=action.reversible)
+        return _recommend_action_fn(self, action)
 
     @staticmethod
     def _action_statement(description: str) -> str:
-        return f"My predictions about the action '{description}' hold"
+        return _action_statement_fn(description)
 
     @staticmethod
     def _action_description(statement: str) -> str:
-        # Exact inverse of _action_statement (a controlled template, not free text).
-        return statement.removeprefix(
-            "My predictions about the action '"
-        ).removesuffix("' hold")
+        return _action_description_fn(statement)
 
     def observe_companion(self, trait: str, evidence: Evidence) -> Belief:
         """Record an observation about the companion and evolve Jarvis's model of
         them (Vision §5). Returns the (revisable) belief; its events flow through
         the nervous system.
         """
-        belief, _ = self._record_companion(trait, evidence)
-        return belief
+        return _observe_companion_fn(self, trait, evidence)
 
     def perceive_about_companion(self, trait: str, observation: str) -> Belief | None:
         """Perceive an observation about the companion and let it shape the lasting
@@ -3294,10 +2656,15 @@ class Jarvis:
         and a perceived denial contradicts it, exactly like hand-built evidence. An
         observation the source makes nothing of leaves the model untouched (§37).
         """
-        belief: Belief | None = None
-        for piece in self._perception.perceive(observation):
-            belief = self.observe_companion(trait, piece)
-        return belief
+        return _perceive_about_companion_fn(self, trait, observation)
+
+    def perceive_all_about_companion(
+        self, trait: str, observations: Iterable[str]
+    ) -> Belief | None:
+        """Perceive a stream of observations about the companion, folding each into
+        the lasting model of them (Vision §5, §3), or None if nothing is perceived.
+        """
+        return _perceive_all_about_companion_fn(self, trait, observations)
 
     def acknowledge_companion(self, trait: str, evidence: Evidence) -> str:
         """Record an observation and acknowledge it in conversation (Vision §18).
@@ -3306,22 +2673,10 @@ class Jarvis:
         so plainly -- the person has contradicted its model, and it holds the
         belief less firmly now. A first or consistent observation is just noted.
         """
-        _, contradicted = self._record_companion(trait, evidence)
-        if contradicted:
-            return (
-                f'You have contradicted what I believed about "{trait}". '
-                "I may be wrong, so I am holding it less firmly now."
-            )
-        return f'Noted about "{trait}".'
+        return _acknowledge_companion_fn(self, trait, evidence)
 
     def _record_companion(self, trait: str, evidence: Evidence) -> tuple[Belief, bool]:
-        belief = self.companion.observe(trait, evidence)
-        events = self.companion.pull_events()
-        contradicted = any(isinstance(event, ContradictionDetected) for event in events)
-        for event in events:
-            self.nervous_system.publish(event)
-        self.nervous_system.dispatch()
-        return belief, contradicted
+        return _record_companion_fn(self, trait, evidence)
 
     def explain_companion(self, trait: str) -> str:
         """Explain *why* Jarvis believes ``trait`` about its companion (Vision §5, §8).
@@ -3330,7 +2685,4 @@ class Jarvis:
         it, its confidence, and, when contested, an honest "I may be wrong". If no
         such belief is held yet, says so plainly (Vision §37).
         """
-        belief = self.companion.belief_about(trait)
-        if belief is None:
-            return f'I don\'t hold a view on "{trait}" about my companion yet.'
-        return belief.explain().narrate()
+        return _explain_companion_fn(self, trait)
