@@ -10,6 +10,7 @@ exercised directly.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -80,8 +81,8 @@ class TestLocalDocumentStore:
         io = _FakeIO()
         store = LocalDocumentStore(Path("C:\\jarvis-docs"), io=io)
         for evil in (
-            "..\\secret.txt",
-            "a\\..\\b.txt",
+            os.path.join("..", "secret.txt"),
+            os.path.join("a", "..", "b.txt"),
             "a/../b.txt",
             "/etc/passwd",
             "C:\\important.txt",
@@ -139,7 +140,7 @@ class TestLocalDocumentStoreOnRealDisk:
 
     def test_real_disk_rejects_escaping_names(self, tmp_path: Path) -> None:
         store = LocalDocumentStore(tmp_path)
-        for evil in ("..\\secret.txt", "a/../b.txt", "/etc/passwd"):
+        for evil in (os.path.join("..", "secret.txt"), "a/../b.txt", "/etc/passwd"):
             try:
                 store.write_document(evil, b"x")
             except ValueError:

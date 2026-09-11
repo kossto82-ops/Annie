@@ -8,6 +8,7 @@ it is exercised directly here. The socket in `server.py` only moves these bytes.
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
@@ -1587,7 +1588,7 @@ class TestDocumentsCommand:
 
     def test_save_rejects_a_folder_that_escapes_the_sandbox(self) -> None:
         jarvis = _documents_able_jarvis()
-        for evil in ("..\\docs", "a/../b", "/abs", "C:\\docs"):
+        for evil in (os.path.join("..", "docs"), "a/../b", "/abs", "C:\\docs"):
             result = handle(jarvis, "documents", {
                 "action": "save", "name": "api.md", "path": evil, "content": "x",
             })

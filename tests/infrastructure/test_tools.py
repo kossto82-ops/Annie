@@ -7,6 +7,7 @@ argument validation are all exercised directly.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from jarvis.domain.enums.permission_level import PermissionLevel
@@ -113,7 +114,7 @@ class TestFileSystemTool:
         result = tool.run(
             {
                 "operation": "read",
-                "path": "..\\..\\evil.txt",
+                "path": os.path.join("..", "..", "evil.txt"),
             }
         )
         assert result.ok is False
