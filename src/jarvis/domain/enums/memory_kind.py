@@ -24,3 +24,4 @@ class MemoryKind(Enum):
     GOAL = "goal"  # a goal's learned reachability
     DOCUMENT = "document"  # a stored document shared by the companion
     SEMANTIC = "semantic"  # a pattern or abstraction derived from multiple sources
+    CONVERSATION = "conversation"  # a past conversation turn
