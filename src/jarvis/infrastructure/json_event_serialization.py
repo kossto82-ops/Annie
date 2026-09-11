@@ -33,6 +33,7 @@ from jarvis.domain.events.episode_events import (
 )
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.events.hypothesis_events import HypothesisCreated
+from jarvis.domain.events.semantic_events import SemanticMemoryContested, SemanticMemoryReinforced
 from jarvis.domain.events.tool_events import ToolCallRecorded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.tool_call import ToolCall
@@ -51,6 +52,8 @@ _EXTRA_FIELDS: dict[type[CognitiveEvent], tuple[str, ...]] = {
     HypothesisCreated: ("hypothesis_id", "statement"),
     ActionOutcomeRecorded: ("action_id", "description", "met_expectation"),
     ToolCallRecorded: ("call",),
+    SemanticMemoryReinforced: ("memory_id", "pattern", "evidence_content"),
+    SemanticMemoryContested: ("memory_id", "pattern", "evidence_content"),
 }
 
 _BY_NAME: dict[str, type[CognitiveEvent]] = {cls.__name__: cls for cls in _EXTRA_FIELDS}

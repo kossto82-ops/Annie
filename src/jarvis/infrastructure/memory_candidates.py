@@ -1,16 +1,17 @@
 """Shared candidate gathering for memory retrievers (Vision §3).
 
 Every retriever ranks the *same* set of remembered items -- world beliefs, episodes,
-companion traits, goals -- and only the *scoring* differs (surface tokens vs. meaning).
-So gathering them, and the rules for what is recallable, live here once: match a belief
-by the words that formed it (its evidence), not only its statement; and never surface a
-past *question* as if it were knowledge. Keeping this shared keeps the lexical and the
-embedding retriever in lockstep.
+companion traits, goals, semantic patterns -- and only the *scoring* differs (surface
+tokens vs. meaning).  So gathering them, and the rules for what is recallable, live
+here once: match a belief by the words that formed it (its evidence), not only its
+statement; and never surface a past *question* as if it were knowledge. Keeping this
+shared keeps the lexical and the embedding retriever in lockstep.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.entities.belief import Belief
@@ -18,6 +19,11 @@ from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.executive.executive_controller import subject_of
+
+if TYPE_CHECKING:
+    from jarvis.domain.repositories.semantic_memory_repository import (
+        SemanticMemoryRepository,
+    )
 
 _GOAL_PREFIX = "The goal '"
 _GOAL_SUFFIX = "' is reachable"
@@ -49,6 +55,7 @@ def gather_candidates(
     episodes: EpisodeRepository,
     companion: CompanionModel,
     goals: BeliefRepository,
+    semantic_memories: SemanticMemoryRepository | None = None,
 ) -> Iterator[Candidate]:
     """Every memory that could match, as (match_text, content, kind, note, conf).
 
@@ -98,3 +105,12 @@ def gather_candidates(
             "goal",
             belief.confidence.value,
         )
+    if semantic_memories is not None:
+        for memory in semantic_memories.all_memories():
+            yield (
+                memory.pattern,
+                memory.pattern,
+                MemoryKind.SEMANTIC,
+                "semantic pattern",
+                memory.confidence.value,
+            )

@@ -24,6 +24,7 @@ from jarvis.domain.events.episode_events import (
 )
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.events.hypothesis_events import HypothesisCreated
+from jarvis.domain.events.semantic_events import SemanticMemoryContested, SemanticMemoryReinforced
 from jarvis.domain.events.tool_events import ToolCallRecorded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.tool_call import ToolCall
@@ -80,6 +81,18 @@ _SAMPLES: list[CognitiveEvent] = [
             permission=PermissionLevel.EXECUTE,
             ok=True,
         ),
+    ),
+    SemanticMemoryReinforced(
+        correlation_id="e",
+        memory_id="m",
+        pattern="Los patrones relacionados con: test",
+        evidence_content="evidence text",
+    ),
+    SemanticMemoryContested(
+        correlation_id="e",
+        memory_id="m",
+        pattern="Los patrones relacionados con: test",
+        evidence_content="contradictory evidence",
     ),
 ]
 

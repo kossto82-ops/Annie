@@ -23,3 +23,4 @@ class MemoryKind(Enum):
     COMPANION_TRAIT = "companion_trait"  # something believed about the companion
     GOAL = "goal"  # a goal's learned reachability
     DOCUMENT = "document"  # a stored document shared by the companion
+    SEMANTIC = "semantic"  # a pattern or abstraction derived from multiple sources
