@@ -3661,27 +3661,33 @@ async function loadGoogleStatus() {
 }
 async function googleConnect() {
   const out = $("calGoogleOut");
-  const data = await api("google_calendar", {
-    action: "auth",
-    client_id: $("calGoogleId").value.trim(),
-    client_secret: $("calGoogleSecret").value,
-  });
+  let data;
+  try {
+    data = await api("google_calendar", {
+      action: "auth",
+      client_id: $("calGoogleId").value.trim(),
+      client_secret: $("calGoogleSecret").value,
+    });
+  } catch (e) {
+    out.textContent = "Error de red: " + e.message;
+    return;
+  }
   $("calGoogleSecret").value = "";
   if (data.error) { out.textContent = "No pude iniciar: " + data.error; return; }
   if (data.redirect_uri) $("calGoogleRedirect").textContent = data.redirect_uri;
-  if (data.error) { out.textContent = "No pude iniciar: " + data.error; return; }
   const url = data.authorize_url || "";
   if (!url) { out.textContent = data.reply || "(sin URL)"; return; }
   out.innerHTML = "";
   const a = document.createElement("a");
   a.href = url; a.target = "_blank"; a.rel = "noopener";
-  a.textContent = "Autorizar en Google (abre pestaña)";
+  a.textContent = "Abrir ventana de autorizacion de Google";
+  a.style.cssText = "display:inline-block;padding:12px 24px;margin:8px 0;background:#4285f4;color:#fff;text-decoration:none;border-radius:6px;font-size:15px;";
   out.appendChild(a);
   const hint = document.createElement("div");
-  hint.textContent = "Tras autorizar, pega aquí el código si el callback no volvió solo.";
+  hint.textContent = "Tras autorizar, el callback te redirigira automaticamente. Si no, pega el codigo manualmente.";
+  hint.style.cssText = "margin-top:8px;color:#888;font-size:13px;";
   out.appendChild(hint);
   $("calGoogleCodeRow").style.display = "";
-  window.open(url, "_blank", "noopener");
   if (data.state) renderState(data.state);
 }
 async function googleComplete() {
