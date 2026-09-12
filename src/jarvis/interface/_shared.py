@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from jarvis.domain.entities.belief import Belief
-from jarvis.domain.enums.capability_status import CapabilityStatus
-from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.executive.executive_controller import subject_of
 from jarvis.jarvis import Jarvis

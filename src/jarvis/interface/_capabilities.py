@@ -5,12 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from jarvis.domain.enums.capability_status import CapabilityStatus
-from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
+from jarvis.interface._shared import _ready_marker
 from jarvis.jarvis import Jarvis
-
-from jarvis.interface._shared import _capability_not_ready, _ready_marker
 
 if TYPE_CHECKING:
     pass

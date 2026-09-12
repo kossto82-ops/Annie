@@ -219,7 +219,8 @@ class AgentReachSource:
         try:
             doctor_mod: Any = importlib.import_module("agent_reach.doctor")
             config_mod: Any = importlib.import_module("agent_reach.config")
-        except (ImportError, ModuleNotFoundError):  # pragma: no cover - agent-reach package is optional
+        except (ImportError, ModuleNotFoundError):
+            # agent-reach package is optional
             return tuple(statuses)
         config_cls: Any = config_mod.Config
         config = self._config or config_cls()

@@ -17,17 +17,16 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.response_renderer import uses_spanish
-from jarvis.jarvis import Jarvis
-
 from jarvis.interface._shared import (
     _AFFIRM,
     _CONFIRMATION_FILLER,
     _DENY,
     _MAX_CONFIRMATION_WORDS,
     _companion_name,
-    _provider_error,
     _provenance,
+    _provider_error,
 )
+from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
     pass

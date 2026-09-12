@@ -14,14 +14,12 @@ from jarvis.infrastructure.perceiver_factory import (
     describe,
     saved_models,
 )
-from jarvis.jarvis import Jarvis
-
 from jarvis.interface._shared import (
     _OFFLINE_PERCEIVERS,
     _companion_name,
-    _ready_marker,
     _recall_block,
 )
+from jarvis.jarvis import Jarvis
 
 # A reply the UI can render and (optionally) speak; some commands add extra fields.
 Reply = dict[str, object]

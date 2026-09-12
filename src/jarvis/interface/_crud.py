@@ -8,13 +8,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.value_objects.capability import Capability
-from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.infrastructure import google_calendar, llm_config_store
-from jarvis.jarvis import Jarvis
-
 from jarvis.interface._shared import _capability_not_ready
+from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
     pass

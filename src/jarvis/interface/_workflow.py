@@ -155,7 +155,7 @@ def _workflow(jarvis: Jarvis, payload: Reply) -> Reply:
     Steps run in order and stop on the first error (later steps read as
     omitted); the final reply joins every step's real outcome under headers.
     """
-    from jarvis.interface.command_center import _COMMANDS, handle
+    from jarvis.interface.command_center import _COMMANDS
 
     action = str(payload.get("action", "")).strip().lower()
     if not action:

@@ -22,47 +22,45 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from jarvis.jarvis import Jarvis
-
-from jarvis.interface._state import snapshot
-from jarvis.interface._conversation import _say, stream_say, StreamEvent
-from jarvis.interface._cognition import (
-    _explain,
-    _reflect,
-    _introspect,
-    _wonder,
-    _rest,
-    _energy_budget,
-    _deliberation,
-    _tunables,
-    _learn,
-    _greeting,
-    _belief,
-    _state,
-)
-from jarvis.interface._providers import (
-    _perceiver,
-    _provider_health,
-    _reasoner,
-    _provider_reset,
-    _embeddings,
-    _speech,
-)
-from jarvis.interface._external import _external, _research, _compare
-from jarvis.interface._crud import (
-    _calendar,
-    _google_calendar,
-    _tasks,
-    _notes,
-    _mail,
-    _documents,
-)
-from jarvis.interface._recall import _recall, _conversations
-from jarvis.interface._workflow import _workflow
-from jarvis.interface._capabilities import _capability, _tool
-
 # Re-export for backward compatibility with tests that patch llm_config_store.
 from jarvis.infrastructure import llm_config_store  # noqa: F401
+from jarvis.interface._capabilities import _capability, _tool
+from jarvis.interface._cognition import (
+    _belief,
+    _deliberation,
+    _energy_budget,
+    _explain,
+    _greeting,
+    _introspect,
+    _learn,
+    _reflect,
+    _rest,
+    _state,
+    _tunables,
+    _wonder,
+)
+from jarvis.interface._conversation import _say, stream_say, StreamEvent  # noqa: F401
+from jarvis.interface._crud import (
+    _calendar,
+    _documents,
+    _google_calendar,
+    _mail,
+    _notes,
+    _tasks,
+)
+from jarvis.interface._external import _compare, _external, _research
+from jarvis.interface._providers import (
+    _embeddings,
+    _perceiver,
+    _provider_health,
+    _provider_reset,
+    _reasoner,
+    _speech,
+)
+from jarvis.interface._recall import _conversations, _recall
+from jarvis.interface._state import snapshot
+from jarvis.interface._workflow import _workflow
+from jarvis.jarvis import Jarvis
 
 _CONSOLE_HTML = Path(__file__).with_name("console.html")
 

@@ -7,9 +7,8 @@ from typing import TYPE_CHECKING, cast
 from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
-from jarvis.jarvis import Jarvis
-
 from jarvis.interface._shared import _capability_not_ready
+from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
     pass

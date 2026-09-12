@@ -7,15 +7,12 @@ from typing import TYPE_CHECKING
 
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.deliberation_value import DeliberationValue
-from jarvis.domain.services.model_compare import ModelRun
 from jarvis.executive.executive_controller import subject_of, working_statement
-from jarvis.infrastructure import llm_config_store
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.perceiver_factory import describe
-from jarvis.jarvis import Jarvis
-
 from jarvis.interface._shared import _provenance
+from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
     pass

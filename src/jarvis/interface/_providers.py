@@ -19,9 +19,8 @@ from jarvis.infrastructure.perceiver_factory import (
     describe,
 )
 from jarvis.infrastructure.provider_settings import ProviderSettings
-from jarvis.jarvis import Jarvis
-
 from jarvis.interface._shared import _OFFLINE_PERCEIVERS, _provider_error, _recall_block
+from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
     pass
