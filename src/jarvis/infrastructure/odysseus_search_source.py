@@ -134,7 +134,7 @@ class SearXNGResearchSource:
             )
         try:
             data: dict[str, Any] = json.loads(body.decode("utf-8"))
-        except Exception as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise RuntimeError(
                 f"searxng returned unparseable JSON for {query!r}: {exc}"
             ) from exc

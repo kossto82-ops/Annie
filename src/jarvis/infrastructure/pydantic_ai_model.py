@@ -126,7 +126,7 @@ class PydanticAiModel(LanguageModel):
                 Any, importlib.import_module("pydantic_ai.capabilities.content_filter")
             )
             kwargs["capabilities"] = [content_filter_mod.RaiseContentFilterError()]
-        except Exception:  # missing/older capability module -> no content-filter hook
+        except (ImportError, ModuleNotFoundError):  # missing/older capability module -> no content-filter hook
             pass
         self._agent = pai.Agent(**kwargs)
         return self._agent
