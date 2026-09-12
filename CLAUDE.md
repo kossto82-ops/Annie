@@ -59,7 +59,14 @@ The architectural audit is complete (Phases 0-5, 2026-09-11). All 5 phases imple
 - Phase 4: Persistent Conversation
 - Phase 5: Second-Order Reflection (Meta-Knowledge)
 
-1647 tests passing, ruff clean, pyright strict 0 errors.
+The refactor and maintenance pass is complete (2026-09-12):
+- Phase 0: CI, MIT license, pinned deps, portable tests
+- Phase 1: command_center.py split (3628→205 lines, 10 domain modules)
+- Phase 2: jarvis.py split (2688→2098 lines, 4 sub-facades)
+- Phase 3: Narrowed 3 except Exception patterns
+- Phase 4: Python ≥3.11, ruff lint clean
+
+1647 tests passing, ruff clean.
 
 The current project is around Increment 160 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now

@@ -44,7 +44,11 @@
 
 ```text
 src/jarvis/
-├── jarvis.py                 Jarvis composition root (public API + persistent() wiring)
+├── jarvis.py                 Jarvis composition root (public API + thin delegators)
+├── capabilities.py           Odysseus capability acquisition surface
+├── edges.py                  External edge surface (web, research, email, delegation, tools)
+├── surfaces.py               CRUD surfaces (notes, documents, calendar, tasks)
+├── goal_surface.py           Goal tracking surface
 ├── cognitive.py              think(), perceive(), consider(), reason(), confirm(), resolve()
 ├── companion.py              observe_companion(), explain_companion(), companion model
 ├── goals.py                  mark_goal_reached(), recurring_goals(), goal reflection
@@ -76,7 +80,20 @@ src/jarvis/
 │                             provider registry, embedder, edge adapters (Agent-Reach, SearXNG, notes,
 │                             mail IMAP/SMTP, calendar local/Google, task scheduler, task agent,
 │                             LocalDocumentStore, DocumentMemoryRetriever), tools
-├── interface/                command_center.py (pure handle/route/snapshot) + server.py + console.html
+├── interface/
+│   ├── command_center.py     Router + dispatch (handle/route/Response/_COMMANDS) — ~200 lines
+│   ├── _conversation.py      Chat/say pipeline, intent handlers, streaming
+│   ├── _state.py             Snapshot assembly, all *_block helpers
+│   ├── _cognition.py         Belief/cognition/tuning handlers
+│   ├── _providers.py         Provider/speech/perceiver switching
+│   ├── _external.py          External/research/compare
+│   ├── _crud.py              Calendar/tasks/notes/mail/documents CRUD
+│   ├── _recall.py            Memory recall, conversation sessions
+│   ├── _workflow.py          Multi-step workflow chains
+│   ├── _capabilities.py      Capability scouting, tool execution
+│   ├── _shared.py            Shared helpers (provenance, evidence_json, etc.)
+│   ├── server.py             HTTP server (socket layer)
+│   └── console.html          Browser UI
 ├── nervous_system/           synchronous subscribe/publish/dispatch
 └── observability/            EpisodeTrace (in-memory + JSONL sinks)
 ```

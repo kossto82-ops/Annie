@@ -60,6 +60,8 @@ trigger (+ evidence)
 - **Events:** immutable cognitive events (`EpisodeStarted`, `EvidenceAdded`, `BeliefStrengthened/Weakened`,
   `ContradictionDetected`, `HypothesisCreated`, ...).
 - **Infrastructure:** In-memory stores (default), JSON stores (`Jarvis.persistent()`), SQLite stores (`Jarvis.database()`).
+- **Jarvis** (~2100 lines): composition root with thin delegators. Sub-facades handle capabilities, edges, CRUD surfaces, and goals.
+- **Command center** (~200 lines): pure router/dispatch. Domain handlers split into 10 focused modules.
 
 ## Vocabulary
 

@@ -65,7 +65,11 @@ ep.working_belief.explain()        # provenance: why it concluded (Vision §8)
 
 ```
 src/jarvis/
-  jarvis.py                              Jarvis composition root (public API, ~110 methods)
+  jarvis.py                              Jarvis composition root (public API + thin delegators)
+  capabilities.py                        Odysseus capability acquisition surface
+  edges.py                               External edge surface (web, research, email, delegation, tools)
+  surfaces.py                            CRUD surfaces (notes, documents, calendar, tasks)
+  goal_surface.py                        Goal tracking surface
   cognitive.py                           think(), perceive(), consider(), reason(), confirm(), resolve()
   companion.py                           observe_companion(), explain_companion(), companion model
   goals.py                               mark_goal_reached(), recurring_goals(), goal reflection
@@ -77,7 +81,20 @@ src/jarvis/
   observability/episode_trace.py          EpisodeTrace — cognitive events grouped by episode (Vision §26)
   executive/executive_controller.py      orchestrates one episode's lifecycle + recall/reason/consult seams
   infrastructure/                         stores, perceivers, models, edges, tools, adapters (JSON + SQLite)
-  interface/                              command_center.py (pure brain) + server.py + console.html (web UI)
+  interface/
+    command_center.py                     Router + dispatch (~200 lines)
+    _conversation.py                      Chat/say pipeline, intent handlers, streaming
+    _state.py                             Snapshot assembly, all *_block helpers
+    _cognition.py                         Belief/cognition/tuning handlers
+    _providers.py                         Provider/speech/perceiver switching
+    _external.py                          External/research/compare
+    _crud.py                              Calendar/tasks/notes/mail/documents CRUD
+    _recall.py                            Memory recall, conversation sessions
+    _workflow.py                          Multi-step workflow chains
+    _capabilities.py                      Capability scouting, tool execution
+    _shared.py                            Shared helpers (provenance, evidence_json, etc.)
+    server.py                             HTTP server (socket layer)
+    console.html                          Browser UI
   domain/
     aggregates/                            CognitiveEpisode, HypothesisSet, CompanionModel
     conversation/                          intent (bilingual classify) + short-term ConversationContext
