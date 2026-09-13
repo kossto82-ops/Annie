@@ -2668,9 +2668,9 @@ function skillsOf(s) {
 function renderCapabilityCards(s) {
   const caps = s.capabilities || [];
   const ready = s.ready || [];
-  const acquired = caps.filter((c) => c.status === "acquired").length;
+  const active = caps.filter((c) => c.status === "ready" || c.status === "acquired");
   const capCount = $("capCount");
-  if (capCount) capCount.textContent = caps.length;
+  if (capCount) capCount.textContent = active.length;
   const toolCount = $("toolCount");
   if (toolCount) toolCount.textContent = (s.tools || []).length + skillsOf(s).length;
   const docCount = $("docCount");
