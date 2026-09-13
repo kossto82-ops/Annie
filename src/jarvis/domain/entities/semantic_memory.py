@@ -8,6 +8,7 @@ directly — exactly like Belief.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -63,6 +64,7 @@ class SemanticMemory:
         formed_at: datetime | None = None,
         last_reinforced_at: datetime | None = None,
         reinforcement_count: int = 0,
+        dedup_policy: Callable[[Evidence, Evidence], bool] | None = None,
     ) -> None:
         self.id: str = id or _new_id()
         self.pattern: str = pattern
@@ -74,6 +76,7 @@ class SemanticMemory:
         self.reinforcement_count: int = reinforcement_count
         self._evidence: list[Evidence] = _empty_evidence()
         self._pending_events: list[CognitiveEvent] = _empty_event_buffer()
+        self._dedup_policy: Callable[[Evidence, Evidence], bool] | None = dedup_policy
 
     # ------------------------------------------------------------------
     # Derived properties (never stored, never set)
@@ -107,7 +110,14 @@ class SemanticMemory:
 
         Emits :class:`SemanticMemoryReinforced` if the evidence strengthens
         the pattern, or :class:`SemanticMemoryContested` if it contradicts.
+
+        Deduplication: when ``_dedup_policy`` is configured, identical evidence
+        (same content + source + direction) is skipped.
         """
+        if self._dedup_policy is not None:
+            for existing in self._evidence:
+                if self._dedup_policy(existing, evidence):
+                    return
         from jarvis.domain.events.semantic_events import (
             SemanticMemoryContested,
             SemanticMemoryReinforced,

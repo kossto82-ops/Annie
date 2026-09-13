@@ -28,8 +28,10 @@ has been supported over time -- is a separate one, derived in ``derive_stability
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.events.belief_events import (
@@ -46,6 +48,9 @@ from jarvis.domain.services.evidence_weighting import (
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
+
+if TYPE_CHECKING:
+    pass
 
 _PRIOR = 1.0
 
@@ -201,6 +206,9 @@ class Belief:
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
     )
+    _dedup_policy: Callable[[Evidence, Evidence], bool] | None = field(
+        default=None, repr=False
+    )
 
     def __post_init__(self) -> None:
         if not self.statement or not self.statement.strip():
@@ -230,7 +238,15 @@ class Belief:
         ``correlation_id`` lets a caller (e.g. an episode) group these events with
         the wider process they belong to; it defaults to the belief's own id when
         the belief evolves outside any larger process.
+
+        Deduplication: when ``dedup_policy`` is configured, identical evidence
+        (same content + source + direction) is skipped.  Without a policy, all
+        evidence is appended unconditionally (the historical default).
         """
+        if self._dedup_policy is not None:
+            for existing in self._evidence:
+                if self._dedup_policy(existing, evidence):
+                    return
         correlation = correlation_id or self.id
         before = self.confidence
         self._evidence.append(evidence)
