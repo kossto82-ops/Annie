@@ -332,7 +332,7 @@ class ExecutiveController:
         self._flush(episode)  # dispatch evidence/belief events
 
         episode.begin_reflecting()
-        if episode.attention is Attention.FULL:
+        if episode.attention is Attention.FULL and self._should_reflect(belief):
             self._reflect(episode, belief)
         self._flush(episode)
 
@@ -631,6 +631,28 @@ class ExecutiveController:
             memory.kind in (MemoryKind.WORLD_BELIEF, MemoryKind.GOAL, MemoryKind.EPISODE)
             and memory.content.strip().lower() == trigger.strip().lower()
         )
+
+    def _should_reflect(self, belief: Belief) -> bool:
+        """Decide whether this episode warrants reflection.
+
+        Reflection is gated to save cognitive work. We reflect when:
+        1. Evidence is contested (contradictions need attention)
+        2. Confidence is near the grounding threshold (uncertain grounding)
+        3. This is a thin belief (few evidence pieces, establishing baseline)
+
+        Well-established beliefs with clear grounding skip reflection.
+        """
+        explanation = belief.explain()
+        # Always reflect on contested evidence
+        if explanation.contradicting:
+            return True
+        # Reflect when confidence is near the threshold (±0.2 margin)
+        confidence = belief.confidence.value
+        threshold = self._knobs.grounded_confidence
+        if abs(confidence - threshold) <= 0.2:
+            return True
+        # Reflect on thin beliefs (3 or fewer evidence pieces)
+        return len(belief.evidence) <= 3
 
     def _reflect(self, episode: CognitiveEpisode, belief: Belief) -> None:
         """Review the reasoning behind ``belief`` and record what the review noticed.

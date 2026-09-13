@@ -138,7 +138,21 @@ Codebase is clean: zero TODOs, FIXMEs, or HACKs. No incomplete-work markers foun
 
 8 tests prove the new fields work and decision history is reconstructable.
 
-## Phases 6-11
+## Phase 6 — Reflection Gating ✅
+
+### 6A: Selective Reflection ✅
+
+**Implemented**: Added `_should_reflect()` method to `ExecutiveController` that gates reflection based on:
+1. **Contested evidence** → always reflect (contradictions need attention)
+2. **Confidence near threshold** (±0.2 margin) → reflect (uncertain grounding)
+3. **Thin belief** (≤3 evidence pieces) → reflect (establishing baseline)
+4. **Well-established belief** with clear grounding → skip (saves cognitive work)
+
+Previously, reflection happened on every `FULL` attention episode. Now it only happens when warranted, while preserving all existing test expectations.
+
+6 tests prove the gating behavior across contested, thin, established, and boundary cases.
+
+## Phases 7-11
 
 See the full roadmap in the user's instructions.
 
