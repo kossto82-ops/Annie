@@ -68,6 +68,10 @@ def observe_reasoning_effectiveness(
     mk = MetaKnowledge(kind=MetaKnowledgeKind.REASONING_STRATEGY, statement=statement)
 
     for record in episodes:
+        # Evidence supports the meta-knowledge: if deliberations outperform,
+        # deliberation episodes are evidence of good strategy; if conclusions
+        # outperform, conclusion episodes are evidence of good strategy.
+        supports_deliberation = avg_deliberation_confidence > avg_conclusion_confidence
         mk.add_evidence(
             Evidence(
                 content=(
@@ -76,8 +80,10 @@ def observe_reasoning_effectiveness(
                 ),
                 source=EvidenceSource.SYSTEM_OBSERVATION,
                 weight=_OBSERVATION_WEIGHT,
-                supports=record.kind.value == "conclusion"
-                    and avg_conclusion_confidence > avg_deliberation_confidence,
+                supports=(
+                    (record.kind.value == "deliberation" and supports_deliberation)
+                    or (record.kind.value == "conclusion" and not supports_deliberation)
+                ),
                 observed_at=record.recorded_at,
             )
         )
@@ -160,6 +166,10 @@ def observe_attention_allocation(
 
     mk = MetaKnowledge(kind=MetaKnowledgeKind.ATTENTION_PATTERN, statement=statement)
 
+    # Evidence supports the meta-knowledge: when attention is insufficient,
+    # ungrounded episodes are evidence of the problem; when attention is
+    # appropriate, grounded episodes are evidence of success.
+    insufficient = "insufficient" in statement
     for record in episodes:
         mk.add_evidence(
             Evidence(
@@ -169,7 +179,10 @@ def observe_attention_allocation(
                 ),
                 source=EvidenceSource.SYSTEM_OBSERVATION,
                 weight=_OBSERVATION_WEIGHT,
-                supports=record.conclusion_confidence.value >= 0.5,
+                supports=(
+                    (record.conclusion_confidence.value < 0.5 and insufficient)
+                    or (record.conclusion_confidence.value >= 0.5 and not insufficient)
+                ),
                 observed_at=record.recorded_at,
             )
         )

@@ -152,7 +152,24 @@ Previously, reflection happened on every `FULL` attention episode. Now it only h
 
 6 tests prove the gating behavior across contested, thin, established, and boundary cases.
 
-## Phases 7-11
+## Phase 7 — Meta-Knowledge Feedback ✅
+
+### 7A: Second-Order Reflection Loop ✅
+
+**Implemented**:
+- Added `adapt_from_meta_observation()` method to `ExecutiveController`
+- Wired into `run()` loop after first-order adaptation bridge
+- Two feedback mechanisms:
+  1. **Reasoning effectiveness**: When deliberations outperform conclusions (confidence ≥0.4), returns feedback suggesting prefer consider() over think()
+  2. **Attention allocation**: When most episodes are ungrounded (>70%), raises `grounded_confidence` threshold by 0.05 (bounded at 0.9)
+
+**Bug fixes in meta_observation.py**:
+- Fixed evidence `supports` logic in `observe_reasoning_effectiveness` — deliberation episodes now correctly support the "deliberations outperform" claim
+- Fixed evidence `supports` logic in `observe_attention_allocation` — ungrounded episodes now correctly support the "insufficient attention" claim
+
+5 tests prove the feedback loop works across reasoning effectiveness, attention allocation, and boundary cases.
+
+## Phases 8-11
 
 See the full roadmap in the user's instructions.
 

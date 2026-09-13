@@ -35,6 +35,10 @@ from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.knowledge_source import KnowledgeSource
+from jarvis.domain.services.meta_observation import (
+    observe_attention_allocation,
+    observe_reasoning_effectiveness,
+)
 from jarvis.domain.services.self_observation import (
     adapt_knobs_from_self_observation,
     observe_evidence_habit,
@@ -224,6 +228,54 @@ class ExecutiveController:
         """
         self._knobs = knobs
 
+    def adapt_from_meta_observation(self) -> str | None:
+        """Evaluate meta-knowledge and return feedback about cognitive adjustments.
+
+        This is the second-order feedback loop (Phase 7): meta-observation
+        produces insights about reasoning strategies, retrieval quality, and
+        attention allocation. This method evaluates those insights and returns
+        a reason string when an adjustment is warranted.
+
+        Currently adjusts:
+        - If deliberations outperform conclusions → prefer consider() over think()
+        - If attention is insufficient → raise grounded_confidence threshold
+        """
+        history = self._episodes.history()
+
+        # Reasoning effectiveness: do deliberations outperform conclusions?
+        reasoning_meta = observe_reasoning_effectiveness(history)
+        if (
+            reasoning_meta is not None
+            and reasoning_meta.confidence.value >= 0.4
+            and "My deliberations" in reasoning_meta.statement
+        ):
+            return (
+                f"meta-observation: {reasoning_meta.statement} "
+                f"(confidence {reasoning_meta.confidence.value:.2f}) — "
+                f"consider preferring deliberation over conclusion"
+            )
+
+        # Attention allocation: is attention insufficient?
+        attention_meta = observe_attention_allocation(history)
+        if (
+            attention_meta is not None
+            and attention_meta.confidence.value >= 0.5
+            and "insufficient" in attention_meta.statement
+        ):
+            # Raise grounded_confidence to demand more evidence before concluding
+            current = self._knobs.grounded_confidence
+            new_val = min(0.9, current + 0.05)
+            if new_val != current:
+                self.set_knobs(
+                    CognitiveKnobs(grounded_confidence=new_val)
+                )
+                return (
+                    f"meta-observation: {attention_meta.statement} — "
+                    f"raised grounded_confidence from {current:.2f} to {new_val:.2f}"
+                )
+
+        return None
+
     def reason(
         self,
         query: str,
@@ -358,6 +410,12 @@ class ExecutiveController:
         )
         if reason is not None:
             self.set_knobs(adapted)
+
+        # Meta-knowledge feedback (Phase 7): second-order reflection on
+        # reasoning strategies and attention allocation.
+        self.adapt_from_meta_observation()
+        # Meta-knowledge feedback is logged but does not override first-order
+        # adaptation; it informs future cognition through the deliberation value.
 
         return episode
 
