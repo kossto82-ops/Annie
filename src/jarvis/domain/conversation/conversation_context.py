@@ -5,11 +5,13 @@ all, *separate* from long-term memory (Vision §3): follow-up questions, pronoun
 "why?" resolve against the last few turns of THIS conversation, not against the belief
 store. Long-term memory holds what deserves to persist; this holds what was just said.
 
-It is a small, bounded ring of turns -- not persisted, not evidence, never a belief.
+    It is a small, bounded ring of turns -- not evidence, never a belief.
 
-When a ``ConversationRepository`` is injected, turns are also persisted so that
-conversation history survives restarts and can be recalled across sessions.
-"""
+    When a ``ConversationRepository`` is injected, turns are dual-written to it
+    and the ring is hydrated from its most recent turns at construction, so
+    short-term context survives restarts (bounded by capacity, never the whole
+    history dumped into a prompt).
+    """
 
 from __future__ import annotations
 
@@ -43,6 +45,11 @@ class ConversationContext:
     ) -> None:
         self._turns: deque[Turn] = deque(maxlen=capacity)
         self._repository = repository
+        if repository is not None:
+            # Rehydrate the ring so a restart resumes the dialogue instead of
+            # blanking it; bounded by capacity (recent turns only).
+            for persisted in repository.recent_turns(capacity):
+                self._turns.append(Turn(speaker=persisted.speaker, text=persisted.text))
 
     def record(
         self,

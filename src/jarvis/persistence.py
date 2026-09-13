@@ -18,9 +18,9 @@ from jarvis.infrastructure.agent_reach_source import (
 )
 from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.env_settings import settings_from_env
-from jarvis.infrastructure.in_memory_conversation_store import InMemoryConversationStore
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
+from jarvis.infrastructure.json_conversation_store import JsonConversationStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
 from jarvis.infrastructure.json_learned_state_store import JsonLearnedStateStore
@@ -81,7 +81,7 @@ def build_persistent_kwargs(
         research_source=research,
         speech_perception=EchoSpeechPerception(),
         documents_store=build_document_store(base / "docs"),
-        conversation_repository=InMemoryConversationStore(),
+        conversation_repository=JsonConversationStore(base / "conversation.json"),
     )
 
 
