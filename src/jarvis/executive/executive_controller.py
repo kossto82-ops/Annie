@@ -14,7 +14,8 @@ conclusion is grounded, tentative, or withheld.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
@@ -175,6 +176,7 @@ class ExecutiveController:
         knowledge_source: KnowledgeSource | None = None,
         knowledge_graph: KnowledgeGraphRepository | None = None,
         knobs: CognitiveKnobs | None = None,
+        on_knobs_adapted: Callable[[CognitiveKnobs, str], None] | None = None,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
@@ -204,6 +206,11 @@ class ExecutiveController:
         # entity extraction is skipped; wiring one lets concluded beliefs
         # automatically populate the graph (Phase 9).
         self._knowledge_graph = knowledge_graph
+        # Optional: learning-continuity sink. When the run adapts the knobs
+        # from evidence (never from operator tuning), the new knobs plus the
+        # reason flow here so the composition root can persist them. Absent ->
+        # adaptation stays in-memory, exactly as before.
+        self._on_knobs_adapted = on_knobs_adapted
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
         """Swap the reasoner at runtime (matches the active provider, Vision §38)."""
@@ -249,6 +256,16 @@ class ExecutiveController:
         """The episode history store (read handle for observation and tests)."""
         return self._episodes
 
+    def _apply_adapted_knobs(self, knobs: CognitiveKnobs, reason: str) -> None:
+        """Apply an evidence-justified adaptation and notify persistence.
+
+        Operator tuning via :meth:`set_knobs` deliberately bypasses this path:
+        only learning writes through to the continuity sink.
+        """
+        self.set_knobs(knobs)
+        if self._on_knobs_adapted is not None:
+            self._on_knobs_adapted(knobs, reason)
+
     def adapt_from_meta_observation(self) -> str | None:
         """Evaluate meta-knowledge and return feedback about cognitive adjustments.
 
@@ -287,13 +304,15 @@ class ExecutiveController:
             current = self._knobs.grounded_confidence
             new_val = min(0.9, current + 0.05)
             if new_val != current:
-                self.set_knobs(
-                    CognitiveKnobs(grounded_confidence=new_val)
-                )
-                return (
+                reason = (
                     f"meta-observation: {attention_meta.statement} — "
                     f"raised grounded_confidence from {current:.2f} to {new_val:.2f}"
                 )
+                # Preserve the untouched thresholds (never reset siblings).
+                self._apply_adapted_knobs(
+                    replace(self._knobs, grounded_confidence=new_val), reason
+                )
+                return reason
 
         return None
 
@@ -430,7 +449,7 @@ class ExecutiveController:
             self._knobs, self._episodes.history()
         )
         if reason is not None:
-            self.set_knobs(adapted)
+            self._apply_adapted_knobs(adapted, reason)
 
         # Meta-knowledge feedback (Phase 7): second-order reflection on
         # reasoning strategies and attention allocation.

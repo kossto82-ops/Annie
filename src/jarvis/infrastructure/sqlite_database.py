@@ -18,6 +18,7 @@ from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.infrastructure.sqlite_belief_store import SqliteBeliefStore
 from jarvis.infrastructure.sqlite_capability_store import SqliteCapabilityStore
 from jarvis.infrastructure.sqlite_episode_store import SqliteEpisodeStore
+from jarvis.infrastructure.sqlite_learned_state_store import SqliteLearnedStateStore
 from jarvis.infrastructure.sqlite_refutation_store import SqliteRefutationStore
 
 
@@ -36,6 +37,7 @@ class SqliteRepositories:
     needs: SqliteBeliefStore
     capabilities: SqliteCapabilityStore
     refutations: SqliteRefutationStore
+    learned_state: SqliteLearnedStateStore
 
     def close(self) -> None:
         """Release the underlying connection (call when the Jarvis shuts down)."""
@@ -75,4 +77,5 @@ def build_sqlite_repositories(
         ),
         capabilities=SqliteCapabilityStore(connection),
         refutations=SqliteRefutationStore(connection),
+        learned_state=SqliteLearnedStateStore(connection),
     )

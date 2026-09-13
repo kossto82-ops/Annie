@@ -23,6 +23,7 @@ from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
+from jarvis.infrastructure.json_learned_state_store import JsonLearnedStateStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
@@ -73,6 +74,7 @@ def build_persistent_kwargs(
         needs_store=JsonBeliefStore(base / "needs.json"),
         refutations_store=JsonRefutationStore(base / "refutations.json"),
         trace=JsonEpisodeTrace(base / "trace.jsonl"),
+        learned_state_store=JsonLearnedStateStore(base / "learned.json"),
         weighting_policy=weighting_policy,
         default_belief_policy=default_belief_policy,
         external_source=source,
@@ -125,6 +127,7 @@ def build_database_kwargs(
         capabilities_store=repositories.capabilities,
         needs_store=repositories.needs,
         refutations_store=repositories.refutations,
+        learned_state_store=repositories.learned_state,
         trace=SqliteEpisodeTrace(repositories.connection),
         weighting_policy=weighting_policy,
         default_belief_policy=default_belief_policy,

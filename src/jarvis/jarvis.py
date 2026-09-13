@@ -8,7 +8,7 @@ subscribe to cognitive events *before* thinking begins.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -129,6 +129,7 @@ from jarvis.domain.reasoning.reasoning_span import ReasoningSpan, SpanThread
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.capability_repository import CapabilityRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.repositories.learned_state_repository import LearnedStateRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
 from jarvis.domain.retrieval.calendar_store import CalendarStore
 from jarvis.domain.retrieval.document_editor import DocumentEditor
@@ -171,6 +172,7 @@ from jarvis.domain.value_objects.energy_costs import EnergyCosts
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.inference import Inference
+from jarvis.domain.value_objects.learned_state import LearnedState
 from jarvis.domain.value_objects.note import Note
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.reflection import Reflection
@@ -315,6 +317,7 @@ class Jarvis:
         tool_policy: ToolPolicy | None = None,
         documents_store: DocumentStore | None = None,
         cognitive_knobs: CognitiveKnobs | None = None,
+        learned_state_store: LearnedStateRepository | None = None,
         default_belief_policy: EvidenceWeightingPolicy | None = None,
         document_editor: DocumentEditor | None = None,
         instrumentation: InstrumentationStore | None = None,
@@ -556,6 +559,15 @@ class Jarvis:
         # them at runtime via :meth:`set_knobs` without rebuilding Jarvis.
         # Owned by the executive (single authoritative copy, P0-C); this class
         # reads them through :meth:`knobs` and never keeps a second copy.
+        # Learning continuity (P0): an explicit constructor value wins (operator
+        # override); otherwise a persisted adaptation is rehydrated so learning
+        # survives restarts; otherwise the historical defaults apply.
+        self._learned_state_store = learned_state_store
+        initial_knobs = cognitive_knobs
+        if initial_knobs is None and learned_state_store is not None:
+            stored = learned_state_store.load()
+            if stored is not None:
+                initial_knobs = stored.knobs
         self._executive = ExecutiveController(
             self.nervous_system,
             self.beliefs,
@@ -565,7 +577,8 @@ class Jarvis:
             reasoner,
             weighting_policy,
             knowledge_source=knowledge_source,
-            knobs=cognitive_knobs,
+            knobs=initial_knobs,
+            on_knobs_adapted=self._save_learned_state,
         )
         # Sub-facades: each wraps a coherent method group, keeping the public
         # API on Jarvis via thin delegators for backward compatibility.
@@ -1902,6 +1915,36 @@ class Jarvis:
         executive owns the live copy; every gate reads it through :meth:`knobs`.
         """
         self._executive.set_knobs(knobs)
+
+    def _save_learned_state(self, knobs: CognitiveKnobs, reason: str) -> None:
+        """Persist an evidence-justified knob adaptation (learning continuity).
+
+        Called by the executive only from its adaptation paths -- operator
+        tuning via :meth:`set_knobs` never writes here. Without a wired
+        learned-state store this is a no-op (adaptation stays in-memory).
+        """
+        if self._learned_state_store is None:
+            return
+        self._learned_state_store.save(
+            LearnedState(knobs=knobs, reason=reason, updated_at=datetime.now(UTC))
+        )
+
+    def learned_state(self) -> LearnedState | None:
+        """The latest persisted knob adaptation, if any (inspectable learning)."""
+        if self._learned_state_store is None:
+            return None
+        return self._learned_state_store.load()
+
+    def reset_learned_state(self) -> None:
+        """Forget learned tuning and restore default thresholds (reversible).
+
+        Clears the persisted adaptation (when a store is wired) and returns
+        the live knobs to the historical defaults, so a poisoned or stale
+        adaptation can always be undone.
+        """
+        if self._learned_state_store is not None:
+            self._learned_state_store.clear()
+        self._executive.set_knobs(CognitiveKnobs())
 
     # -- component collaboration seams -------------------------------------
     # Read handles the sub-facades (split from this class in the audit's
