@@ -21,7 +21,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 
 
-def _serialise_memory(memory: SemanticMemory) -> dict[str, Any]:
+def serialise_memory(memory: SemanticMemory) -> dict[str, Any]:
     return {
         "id": memory.id,
         "pattern": memory.pattern,
@@ -49,7 +49,7 @@ def _serialise_memory(memory: SemanticMemory) -> dict[str, Any]:
     }
 
 
-def _deserialise_memory(
+def deserialise_memory(
     data: dict[str, Any],
     weighting_policy: EvidenceWeightingPolicy | None = None,
 ) -> SemanticMemory:
@@ -110,7 +110,7 @@ class SqliteSemanticMemoryStore:
     def save(self, memory: SemanticMemory) -> None:
         self._by_pattern[memory.pattern] = memory
         self._by_id[memory.id] = memory
-        payload = json.dumps(_serialise_memory(memory), separators=(",", ":"))
+        payload = json.dumps(serialise_memory(memory), separators=(",", ":"))
         self._conn.execute(
             "INSERT INTO semantic_memories (id, pattern, payload) VALUES (?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload",
@@ -142,6 +142,6 @@ class SqliteSemanticMemoryStore:
         cursor = self._conn.execute("SELECT payload FROM semantic_memories")
         for row in cursor:
             data = json.loads(row[0])
-            memory = _deserialise_memory(data, self._weighting_policy)
+            memory = deserialise_memory(data, self._weighting_policy)
             self._by_pattern[memory.pattern] = memory
             self._by_id[memory.id] = memory

@@ -25,6 +25,7 @@ from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
 from jarvis.infrastructure.json_learned_state_store import JsonLearnedStateStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
+from jarvis.infrastructure.json_semantic_memory_store import JsonSemanticMemoryStore
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
 from jarvis.infrastructure.speech_perception import EchoSpeechPerception
@@ -75,6 +76,12 @@ def build_persistent_kwargs(
         refutations_store=JsonRefutationStore(base / "refutations.json"),
         trace=JsonEpisodeTrace(base / "trace.jsonl"),
         learned_state_store=JsonLearnedStateStore(base / "learned.json"),
+        semantic_memory_store=JsonSemanticMemoryStore(
+            base / "semantic.json", weighting_policy
+        ),
+        # Lexical recall is deterministic and offline: factory builds answer
+        # from what they persist (beliefs, episodes, abstractions, turns).
+        enable_recall=True,
         weighting_policy=weighting_policy,
         default_belief_policy=default_belief_policy,
         external_source=source,
@@ -128,6 +135,10 @@ def build_database_kwargs(
         needs_store=repositories.needs,
         refutations_store=repositories.refutations,
         learned_state_store=repositories.learned_state,
+        semantic_memory_store=repositories.semantic_memories,
+        # Lexical recall is deterministic and offline: factory builds answer
+        # from what they persist (beliefs, episodes, abstractions, turns).
+        enable_recall=True,
         trace=SqliteEpisodeTrace(repositories.connection),
         weighting_policy=weighting_policy,
         default_belief_policy=default_belief_policy,

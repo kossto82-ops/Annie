@@ -55,7 +55,9 @@ from jarvis.infrastructure.perceiver_factory import (
 )
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.provider_stats import InMemoryInstrumentation
+from jarvis.infrastructure.sqlite_conversation_store import SqliteConversationStore
 from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
+from jarvis.infrastructure.sqlite_episode_trace import SqliteEpisodeTrace
 from jarvis.infrastructure.task_agent_source import (
     build_instruction_agent,
     build_task_agent,
@@ -209,6 +211,10 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             refutations_store=repositories.refutations,
             capabilities_store=repositories.capabilities,
             needs_store=repositories.needs,
+            learned_state_store=repositories.learned_state,
+            semantic_memory_store=repositories.semantic_memories,
+            conversation_repository=SqliteConversationStore(repositories.connection),
+            trace=SqliteEpisodeTrace(repositories.connection),
             perception=perception,
             companion_perception=companion_perception,
             enable_recall=True,

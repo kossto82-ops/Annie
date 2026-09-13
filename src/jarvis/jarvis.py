@@ -2002,6 +2002,11 @@ class Jarvis:
         """The gated tool surface (permission/approval live here, D6)."""
         return self._tools
 
+    @property
+    def semantic_memories(self) -> SemanticMemoryRepository | None:
+        """The long-term abstraction store (semantic memory), if one is wired."""
+        return self._semantic_memory_store
+
     def default_belief_policy(self) -> EvidenceWeightingPolicy:
         """The per-belief default source policy for newly created beliefs."""
         return self._default_belief_policy
