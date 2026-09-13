@@ -32,7 +32,9 @@ from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.reasoning.reasoning_span import SpanThread
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraphRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
+from jarvis.domain.services.entity_extraction import extract_entities
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.meta_observation import (
@@ -171,6 +173,7 @@ class ExecutiveController:
         reasoner: Reasoner | None = None,
         weighting_policy: EvidenceWeightingPolicy | None = None,
         knowledge_source: KnowledgeSource | None = None,
+        knowledge_graph: KnowledgeGraphRepository | None = None,
         knobs: CognitiveKnobs | None = None,
     ) -> None:
         self._nervous_system = nervous_system
@@ -197,6 +200,10 @@ class ExecutiveController:
         # the episode never consults, exactly as before; wiring one only lets an
         # episode *choose* to look -- it gathers candidates and never concludes (D6).
         self._knowledge_source = knowledge_source
+        # Optional: knowledge graph for entity/relationship tracking. Absent ->
+        # entity extraction is skipped; wiring one lets concluded beliefs
+        # automatically populate the graph (Phase 9).
+        self._knowledge_graph = knowledge_graph
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
         """Swap the reasoner at runtime (matches the active provider, Vision §38)."""
@@ -838,6 +845,16 @@ class ExecutiveController:
                 evidence_snapshot=evidence_snapshot,
             )
         )
+
+        # Knowledge graph population (Phase 9): extract entities and
+        # relationships from the concluded belief and persist them.
+        if self._knowledge_graph is not None:
+            existing = self._knowledge_graph.all_nodes()
+            extraction = extract_entities(belief, existing_nodes=existing)
+            for node in extraction.new_nodes:
+                self._knowledge_graph.save_node(node)
+            for edge in extraction.new_edges:
+                self._knowledge_graph.save_edge(edge)
 
     # -- event plumbing ------------------------------------------------------
 
