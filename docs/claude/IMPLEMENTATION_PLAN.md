@@ -95,13 +95,25 @@ Generated: 2026-09-13
 
 Meta-observation produces `MetaKnowledge` instances but feeding them back to strategy adjustment requires more infrastructure. Deferred to a future phase as the core learning loop (2A/2B) is now functional.
 
-## Phase 3 — Temporal Cognition
+## Phase 3 — Temporal Cognition ✅
 
-### 3A: Historical Beliefs
-`belief_at_time(subject, timestamp)` — reconstruct historical state from episodes.
+### 3A: Historical Belief Queries ✅
 
-### 3B: Temporal Patterns
-Detect stable/changing preferences, recurring contradictions.
+**Implemented**: Created `domain/services/temporal_reasoning.py` with three pure functions:
+- `belief_timeline(subject, history)` — returns time-ordered snapshots of a belief's evolution (confidence, stability, decision at each episode)
+- `what_changed(subject, start, end, history)` — detects confidence shifts ≥0.1 within a time window
+- `belief_snapshot_at(subject, at_time, history)` — reconstructs what was believed at a specific point in time
+
+These answer the roadmap's three questions:
+1. **What was believed then?** → `belief_snapshot_at(subject, time, history)`
+2. **What is believed now?** → latest entry from `belief_timeline(subject, history)`
+3. **What evidence changed it?** → `what_changed(subject, start, end, history)` returns the delta
+
+10 tests prove the behavior across filtering, ordering, time windows, and edge cases.
+
+### 3B: Temporal Pattern Detection — Deferred
+
+Simple patterns (stable preference, changing preference, recurring contradiction) could be built on top of the timeline infrastructure but are not yet wired into cognition. Deferred.
 
 ## Phases 4-11
 
