@@ -592,23 +592,26 @@ class ExecutiveController:
         the episode is *currently* forming about this exact trigger is filtered
         out -- echoing it back as "memory" would be circular, not recall.
         """
-        if self._memory_retriever is None:
-            return
         relevant: list[RecalledMemory] = []
         seen: set[str] = set()
         # Results come ranked most-relevant first, so the first time a given content
         # appears is its strongest match; later duplicates (e.g. the same text held
         # both as a world belief and an episode) are dropped.
-        for memory in self._memory_retriever.recall(episode.trigger):
-            if memory.relevance < _MIN_RECALL_RELEVANCE:
-                continue
-            if self._is_about_current(memory, episode.trigger):
-                continue
-            key = memory.content.strip().lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            relevant.append(memory)
+        if self._memory_retriever is not None:
+            for memory in self._memory_retriever.recall(episode.trigger):
+                if memory.relevance < _MIN_RECALL_RELEVANCE:
+                    continue
+                if self._is_about_current(memory, episode.trigger):
+                    continue
+                key = memory.content.strip().lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                relevant.append(memory)
+        # Relationship traversal is its own retrieval system (it shares no
+        # surface tokens with the question by construction), so it runs even
+        # when no lexical retriever is wired.
+        self._recall_graph_into(episode, relevant, seen)
         # A question about the companion themselves is answered from the companion
         # model directly, since surface-token recall cannot bridge "who am I?" to a
         # trait like "is named Raúl" (Vision §5).
@@ -626,6 +629,56 @@ class ExecutiveController:
                 key=lambda m: (-m.relevance, -(m.source_confidence or 0.0), m.content)
             )
             episode.recall(tuple(relevant))
+
+    def _recall_graph_into(
+        self,
+        episode: CognitiveEpisode,
+        relevant: list[RecalledMemory],
+        seen: set[str],
+    ) -> None:
+        """Enrich recall by relationship traversal (the graph's read path).
+
+        Entities named in the trigger seed a bounded traversal (depth 2).
+        Traversed neighbours share no surface tokens with the question, so
+        isolated lexical retrieval could never surface them -- the recorded
+        relationship is the retrieval signal, which is exactly the case where
+        a graph earns its keep over ordinary retrieval. Structural relevance
+        decays with distance; duplicates against lexical hits are dropped.
+        """
+        graph = self._knowledge_graph
+        if graph is None:
+            return
+        lowered = episode.trigger.lower()
+        seeds = [
+            node
+            for node in graph.all_nodes()
+            if len(node.name) >= 3 and node.name.lower() in lowered
+        ]
+        for seed in seeds:
+            collected: set[str] = set()
+            for depth, relevance in ((1, 0.5), (2, 0.3)):
+                for node in graph.neighbors(seed.id, depth=depth):
+                    if node.id in collected:
+                        continue
+                    collected.add(node.id)
+                    text = f"{node.name} ({node.kind.value})"
+                    if node.description:
+                        text += f": {node.description}"
+                    memory = RecalledMemory(
+                        content=text,
+                        kind=MemoryKind.GRAPH_NODE,
+                        provenance=f"graph {depth}-hop from {seed.name}",
+                        relevance=relevance,
+                        source_confidence=node.confidence.value,
+                        observed_at=node.created_at,
+                    )
+                    if self._is_about_current(memory, episode.trigger):
+                        continue
+                    key = text.strip().lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    relevant.append(memory)
 
     def _reason_into(
         self,

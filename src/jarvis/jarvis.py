@@ -129,6 +129,7 @@ from jarvis.domain.reasoning.reasoning_span import ReasoningSpan, SpanThread
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.capability_repository import CapabilityRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
+from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraphRepository
 from jarvis.domain.repositories.learned_state_repository import LearnedStateRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
 from jarvis.domain.retrieval.calendar_store import CalendarStore
@@ -323,6 +324,7 @@ class Jarvis:
         instrumentation: InstrumentationStore | None = None,
         semantic_memory_store: SemanticMemoryRepository | None = None,
         conversation_repository: ConversationRepository | None = None,
+        knowledge_graph_store: KnowledgeGraphRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         # Live-provider instrumentation (Phase 4): a shared collector that recorded
@@ -521,6 +523,9 @@ class Jarvis:
         # Long-term memory repositories for recall augmentation (Phase 1A/1B).
         self._semantic_memory_store = semantic_memory_store
         self._conversation_repository = conversation_repository
+        # Entity/relationship graph (Phase 9, wired in the remediation): concluded
+        # beliefs populate it and traversal enriches recall. None disables both.
+        self._knowledge_graph_store = knowledge_graph_store
         # Optional long-term-memory recall (Vision §3): when enabled, a deterministic
         # lexical retriever over Jarvis's own stores lets an episode answer from what
         # it remembers instead of a blank "insufficient evidence". Off by default, so
@@ -577,6 +582,7 @@ class Jarvis:
             reasoner,
             weighting_policy,
             knowledge_source=knowledge_source,
+            knowledge_graph=knowledge_graph_store,
             knobs=initial_knobs,
             on_knobs_adapted=self._save_learned_state,
         )
@@ -2006,6 +2012,15 @@ class Jarvis:
     def semantic_memories(self) -> SemanticMemoryRepository | None:
         """The long-term abstraction store (semantic memory), if one is wired."""
         return self._semantic_memory_store
+
+    @property
+    def knowledge_graph(self) -> KnowledgeGraphRepository | None:
+        """The entity/relationship graph, if one is wired.
+
+        Concluded beliefs populate it (entity extraction); relationship
+        traversal enriches recall. ``None`` disables both, exactly as before.
+        """
+        return self._knowledge_graph_store
 
     def default_belief_policy(self) -> EvidenceWeightingPolicy:
         """The per-belief default source policy for newly created beliefs."""

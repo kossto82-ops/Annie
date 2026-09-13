@@ -25,3 +25,4 @@ class MemoryKind(Enum):
     DOCUMENT = "document"  # a stored document shared by the companion
     SEMANTIC = "semantic"  # a pattern or abstraction derived from multiple sources
     CONVERSATION = "conversation"  # a past conversation turn
+    GRAPH_NODE = "graph_node"  # an entity reached by relationship traversal

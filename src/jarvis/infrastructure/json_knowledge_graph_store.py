@@ -1,75 +1,40 @@
-"""SQLite-backed KnowledgeGraphRepository.
+"""File-backed implementation of :class:`KnowledgeGraphRepository` (Vision §3).
 
-Stores nodes and edges as JSON payloads in SQLite tables, with in-memory
-caching for session semantics. Traversal operations (neighbors, path_between)
-use BFS on the in-memory cache.
+Persists nodes and edges to one JSON file with crash-safe atomic writes,
+reusing the canonical serialisers shared with the SQLite twin. Traversal is
+the same BFS as the in-memory twin. A missing file reads as empty;
+malformed entries are skipped (recovery, not a crash).
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections import deque
-from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 
 from jarvis.domain.entities.knowledge_edge import KnowledgeEdge
 from jarvis.domain.entities.knowledge_node import KnowledgeNode
 from jarvis.domain.enums.node_kind import NodeKind
+from jarvis.infrastructure.atomic_write import atomic_write_text
+from jarvis.infrastructure.sqlite_knowledge_graph_store import (
+    deserialise_edge,
+    deserialise_node,
+    serialise_edge,
+    serialise_node,
+)
 
 
-def serialise_node(node: KnowledgeNode) -> dict[str, Any]:
-    return {
-        "id": node.id,
-        "kind": node.kind.value,
-        "name": node.name,
-        "description": node.description,
-        "properties": node.properties,
-        "created_at": node.created_at.isoformat(),
-    }
+class JsonKnowledgeGraphStore:
+    """An entity/relationship graph persisted to a JSON file."""
 
-
-def deserialise_node(data: dict[str, Any]) -> KnowledgeNode:
-    return KnowledgeNode(
-        kind=NodeKind(data["kind"]),
-        name=data["name"],
-        id=data["id"],
-        description=data.get("description"),
-        properties=data.get("properties", {}),
-        created_at=datetime.fromisoformat(data["created_at"]),
-    )
-
-
-def serialise_edge(edge: KnowledgeEdge) -> dict[str, Any]:
-    return {
-        "id": edge.id,
-        "source_id": edge.source_id,
-        "target_id": edge.target_id,
-        "relation": edge.relation,
-        "created_at": edge.created_at.isoformat(),
-    }
-
-
-def deserialise_edge(data: dict[str, Any]) -> KnowledgeEdge:
-    return KnowledgeEdge(
-        source_id=data["source_id"],
-        target_id=data["target_id"],
-        relation=data["relation"],
-        id=data["id"],
-        created_at=datetime.fromisoformat(data["created_at"]),
-    )
-
-
-class SqliteKnowledgeGraphStore:
-    """A knowledge graph store backed by SQLite."""
-
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self._conn = connection
+    def __init__(self, path: str | Path) -> None:
+        self._path = Path(path)
         self._nodes: dict[str, KnowledgeNode] = {}
+        self._nodes_by_name: dict[str, KnowledgeNode] = {}
         self._edges: dict[str, KnowledgeEdge] = {}
         self._edges_from: dict[str, list[KnowledgeEdge]] = {}
         self._edges_to: dict[str, list[KnowledgeEdge]] = {}
-        self._ensure_schema()
         self._load()
 
     def get_node(self, node_id: str) -> KnowledgeNode | None:
@@ -85,13 +50,8 @@ class SqliteKnowledgeGraphStore:
 
     def save_node(self, node: KnowledgeNode) -> None:
         self._nodes[node.id] = node
-        payload = json.dumps(serialise_node(node), separators=(",", ":"))
-        self._conn.execute(
-            "INSERT INTO knowledge_nodes (id, name, payload) VALUES (?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload",
-            (node.id, node.name, payload),
-        )
-        self._conn.commit()
+        self._nodes_by_name[node.name] = node
+        self._flush()
 
     def all_nodes(self) -> tuple[KnowledgeNode, ...]:
         return tuple(self._nodes.values())
@@ -103,14 +63,7 @@ class SqliteKnowledgeGraphStore:
         self._edges[edge.id] = edge
         self._edges_from.setdefault(edge.source_id, []).append(edge)
         self._edges_to.setdefault(edge.target_id, []).append(edge)
-        payload = json.dumps(serialise_edge(edge), separators=(",", ":"))
-        self._conn.execute(
-            "INSERT INTO knowledge_edges (id, source_id, target_id, payload) "
-            "VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload",
-            (edge.id, edge.source_id, edge.target_id, payload),
-        )
-        self._conn.commit()
+        self._flush()
 
     def edges_from(self, node_id: str) -> tuple[KnowledgeEdge, ...]:
         return tuple(self._edges_from.get(node_id, []))
@@ -129,6 +82,7 @@ class SqliteKnowledgeGraphStore:
     def neighbors(
         self, node_id: str, relation: str | None = None, depth: int = 1
     ) -> tuple[KnowledgeNode, ...]:
+        """BFS traversal up to ``depth`` hops, optionally filtering by relation."""
         visited: set[str] = {node_id}
         current_level = [node_id]
         result: list[KnowledgeNode] = []
@@ -151,6 +105,7 @@ class SqliteKnowledgeGraphStore:
     def path_between(
         self, source_id: str, target_id: str, max_depth: int = 4
     ) -> tuple[list[KnowledgeNode], list[KnowledgeEdge]] | None:
+        """BFS to find shortest path from source to target."""
         if source_id == target_id:
             node = self._nodes.get(source_id)
             return ([node], []) if node is not None else None
@@ -180,33 +135,43 @@ class SqliteKnowledgeGraphStore:
 
         return None
 
-    def _ensure_schema(self) -> None:
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS knowledge_nodes "
-            "(id TEXT PRIMARY KEY, name TEXT NOT NULL, payload TEXT NOT NULL)"
-        )
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS knowledge_edges "
-            "(id TEXT PRIMARY KEY, source_id TEXT NOT NULL, "
-            "target_id TEXT NOT NULL, payload TEXT NOT NULL)"
-        )
-        self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_edges_source ON knowledge_edges(source_id)"
-        )
-        self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_edges_target ON knowledge_edges(target_id)"
-        )
-        self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_nodes_name ON knowledge_nodes(name)"
-        )
-        self._conn.commit()
-
     def _load(self) -> None:
-        for row in self._conn.execute("SELECT payload FROM knowledge_nodes"):
-            node = deserialise_node(json.loads(row[0]))
+        if not self._path.exists():
+            return
+        try:
+            raw: Any = json.loads(self._path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if not isinstance(raw, dict):
+            return
+        data = cast(dict[str, Any], raw)
+        for entry in cast(list[Any], data.get("nodes", [])):
+            if not isinstance(entry, dict):
+                continue
+            try:
+                node = deserialise_node(cast(dict[str, Any], entry))
+            except (KeyError, TypeError, ValueError):
+                continue
             self._nodes[node.id] = node
-        for row in self._conn.execute("SELECT payload FROM knowledge_edges"):
-            edge = deserialise_edge(json.loads(row[0]))
+            self._nodes_by_name[node.name] = node
+        for entry in cast(list[Any], data.get("edges", [])):
+            if not isinstance(entry, dict):
+                continue
+            try:
+                edge = deserialise_edge(cast(dict[str, Any], entry))
+            except (KeyError, TypeError, ValueError):
+                continue
             self._edges[edge.id] = edge
             self._edges_from.setdefault(edge.source_id, []).append(edge)
             self._edges_to.setdefault(edge.target_id, []).append(edge)
+
+    def _flush(self) -> None:
+        atomic_write_text(
+            self._path,
+            json.dumps(
+                {
+                    "nodes": [serialise_node(n) for n in self._nodes.values()],
+                    "edges": [serialise_edge(e) for e in self._edges.values()],
+                }
+            ),
+        )
