@@ -196,6 +196,8 @@ class CapabilitySurface:
                     source=EvidenceSource.SYSTEM_OBSERVATION,
                     weight=Confidence(1.0),
                     supports=True,
+                    # Each failed episode is its own observation (identity policy).
+                    context=f"episode {record.episode_id}",
                 )
                 for record in gap.episodes
             ]

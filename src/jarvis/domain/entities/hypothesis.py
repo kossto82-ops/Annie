@@ -16,11 +16,13 @@ class, and extraction waits for a genuine third case.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from jarvis.domain.entities.belief import derive_confidence, derive_stability
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.evidence_events import EvidenceAdded
+from jarvis.domain.services.evidence_identity import same_observation
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
@@ -47,6 +49,9 @@ class Hypothesis:
     _evidence: list[Evidence] = field(default_factory=_empty_evidence, repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
+    )
+    _dedup_policy: Callable[[Evidence, Evidence], bool] | None = field(
+        default=same_observation, repr=False
     )
 
     def __post_init__(self) -> None:
@@ -78,7 +83,15 @@ class Hypothesis:
 
         ``correlation_id`` lets a wider process (a deliberation episode) group
         this event with it; defaults to the hypothesis's own id.
+
+        The shared identity policy (:func:`same_observation`) skips an incoming
+        piece when it is the same observation as one already held, exactly like
+        :class:`Belief`, so re-injection cannot inflate a contender either.
         """
+        if self._dedup_policy is not None:
+            for existing in self._evidence:
+                if self._dedup_policy(existing, evidence):
+                    return
         self._evidence.append(evidence)
         self._record(
             EvidenceAdded(

@@ -30,9 +30,10 @@ def _ev(
     *,
     supports: bool = True,
     weight: float = 1.0,
+    content: str = "observation",
 ) -> Evidence:
     return Evidence(
-        content="observation",
+        content=content,
         source=EvidenceSource.SYSTEM_OBSERVATION,
         weight=Confidence(weight),
         supports=supports,
@@ -60,7 +61,9 @@ class TestHypothesisStability:
         assert wide.stability.is_more_stable_than(narrow.stability)
 
     def test_stability_is_independent_of_confidence(self) -> None:
-        burst = _hypothesis(_ev(_EPOCH), _ev(_EPOCH))
+        # A burst of *distinct* observations at one instant: same confidence as
+        # sustained support, none of its stability (replays would dedup).
+        burst = _hypothesis(_ev(_EPOCH), _ev(_EPOCH, content="a second observation"))
         sustained = _hypothesis(_ev(_EPOCH), _ev(_EPOCH + timedelta(days=60)))
         assert burst.confidence == sustained.confidence
         assert sustained.stability.is_more_stable_than(burst.stability)
@@ -72,9 +75,14 @@ class TestHypothesisStability:
         assert hypothesis.stability == TemporalStability.none()
 
     def test_a_recent_burst_reads_confident_but_utterly_unstable(self) -> None:
-        # Three supports at one instant: high confidence, zero stability. Vision §10
-        # keeps the axes separate -- the anti-overfit signal lives in the narrative.
-        hypothesis = _hypothesis(_ev(_EPOCH), _ev(_EPOCH), _ev(_EPOCH))
+        # Three distinct supports at one instant: high confidence, zero
+        # stability. Vision §10 keeps the axes separate -- the anti-overfit
+        # signal lives in the narrative.
+        hypothesis = _hypothesis(
+            _ev(_EPOCH),
+            _ev(_EPOCH, content="a second observation"),
+            _ev(_EPOCH, content="a third observation"),
+        )
         assert hypothesis.confidence.value > 0.5
         assert hypothesis.stability.value == 0.0
 
@@ -83,7 +91,7 @@ class TestRankingStaysOnConfidence:
     def test_stability_never_reorders_or_breaks_ties(self) -> None:
         # The bursty hypothesis is more confident; an equally-confident and much more
         # stable rival ties exactly. Stability is not a ranking key and ties survive.
-        bursty = _hypothesis(_ev(_EPOCH), _ev(_EPOCH))
+        bursty = _hypothesis(_ev(_EPOCH), _ev(_EPOCH, content="a second observation"))
         steady = _hypothesis(_ev(_EPOCH), _ev(_EPOCH + timedelta(days=90)))
         assert bursty.confidence == steady.confidence  # a real tie
         assert steady.stability.is_more_stable_than(bursty.stability)
@@ -95,7 +103,7 @@ class TestRankingStaysOnConfidence:
         hypotheses.add_evidence(steady_id, _ev(_EPOCH))
         hypotheses.add_evidence(steady_id, _ev(_EPOCH + timedelta(days=90)))
         hypotheses.add_evidence(bursty_id, _ev(_EPOCH))
-        hypotheses.add_evidence(bursty_id, _ev(_EPOCH))
+        hypotheses.add_evidence(bursty_id, _ev(_EPOCH, content="a second observation"))
         ranked = hypotheses.ranked()
         assert len(ranked) == 3
         # Tied top two -> strictly confidence-driven, no stability tie-break.

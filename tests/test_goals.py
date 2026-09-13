@@ -378,10 +378,11 @@ class TestRecurringGoalBecomesCuriosity:
             jarvis.think("is it correct?", goal=reachable)
         for _ in range(3):
             jarvis.think("is it correct?", goal=unreached)
-        # Two reaches ground the reachable goal above the threshold; the hard goal
-        # is marked unreached, so it is the sharper tension.
+        # A reach plus helpful guidance ground the reachable goal above the
+        # threshold (two independent confirmations); the hard goal is marked
+        # unreached, so it is the sharper tension.
         jarvis.mark_goal_reached(reachable)
-        jarvis.mark_goal_reached(reachable)
+        jarvis.receive_help(reachable)
         jarvis.mark_goal_reached(unreached, reached=False)
 
         impulse = jarvis.feel_curious()
@@ -396,7 +397,7 @@ class TestRecurringGoalBecomesCuriosity:
         for _ in range(2):
             jarvis.think("is it correct?", goal=goal)
         jarvis.mark_goal_reached(goal)
-        jarvis.mark_goal_reached(goal)
+        jarvis.receive_help(goal)
 
         impulse = jarvis.feel_curious()
         assert impulse is not None
@@ -515,9 +516,10 @@ class TestGivingUpOnAStuckGoal:
         assert jarvis.feel_curious() is None  # suppressed
 
         # Learning it is reachable clears the suppression: it may surface again.
-        # (Enough reaches to outweigh the earlier failure and cross the threshold.)
-        for _ in range(4):
-            jarvis.mark_goal_reached(goal)
+        # (A reach plus helpful guidance outweigh the earlier failure and cross
+        # the threshold -- two independent confirmations, not one nagging replay.)
+        jarvis.mark_goal_reached(goal)
+        jarvis.receive_help(goal)
         reachable = jarvis.belief_about_goal(goal)
         assert reachable is not None and reachable.confidence.value >= 0.5
         revived = jarvis.feel_curious()
@@ -565,8 +567,8 @@ class TestAskingForHelp:
         self._exhausted_stuck(jarvis, goal)
         assert jarvis.stuck_goals() == ("master recursion",)
 
-        for _ in range(4):
-            jarvis.mark_goal_reached(goal)
+        jarvis.mark_goal_reached(goal)
+        jarvis.receive_help(goal)
         assert jarvis.stuck_goals() == ()
         assert jarvis.ask_for_help() is None
 
@@ -596,9 +598,10 @@ class TestReceivingHelp:
         self._exhausted_stuck(jarvis, goal)
         assert jarvis.stuck_goals() == ("master recursion",)
 
-        # One answer is not proof; sustained helpful guidance lifts it.
+        # One answer is not proof; guidance plus actual reaching lifts it --
+        # two independent confirmations outweigh the earlier failure.
         jarvis.receive_help(goal)
-        jarvis.receive_help(goal)
+        jarvis.mark_goal_reached(goal)
         assert jarvis.stuck_goals() == ()
         assert jarvis.ask_for_help() is None
 

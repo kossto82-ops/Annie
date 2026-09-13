@@ -72,7 +72,9 @@ class TestAttention:
         from jarvis.domain.enums.attention import Attention
 
         jarvis = Jarvis()
-        jarvis.think(self._Q, evidence=[_ev(0.9), _ev(0.9)])  # ground it (FULL)
+        jarvis.think(
+            self._Q, evidence=[_ev(0.9), _ev(0.9, content="a second observation")]
+        )  # ground it (FULL)
         repeat = jarvis.think(self._Q)  # no new evidence
         assert repeat.attention is Attention.BRIEF
         assert repeat.working_belief is not None
@@ -82,22 +84,26 @@ class TestAttention:
         from jarvis.domain.enums.attention import Attention
 
         jarvis = Jarvis()
-        jarvis.think(self._Q, evidence=[_ev(0.9), _ev(0.9)])
-        episode = jarvis.think(self._Q, evidence=[_ev(0.9)])
+        jarvis.think(
+            self._Q, evidence=[_ev(0.9), _ev(0.9, content="a second observation")]
+        )
+        episode = jarvis.think(self._Q, evidence=[_ev(0.9, content="a third observation")])
         assert episode.attention is Attention.FULL
         assert episode.working_belief is not None
         assert len(episode.working_belief.evidence) == 3
 
     def test_a_brief_answer_reads_as_brief(self) -> None:
         jarvis = Jarvis()
-        jarvis.think(self._Q, evidence=[_ev(0.9), _ev(0.9)])
+        jarvis.think(
+            self._Q, evidence=[_ev(0.9), _ev(0.9, content="a second observation")]
+        )
         repeat = jarvis.think(self._Q)
         assert repeat.result is not None
         assert "From what I already understand" in repeat.result
 
     def test_a_full_answer_does_not_claim_prior_understanding(self) -> None:
         episode = Jarvis().think(
-            self._Q, evidence=[_ev(0.9), _ev(0.9)]
+            self._Q, evidence=[_ev(0.9), _ev(0.9, content="a second observation")]
         )  # FULL, grounded
         assert episode.result is not None
         assert "From what I already understand" not in episode.result
@@ -116,7 +122,11 @@ class TestEpistemologyDrivesTheDecision:
     def test_strong_evidence_yields_a_grounded_conclusion(self) -> None:
         episode = Jarvis().think(
             "does my companion prefer simplicity?",
-            evidence=[_ev(0.9), _ev(0.8), _ev(0.9)],
+            evidence=[
+                _ev(0.9),
+                _ev(0.8, content="a second observation"),
+                _ev(0.9, content="a third observation"),
+            ],
         )
         assert episode.result is not None
         assert "Concluded" in episode.result
@@ -147,7 +157,8 @@ class TestEvidenceRequest:
 
     def test_a_grounded_episode_asks_for_nothing(self) -> None:
         episode = Jarvis().think(
-            "does my companion prefer simplicity?", evidence=[_ev(0.9), _ev(0.9)]
+            "does my companion prefer simplicity?",
+            evidence=[_ev(0.9), _ev(0.9, content="a second observation")],
         )
         assert episode.evidence_request is None
 
@@ -155,7 +166,10 @@ class TestEvidenceRequest:
         # High confidence from a single burst is flagged as possible overfitting.
         episode = Jarvis().think(
             "does my companion prefer simplicity?",
-            evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)],
+            evidence=[
+                _ev(0.9, at=_EPOCH),
+                _ev(0.9, content="a second observation", at=_EPOCH),
+            ],
         )
         assert episode.result is not None
         assert "Concluded" in episode.result
@@ -198,7 +212,12 @@ class TestEventFlow:
         jarvis = Jarvis()
         # Three supporting pieces clear the grounded-confidence threshold (0.5).
         episode = jarvis.think(
-            "is the plan solid?", evidence=[_ev(0.9), _ev(0.9), _ev(0.9)]
+            "is the plan solid?",
+            evidence=[
+                _ev(0.9),
+                _ev(0.9, content="a second observation"),
+                _ev(0.9, content="a third observation"),
+            ],
         )
         reflected = _only_reflection(jarvis.trace_of(episode))
         assert reflected.contested is False
@@ -234,7 +253,9 @@ class TestContinuityAcrossEpisodes:
         assert first.working_belief is not None
         confidence_after_first = first.working_belief.confidence  # immutable snapshot
 
-        second = jarvis.think(question, evidence=[_ev(0.5)])
+        second = jarvis.think(
+            question, evidence=[_ev(0.5, content="a second observation")]
+        )
 
         assert second.working_belief is first.working_belief  # same belief retrieved
         assert second.working_belief is not None
@@ -246,7 +267,9 @@ class TestContinuityAcrossEpisodes:
         jarvis = Jarvis()
         question = "is my companion busy this week?"
         jarvis.think(question, evidence=[_ev(0.4)])
-        second = jarvis.think(question, evidence=[_ev(0.4)])
+        second = jarvis.think(
+            question, evidence=[_ev(0.4, content="a second observation")]
+        )
         assert second.working_belief is not None
         assert len(second.working_belief.evidence) == 2
 
@@ -324,7 +347,10 @@ class TestOverconfidenceSelfObservation:
             # Both pieces at the same instant -> grounded but zero stability.
             jarvis.think(
                 f"question about {topic}",
-                evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)],
+                evidence=[
+                    _ev(0.9, at=_EPOCH),
+                    _ev(0.9, content="a second observation", at=_EPOCH),
+                ],
             )
         belief = jarvis.observe_overconfidence()
         assert belief is not None
@@ -465,7 +491,10 @@ class TestCuriosity:
             # Grounded but same-instant evidence -> overconfident, not ungrounded.
             jarvis.think(
                 f"question about {topic}",
-                evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)],
+                evidence=[
+                    _ev(0.9, at=_EPOCH),
+                    _ev(0.9, content="a second observation", at=_EPOCH),
+                ],
             )
         impulse = jarvis.feel_curious()
         assert impulse is not None
@@ -564,7 +593,9 @@ class TestCompanionModelInformsCognition:
 
     def _make_confident(self, jarvis: Jarvis) -> None:
         jarvis.observe_companion(self._TRAIT, _ev(0.9))
-        jarvis.observe_companion(self._TRAIT, _ev(0.9))
+        jarvis.observe_companion(
+            self._TRAIT, _ev(0.9, content="a second, independent observation")
+        )
 
     def test_prior_knowledge_raises_confidence_over_a_blank_slate(self) -> None:
         # Vision §3: past understanding shapes new interpretation.
@@ -632,7 +663,8 @@ class TestLearning:
 
 class TestOverconfidenceLearning:
     def _thin(self) -> list[Evidence]:
-        return [_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)]
+        # A burst of distinct observations at one instant: grounded but thin.
+        return [_ev(0.9, at=_EPOCH), _ev(0.9, content="a second observation", at=_EPOCH)]
 
     def _spread(self) -> list[Evidence]:
         return [_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH + timedelta(days=60))]

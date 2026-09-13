@@ -32,13 +32,13 @@ class TestObserving:
         assert model.belief_about(_TRAIT) is belief
         assert belief.confidence.value > 0.0
 
-    def test_repeated_observations_strengthen_the_belief(self) -> None:
+    def test_independent_observations_strengthen_the_belief(self) -> None:
         model = CompanionModel(InMemoryBeliefStore())
         model.observe(_TRAIT, _ev(0.5))
         first = model.belief_about(_TRAIT)
         assert first is not None
         after_one = first.confidence
-        model.observe(_TRAIT, _ev(0.5))
+        model.observe(_TRAIT, _ev(0.5, content="a second, independent observation"))
         assert first.confidence.is_stronger_than(after_one)
 
 
@@ -71,7 +71,7 @@ class TestRelevance:
     def test_a_confident_belief_is_relevant_when_its_trait_is_in_the_trigger(self) -> None:
         model = CompanionModel(InMemoryBeliefStore())
         model.observe(_TRAIT, _ev(0.9))
-        model.observe(_TRAIT, _ev(0.9))
+        model.observe(_TRAIT, _ev(0.9, content="a second, independent observation"))
         assert model.relevant_to(f"will they act because they {_TRAIT}?") is not None
 
     def test_an_unrelated_trigger_matches_nothing(self) -> None:

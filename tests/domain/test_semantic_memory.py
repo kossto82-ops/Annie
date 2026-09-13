@@ -72,11 +72,11 @@ class TestEvidenceDrivenConfidence:
         sm.add_evidence(_ev(0.1))
         assert sm.confidence.value < 0.2
 
-    def test_repeated_support_strengthens(self) -> None:
+    def test_independent_support_strengthens(self) -> None:
         sm = SemanticMemory(pattern="users who X tend to Y")
         sm.add_evidence(_ev(0.5))
         after_one = sm.confidence
-        sm.add_evidence(_ev(0.5))
+        sm.add_evidence(_ev(0.5, content="a second, independent observation"))
         assert sm.confidence.is_stronger_than(after_one)
 
     def test_contradicting_evidence_lowers(self) -> None:
@@ -129,7 +129,7 @@ class TestSourceTracking:
         assert sm.reinforcement_count == 0
         sm.add_evidence(_ev(0.5))
         assert sm.reinforcement_count == 1
-        sm.add_evidence(_ev(0.5))
+        sm.add_evidence(_ev(0.5, content="a second, independent observation"))
         assert sm.reinforcement_count == 2
 
     def test_last_reinforced_at_set(self) -> None:

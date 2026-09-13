@@ -90,6 +90,10 @@ def record_outcome(
             source=EvidenceSource.ACTION_OUTCOME,
             weight=Confidence(1.0),
             supports=met_expectation,
+            # Each run is its own observation: the run identity keeps
+            # repeated runs from collapsing into one recording (identity
+            # policy), while true replays of the same run still dedup.
+            context=f"run {action.id}",
         )
     )
     jarvis.actions.save(belief)
@@ -140,6 +144,8 @@ def _remember_reversibility(jarvis: Jarvis, action: Action) -> None:
             source=EvidenceSource.ACTION_OUTCOME,
             weight=Confidence(1.0),
             supports=action.reversible,
+            # Each run is its own observation (identity policy).
+            context=f"run {action.id}",
         )
     )
     belief.pull_events()  # bookkeeping belief -- its events are not dispatched

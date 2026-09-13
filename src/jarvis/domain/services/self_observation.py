@@ -87,6 +87,8 @@ def observe_evidence_habit(
                 weight=_OBSERVATION_WEIGHT,
                 supports=ungrounded,
                 observed_at=record.recorded_at,
+                # Each episode is its own observation (identity policy).
+                context=f"episode {record.episode_id}",
             )
         )
     return belief
@@ -135,6 +137,8 @@ def observe_overconfidence(
                 weight=_OBSERVATION_WEIGHT,
                 supports=overconfident,
                 observed_at=record.recorded_at,
+                # Each episode is its own observation (identity policy).
+                context=f"episode {record.episode_id}",
             )
         )
     return belief

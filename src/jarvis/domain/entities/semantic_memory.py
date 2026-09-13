@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from jarvis.domain.entities.belief import derive_confidence, derive_stability
+from jarvis.domain.services.evidence_identity import same_observation
 from jarvis.domain.services.evidence_weighting import DEFAULT_WEIGHTING
 
 if TYPE_CHECKING:
@@ -64,7 +65,7 @@ class SemanticMemory:
         formed_at: datetime | None = None,
         last_reinforced_at: datetime | None = None,
         reinforcement_count: int = 0,
-        dedup_policy: Callable[[Evidence, Evidence], bool] | None = None,
+        dedup_policy: Callable[[Evidence, Evidence], bool] | None = same_observation,
     ) -> None:
         self.id: str = id or _new_id()
         self.pattern: str = pattern
@@ -111,8 +112,10 @@ class SemanticMemory:
         Emits :class:`SemanticMemoryReinforced` if the evidence strengthens
         the pattern, or :class:`SemanticMemoryContested` if it contradicts.
 
-        Deduplication: when ``_dedup_policy`` is configured, identical evidence
-        (same content + source + direction) is skipped.
+        Deduplication: the shared identity policy (:func:`same_observation`)
+        skips an incoming piece when it is the same observation as one
+        already held, so re-injection can never inflate confidence; an
+        independently confirmed pattern still counts.
         """
         if self._dedup_policy is not None:
             for existing in self._evidence:

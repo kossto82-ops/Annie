@@ -11,9 +11,9 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.interface.command_center import handle
 
 
-def _ev(weight: float) -> Evidence:
+def _ev(weight: float, content: str = "an observation") -> Evidence:
     return Evidence(
-        content="an observation",
+        content=content,
         source=EvidenceSource.USER_STATEMENT,
         weight=Confidence(weight),
     )
@@ -35,7 +35,11 @@ class TestDatabaseFactory:
         first_run.think(question, evidence=[_ev(0.9)])
 
         second_run = Jarvis.database(tmp_path)
-        episode = second_run.think(question, evidence=[_ev(0.9)])
+        # New (independent) evidence after the restart keeps the belief evolving;
+        # re-injecting the identical observation would rightly dedup.
+        episode = second_run.think(
+            question, evidence=[_ev(0.9, content="a second observation")]
+        )
         assert episode.working_belief is not None
         assert len(episode.working_belief.evidence) == 2
 
@@ -74,7 +78,7 @@ class TestDatabaseFactory:
         trait = "prefers simplicity"
         first_run = Jarvis.database(tmp_path)
         first_run.observe_companion(trait, _ev(0.9))
-        first_run.observe_companion(trait, _ev(0.9))
+        first_run.observe_companion(trait, _ev(0.9, content="a second observation"))
 
         second_run = Jarvis.database(tmp_path)
         belief = second_run.companion.belief_about(trait)

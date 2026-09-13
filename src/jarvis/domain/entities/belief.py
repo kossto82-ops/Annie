@@ -41,6 +41,7 @@ from jarvis.domain.events.belief_events import (
 )
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.evidence_events import EvidenceAdded
+from jarvis.domain.services.evidence_identity import same_observation
 from jarvis.domain.services.evidence_weighting import (
     DEFAULT_WEIGHTING,
     EvidenceWeightingPolicy,
@@ -207,7 +208,7 @@ class Belief:
         default_factory=_empty_event_buffer, repr=False
     )
     _dedup_policy: Callable[[Evidence, Evidence], bool] | None = field(
-        default=None, repr=False
+        default=same_observation, repr=False
     )
 
     def __post_init__(self) -> None:
@@ -243,9 +244,13 @@ class Belief:
         the wider process they belong to; it defaults to the belief's own id when
         the belief evolves outside any larger process.
 
-        Deduplication: when ``dedup_policy`` is configured, identical evidence
-        (same content + source + direction) is skipped.  Without a policy, all
-        evidence is appended unconditionally (the historical default).
+        Deduplication: by default the shared identity policy
+        (:func:`same_observation`) skips an incoming piece when it is the same
+        observation as one already held -- same id, or same claim fingerprint
+        on the same UTC day -- so re-injection can never inflate confidence.
+        An independently confirmed claim (different source, provenance, or
+        day) still counts.  Pass ``dedup_policy=None`` to restore the
+        historical append-unconditionally behaviour, or a custom predicate.
         """
         if self._dedup_policy is not None:
             for existing in self._evidence:

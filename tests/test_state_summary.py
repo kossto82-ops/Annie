@@ -15,9 +15,11 @@ from jarvis.domain.value_objects.evidence import Evidence
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _ev(weight: float, *, at: datetime | None = None) -> Evidence:
+def _ev(
+    weight: float, *, at: datetime | None = None, content: str = "an observation"
+) -> Evidence:
     kwargs: dict[str, object] = {
-        "content": "an observation",
+        "content": content,
         "source": EvidenceSource.USER_STATEMENT,
         "weight": Confidence(weight),
     }
@@ -60,7 +62,13 @@ class TestSummaryReflectsState:
         jarvis = Jarvis()
         for topic in ("a", "b", "c"):
             # grounded but same-instant -> overconfidence tendency
-            jarvis.think(f"q {topic}", evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)])
+            jarvis.think(
+                f"q {topic}",
+                evidence=[
+                    _ev(0.9, at=_EPOCH),
+                    _ev(0.9, content="a second observation", at=_EPOCH),
+                ],
+            )
         for _ in range(3):
             action = jarvis.act("tidy the notes", expected="tidy", reversible=True)
             jarvis.record_outcome(action, actual="tidy", met_expectation=True)

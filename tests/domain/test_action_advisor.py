@@ -12,19 +12,22 @@ from jarvis.domain.value_objects.evidence import Evidence
 
 def _belief_with(*, successes: int, failures: int) -> Belief:
     belief = Belief(statement="predictions about the action hold")
-    for _ in range(successes):
-        belief.add_evidence(_outcome(met=True))
-    for _ in range(failures):
-        belief.add_evidence(_outcome(met=False))
+    for run in range(successes):
+        belief.add_evidence(_outcome(met=True, run=run))
+    for run in range(successes, successes + failures):
+        belief.add_evidence(_outcome(met=False, run=run))
     return belief
 
 
-def _outcome(*, met: bool) -> Evidence:
+def _outcome(*, met: bool, run: int = 0) -> Evidence:
+    # Distinct runs are distinct observations (identity policy), like the
+    # run-id provenance record_outcome attaches in production.
     return Evidence(
         content="an outcome",
         source=EvidenceSource.ACTION_OUTCOME,
         weight=Confidence(1.0),
         supports=met,
+        context=f"run {run}",
     )
 
 

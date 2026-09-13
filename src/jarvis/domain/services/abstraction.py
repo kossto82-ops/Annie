@@ -102,6 +102,8 @@ def abstract_patterns(
                     source=EvidenceSource.SYSTEM_OBSERVATION,
                     weight=Confidence(0.5),
                     supports=True,
+                    # Each episode is its own observation (identity policy).
+                    context=f"episode {ep.episode_id}",
                 )
             )
 

@@ -20,6 +20,8 @@ from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
+_episode_seq = 0
+
 
 def _record(
     confidence: float,
@@ -28,8 +30,12 @@ def _record(
     stability: float = 0.5,
     kind: EpisodeKind = EpisodeKind.CONCLUSION,
 ) -> EpisodeRecord:
+    # Real episodes carry unique ids; the observer keys identity on them, so
+    # each recorded episode must be its own observation (identity policy).
+    global _episode_seq
+    _episode_seq += 1
     return EpisodeRecord(
-        episode_id="e",
+        episode_id=f"e-{_episode_seq}",
         trigger=trigger,
         decision="d",
         working_belief_id="b",
@@ -96,13 +102,16 @@ class TestObserveOverconfidence:
 
 def _action_belief(*, met: bool, count: int) -> Belief:
     belief = Belief(statement="My predictions about the action 'x' hold")
-    for _ in range(count):
+    for run in range(count):
+        # Distinct runs are distinct observations (identity policy), like the
+        # run-id provenance record_outcome attaches in production.
         belief.add_evidence(
             Evidence(
                 content="outcome",
                 source=EvidenceSource.ACTION_OUTCOME,
                 weight=Confidence(1.0),
                 supports=met,
+                context=f"run {run}",
             )
         )
     return belief

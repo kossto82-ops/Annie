@@ -65,11 +65,11 @@ class TestEvidenceDrivenConfidence:
         belief.add_evidence(_ev(0.1))
         assert belief.confidence.value < 0.2
 
-    def test_repeated_support_strengthens_the_belief(self) -> None:
+    def test_independent_support_strengthens_the_belief(self) -> None:
         belief = Belief(statement="the user prefers simplicity")
         belief.add_evidence(_ev(0.5))
         after_one = belief.confidence
-        belief.add_evidence(_ev(0.5))
+        belief.add_evidence(_ev(0.5, content="a second, independent observation"))
         assert belief.confidence.is_stronger_than(after_one)
 
     def test_contradicting_evidence_lowers_confidence(self) -> None:
@@ -115,7 +115,7 @@ class TestTemporalStability:
         # spans -> different stability. The two axes do not collapse (Vision §10).
         burst = Belief(statement="x")
         burst.add_evidence(_ev(0.6, at=_EPOCH))
-        burst.add_evidence(_ev(0.6, at=_EPOCH))
+        burst.add_evidence(_ev(0.6, content="a second observation", at=_EPOCH))
 
         sustained = Belief(statement="y")
         sustained.add_evidence(_ev(0.6, at=_EPOCH))

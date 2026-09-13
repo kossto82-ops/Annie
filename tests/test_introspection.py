@@ -12,9 +12,11 @@ from jarvis.domain.value_objects.evidence import Evidence
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _ev(weight: float, *, at: datetime | None = None) -> Evidence:
+def _ev(
+    weight: float, *, at: datetime | None = None, content: str = "an observation"
+) -> Evidence:
     kwargs: dict[str, object] = {
-        "content": "an observation",
+        "content": content,
         "source": EvidenceSource.USER_STATEMENT,
         "weight": Confidence(weight),
     }
@@ -34,7 +36,13 @@ class TestIntrospect:
         jarvis = Jarvis()
         for topic in ("a", "b", "c"):
             # grounded but same-instant evidence -> overconfidence
-            jarvis.think(f"q {topic}", evidence=[_ev(0.9, at=_EPOCH), _ev(0.9, at=_EPOCH)])
+            jarvis.think(
+                f"q {topic}",
+                evidence=[
+                    _ev(0.9, at=_EPOCH),
+                    _ev(0.9, content="a second observation", at=_EPOCH),
+                ],
+            )
         text = jarvis.introspect()
         assert "overconfident on thin evidence" in text
 
@@ -72,8 +80,9 @@ class TestIntrospect:
         goal = Goal(statement="ship the parser")
         for question in ("q1", "q2", "q3"):
             jarvis.think(question, goal=goal)
+        # A reach plus confirmed guidance: two independent confirmations.
         jarvis.mark_goal_reached(goal)
-        jarvis.mark_goal_reached(goal)
+        jarvis.receive_help(goal)
         text = jarvis.introspect()
         assert "ship the parser (3 times)" in text
         assert "I have learned I can reach this" in text

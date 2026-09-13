@@ -14,9 +14,9 @@ from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.interface.command_center import handle
 
 
-def _ev(weight: float) -> Evidence:
+def _ev(weight: float, content: str = "an observation") -> Evidence:
     return Evidence(
-        content="an observation",
+        content=content,
         source=EvidenceSource.USER_STATEMENT,
         weight=Confidence(weight),
     )
@@ -41,7 +41,11 @@ class TestContinuityAcrossRestart:
 
         # "Restart": a brand-new Jarvis reading the same files.
         second_run = _boot(tmp_path)
-        episode = second_run.think(question, evidence=[_ev(0.9)])
+        # New (independent) evidence after the restart keeps the belief evolving;
+        # re-injecting the identical observation would rightly dedup.
+        episode = second_run.think(
+            question, evidence=[_ev(0.9, content="a second observation")]
+        )
         assert episode.working_belief is not None
         # Two pieces of evidence total -> the belief carried over and grew.
         assert len(episode.working_belief.evidence) == 2
@@ -102,7 +106,7 @@ class TestContinuityAcrossRestart:
         trait = "prefers simplicity"
         first_run = _boot(tmp_path)
         first_run.observe_companion(trait, _ev(0.9))
-        first_run.observe_companion(trait, _ev(0.9))
+        first_run.observe_companion(trait, _ev(0.9, content="a second observation"))
 
         second_run = _boot(tmp_path)
         belief = second_run.companion.belief_about(trait)
