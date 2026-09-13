@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
-from jarvis.interface._shared import _ready_marker
 from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
@@ -15,6 +15,11 @@ if TYPE_CHECKING:
 
 # A reply the UI can render and (optionally) speak; some commands add extra fields.
 Reply = dict[str, object]
+
+
+def _ready_marker(jarvis: Jarvis, capability: str) -> str:
+    """A concise "(ready)" taste when an acquired capability is live-backed."""
+    return " (ready)" if jarvis.can_do(capability) else ""
 
 
 def _capability(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -230,3 +235,12 @@ def _tool_run_reply(name: str, result: ToolCallResult) -> str:
     if result.ok:
         return f"Tool '{name}' ran successfully:\n{result.value or '(no output)'}"
     return f"Tool '{name}' could not run: {result.error}"
+
+
+Command = Callable[[Jarvis, Reply], Reply]
+
+# The commands this module serves, composed by the command-center router.
+COMMANDS: dict[str, Command] = {
+    "capability": _capability,
+    "tool": _tool,
+}

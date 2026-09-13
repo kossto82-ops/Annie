@@ -91,10 +91,10 @@ class OpenBotTaskAgent:
                 success=False,
             )
         self._last_result = result
-        return _map_result(task, result)
+        return map_result(task, result)
 
 
-def _map_result(task: str, result: OpenBotRunResult) -> TaskResult:
+def map_result(task: str, result: OpenBotRunResult) -> TaskResult:
     """Map an AG-UI ``OpenBotRunResult`` onto a Jarvis ``TaskResult`` (D6).
 
     The truth comes from the observed execution events, not from whatever

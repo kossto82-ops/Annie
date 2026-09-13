@@ -57,10 +57,11 @@ def identify_forgetting_candidates(
     candidates: list[ForgettingCandidate] = []
 
     for belief in beliefs.all_beliefs():
-        # Compute effective confidence with the policy
+        # Compute effective confidence with the policy (always a plain float:
+        # Confidence has no ordering against floats, so unwrap it immediately).
         if isinstance(weighting_policy, DecayingWeightingPolicy):
             # Use the injected decaying policy
-            effective = belief.confidence_with_policy(weighting_policy)
+            effective = belief.confidence_with_policy(weighting_policy).value
         else:
             effective = belief.confidence.value
 

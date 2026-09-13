@@ -48,7 +48,7 @@ def mark_goal_reached(jarvis: Jarvis, goal: Goal, reached: bool = True) -> Belie
     ``success_criterion`` itself yet.
     """
     statement = _goal_statement(goal.statement)
-    belief = jarvis._goals.get_by_statement(statement) or jarvis._fresh_belief(statement)
+    belief = jarvis.goals.get_by_statement(statement) or jarvis.fresh_belief(statement)
     outcome = "reached" if reached else "not reached"
     belief.add_evidence(
         Evidence(
@@ -59,7 +59,7 @@ def mark_goal_reached(jarvis: Jarvis, goal: Goal, reached: bool = True) -> Belie
             context=goal.success_criterion,
         )
     )
-    jarvis._goals.save(belief)
+    jarvis.goals.save(belief)
     for event in belief.pull_events():
         jarvis.nervous_system.publish(event)
     jarvis.nervous_system.dispatch()
@@ -71,7 +71,7 @@ def mark_goal_reached(jarvis: Jarvis, goal: Goal, reached: bool = True) -> Belie
 
 def _credit_parent(jarvis: Jarvis, parent: str, child: str, reached: bool) -> None:
     statement = _goal_statement(parent)
-    belief = jarvis._goals.get_by_statement(statement) or jarvis._fresh_belief(statement)
+    belief = jarvis.goals.get_by_statement(statement) or jarvis.fresh_belief(statement)
     outcome = "reached" if reached else "not reached"
     belief.add_evidence(
         Evidence(
@@ -81,7 +81,7 @@ def _credit_parent(jarvis: Jarvis, parent: str, child: str, reached: bool) -> No
             supports=reached,
         )
     )
-    jarvis._goals.save(belief)
+    jarvis.goals.save(belief)
     for event in belief.pull_events():
         jarvis.nervous_system.publish(event)
     jarvis.nervous_system.dispatch()
@@ -91,7 +91,7 @@ def _credit_parent(jarvis: Jarvis, parent: str, child: str, reached: bool) -> No
 def _record_subgoal_link(jarvis: Jarvis, parent: str, child: str, reached: bool) -> None:
     """Make the parent→child structure queryable (Vision §26)."""
     statement = _subgoal_statement(parent, child)
-    belief = jarvis._subgoals.get_by_statement(statement) or jarvis._fresh_belief(statement)
+    belief = jarvis.subgoals.get_by_statement(statement) or jarvis.fresh_belief(statement)
     outcome = "reached" if reached else "not reached"
     belief.add_evidence(
         Evidence(
@@ -102,7 +102,7 @@ def _record_subgoal_link(jarvis: Jarvis, parent: str, child: str, reached: bool)
         )
     )
     belief.pull_events()
-    jarvis._subgoals.save(belief)
+    jarvis.subgoals.save(belief)
 
 
 def sub_goals(jarvis: Jarvis, parent: str) -> tuple[str, ...]:
@@ -111,16 +111,16 @@ def sub_goals(jarvis: Jarvis, parent: str) -> tuple[str, ...]:
     suffix = f"' is a part of '{parent}'"
     return tuple(
         belief.statement[len(prefix) : -len(suffix)]
-        for belief in jarvis._subgoals.all_beliefs()
+        for belief in jarvis.subgoals.all_beliefs()
         if belief.statement.endswith(suffix)
     )
 
 
-def _first_unreached_part(jarvis: Jarvis, parent: str) -> str | None:
+def first_unreached_part(jarvis: Jarvis, parent: str) -> str | None:
     """The first recorded part of ``parent`` never yet reached, or None."""
     prefix = "The goal '"
     suffix = f"' is a part of '{parent}'"
-    for belief in jarvis._subgoals.all_beliefs():
+    for belief in jarvis.subgoals.all_beliefs():
         if belief.statement.endswith(suffix) and not belief.explain().supporting:
             return belief.statement[len(prefix) : -len(suffix)]
     return None
@@ -131,7 +131,7 @@ def goal_progress(jarvis: Jarvis, parent: str) -> tuple[int, int]:
     suffix = f"' is a part of '{parent}'"
     children = [
         belief
-        for belief in jarvis._subgoals.all_beliefs()
+        for belief in jarvis.subgoals.all_beliefs()
         if belief.statement.endswith(suffix)
     ]
     reached = sum(1 for belief in children if belief.explain().supporting)
@@ -141,7 +141,7 @@ def goal_progress(jarvis: Jarvis, parent: str) -> tuple[int, int]:
 def receive_help(jarvis: Jarvis, goal: Goal, helpful: bool = True) -> Belief:
     """Take in the companion's guidance on a goal and learn from it (Vision §18, §26)."""
     statement = _goal_statement(goal.statement)
-    belief = jarvis._goals.get_by_statement(statement) or jarvis._fresh_belief(statement)
+    belief = jarvis.goals.get_by_statement(statement) or jarvis.fresh_belief(statement)
     outcome = "helped" if helpful else "did not help"
     belief.add_evidence(
         Evidence(
@@ -152,12 +152,15 @@ def receive_help(jarvis: Jarvis, goal: Goal, helpful: bool = True) -> Belief:
             context=goal.success_criterion,
         )
     )
-    jarvis._goals.save(belief)
+    jarvis.goals.save(belief)
     for event in belief.pull_events():
         jarvis.nervous_system.publish(event)
     jarvis.nervous_system.dispatch()
 
-    jarvis._record_companion(
+    from jarvis.companion import record_companion
+
+    record_companion(
+        jarvis,
         "is helpful when I am stuck",
         Evidence(
             content=f"the companion's guidance on '{goal.statement}' {outcome}",
@@ -168,7 +171,7 @@ def receive_help(jarvis: Jarvis, goal: Goal, helpful: bool = True) -> Belief:
     )
 
     if helpful:
-        part = _first_unreached_part(jarvis, goal.statement)
+        part = first_unreached_part(jarvis, goal.statement)
         if part is not None:
             _credit_helped_part(jarvis, goal.statement, part)
     return belief
@@ -176,7 +179,7 @@ def receive_help(jarvis: Jarvis, goal: Goal, helpful: bool = True) -> Belief:
 
 def _credit_helped_part(jarvis: Jarvis, parent: str, part: str) -> None:
     statement = _goal_statement(part)
-    belief = jarvis._goals.get_by_statement(statement) or jarvis._fresh_belief(statement)
+    belief = jarvis.goals.get_by_statement(statement) or jarvis.fresh_belief(statement)
     belief.add_evidence(
         Evidence(
             content=f"the companion's guidance helped reach the part '{part}'",
@@ -185,7 +188,7 @@ def _credit_helped_part(jarvis: Jarvis, parent: str, part: str) -> None:
             supports=True,
         )
     )
-    jarvis._goals.save(belief)
+    jarvis.goals.save(belief)
     for event in belief.pull_events():
         jarvis.nervous_system.publish(event)
     jarvis.nervous_system.dispatch()
@@ -195,7 +198,7 @@ def _credit_helped_part(jarvis: Jarvis, parent: str, part: str) -> None:
 def belief_about_goal(jarvis: Jarvis, goal: Goal | str) -> Belief | None:
     """What Jarvis has learned about whether a goal is reachable (Vision §26)."""
     statement = goal.statement if isinstance(goal, Goal) else goal
-    return jarvis._goals.get_by_statement(_goal_statement(statement))
+    return jarvis.goals.get_by_statement(_goal_statement(statement))
 
 
 def is_stuck_goal(jarvis: Jarvis, goal_statement: str) -> bool:
@@ -209,7 +212,7 @@ def is_open_stuck_goal(jarvis: Jarvis, goal_statement: str) -> bool:
     effort = reflection_effort(jarvis.episodes.history(), goal_statement)
     return (
         is_stuck_goal(jarvis, goal_statement)
-        and effort < jarvis._knobs.max_goal_reflections
+        and effort < jarvis.knobs().max_goal_reflections
     )
 
 
@@ -218,7 +221,7 @@ def is_exhausted_stuck_goal(jarvis: Jarvis, goal_statement: str) -> bool:
     effort = reflection_effort(jarvis.episodes.history(), goal_statement)
     return (
         is_stuck_goal(jarvis, goal_statement)
-        and effort >= jarvis._knobs.max_goal_reflections
+        and effort >= jarvis.knobs().max_goal_reflections
     )
 
 
@@ -237,7 +240,7 @@ def ask_for_help(jarvis: Jarvis) -> str | None:
     if not stuck:
         return None
     goal = stuck[0]
-    part = _first_unreached_part(jarvis, goal)
+    part = first_unreached_part(jarvis, goal)
     if part is not None:
         reached, known = goal_progress(jarvis, goal)
         detail = (

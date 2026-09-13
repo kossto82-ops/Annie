@@ -66,7 +66,7 @@ class TestMetaKnowledgeFeedback:
                 f"conclusion-{i}", 0.3, EpisodeKind.CONCLUSION,
                 now - timedelta(hours=7 - i),
             )
-            controller._episodes.record(record)
+            controller.episodes.record(record)
 
         # Create 7 deliberation episodes with high confidence
         for i in range(7):
@@ -74,7 +74,7 @@ class TestMetaKnowledgeFeedback:
                 f"deliberation-{i}", 0.8, EpisodeKind.DELIBERATION,
                 now - timedelta(hours=7 - i),
             )
-            controller._episodes.record(record)
+            controller.episodes.record(record)
 
         result = controller.adapt_from_meta_observation()
 
@@ -93,7 +93,7 @@ class TestMetaKnowledgeFeedback:
                 f"conclusion-{i}", 0.8, EpisodeKind.CONCLUSION,
                 now - timedelta(hours=7 - i),
             )
-            controller._episodes.record(record)
+            controller.episodes.record(record)
 
         # Create 7 deliberation episodes with low confidence
         for i in range(7):
@@ -101,7 +101,7 @@ class TestMetaKnowledgeFeedback:
                 f"deliberation-{i}", 0.3, EpisodeKind.DELIBERATION,
                 now - timedelta(hours=7 - i),
             )
-            controller._episodes.record(record)
+            controller.episodes.record(record)
 
         result = controller.adapt_from_meta_observation()
 
@@ -118,7 +118,7 @@ class TestMetaKnowledgeFeedback:
         for i in range(3):
             record = _make_record(f"test-{i}", 0.5, EpisodeKind.CONCLUSION,
                                   datetime(2026, 9, 13, tzinfo=UTC))
-            controller._episodes.record(record)
+            controller.episodes.record(record)
 
         result = controller.adapt_from_meta_observation()
 
@@ -128,7 +128,7 @@ class TestMetaKnowledgeFeedback:
         """When most episodes are ungrounded, raise grounded_confidence."""
         controller = _make_controller()
         now = datetime(2026, 9, 13, tzinfo=UTC)
-        initial_threshold = controller._knobs.grounded_confidence
+        initial_threshold = controller.knobs.grounded_confidence
 
         # Create 8 episodes with low confidence (ungrounded)
         for i in range(8):
@@ -136,13 +136,13 @@ class TestMetaKnowledgeFeedback:
                 f"test-{i}", 0.2, EpisodeKind.CONCLUSION,
                 now - timedelta(hours=8 - i),
             )
-            controller._episodes.record(record)
+            controller.episodes.record(record)
 
         result = controller.adapt_from_meta_observation()
 
         assert result is not None
         assert "insufficient" in result
-        assert controller._knobs.grounded_confidence > initial_threshold
+        assert controller.knobs.grounded_confidence > initial_threshold
 
     def test_threshold_stays_bounded(self):
         """Grounded_confidence never exceeds 0.9."""
@@ -158,8 +158,8 @@ class TestMetaKnowledgeFeedback:
                 f"test-{i}", 0.2, EpisodeKind.CONCLUSION,
                 now - timedelta(hours=10 - i),
             )
-            controller._episodes.record(record)
+            controller.episodes.record(record)
 
         controller.adapt_from_meta_observation()
 
-        assert controller._knobs.grounded_confidence <= 0.9
+        assert controller.knobs.grounded_confidence <= 0.9

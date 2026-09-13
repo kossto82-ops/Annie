@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from jarvis.cognitive import run_episode
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.curiosity import wonder
@@ -19,6 +20,11 @@ from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.executive.executive_controller import working_statement
+from jarvis.goals import (
+    first_unreached_part,
+    is_exhausted_stuck_goal,
+    is_open_stuck_goal,
+)
 
 if TYPE_CHECKING:
     from jarvis.domain.entities.belief import Belief
@@ -121,8 +127,8 @@ def feel_curious(jarvis: Jarvis) -> CuriosityImpulse | None:
     recurring = recurring_goals(jarvis.episodes.history())
     if recurring:
         for goal, count in recurring:
-            if jarvis._is_open_stuck_goal(goal):
-                part = jarvis._first_unreached_part(goal)
+            if is_open_stuck_goal(jarvis, goal):
+                part = first_unreached_part(jarvis, goal)
                 if part is not None:
                     reached, known = jarvis.goal_progress(goal)
                     return CuriosityImpulse(
@@ -144,7 +150,7 @@ def feel_curious(jarvis: Jarvis) -> CuriosityImpulse | None:
                     goal=goal,
                 )
         for goal, count in recurring:
-            if not jarvis._is_exhausted_stuck_goal(goal):
+            if not is_exhausted_stuck_goal(jarvis, goal):
                 return CuriosityImpulse(
                     trigger=f"Why do I keep returning to: {goal}?",
                     rationale=f'I have pursued the goal "{goal}" {count} times',
@@ -152,16 +158,16 @@ def feel_curious(jarvis: Jarvis) -> CuriosityImpulse | None:
                 )
 
     for need_statement, confidence in jarvis.capability_needs():
-        if confidence.value < jarvis._knobs.insight_confidence:
+        if confidence.value < jarvis.knobs().insight_confidence:
             continue
-        need = jarvis._needs.get_by_statement(need_statement)
-        for capability in jarvis._capabilities.all_capabilities():
+        need = jarvis.needs.get_by_statement(need_statement)
+        for capability in jarvis.capability_store.all_capabilities():
             if (
                 recommend_capability(need, capability).stance
                 is CapabilityStance.SUGGEST
             ):
-                from jarvis.introspection import _NEED_PREFIX as _NEED_PREFIX_VAL
-                subject = need_statement.removeprefix(_NEED_PREFIX_VAL)
+                from jarvis.capabilities import NEED_PREFIX
+                subject = need_statement.removeprefix(NEED_PREFIX)
                 return CuriosityImpulse(
                     trigger=f"Acquire the capability to: {subject}",
                     rationale=(
@@ -253,7 +259,7 @@ def pursue(jarvis: Jarvis, impulse: CuriosityImpulse):
     episode = CognitiveEpisode(
         trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY, goal=goal
     )
-    return jarvis._run(episode)
+    return run_episode(jarvis, episode)
 
 
 def subject_of(statement: str) -> str:

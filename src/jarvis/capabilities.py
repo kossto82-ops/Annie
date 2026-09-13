@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from jarvis.domain.entities.belief import Belief
     from jarvis.jarvis import Jarvis
 
-_NEED_PREFIX = "I need the ability to: "
+NEED_PREFIX = "I need the ability to: "
 
 
 class CapabilitySurface:
@@ -40,7 +40,7 @@ class CapabilitySurface:
 
     @staticmethod
     def _need_statement(statement: str) -> str:
-        return f"{_NEED_PREFIX}{statement}"
+        return f"{NEED_PREFIX}{statement}"
 
     def _need_for_capability(self, capability_name: str) -> Belief | None:
         """The need belief bearing on a named capability, if Jarvis recorded one.
@@ -49,8 +49,8 @@ class CapabilitySurface:
         names the capability's work. Best effort: it looks for any recorded need
         whose plain-text subject mentions ``capability_name``, else None.
         """
-        prefix = _NEED_PREFIX
-        candidates = self._jarvis._needs.all_beliefs()
+        prefix = NEED_PREFIX
+        candidates = self._jarvis.needs.all_beliefs()
         if not candidates:
             return None
         for belief in candidates:
@@ -74,12 +74,12 @@ class CapabilitySurface:
         evidence: Iterable[Evidence] | None = None,
     ) -> tuple[Capability, ...]:
         need_statement = self._need_statement(statement)
-        belief = self._jarvis._needs.get_by_statement(
+        belief = self._jarvis.needs.get_by_statement(
             need_statement
-        ) or self._jarvis._fresh_belief(need_statement)
+        ) or self._jarvis.fresh_belief(need_statement)
         for piece in evidence or ():
             belief.add_evidence(piece)
-        self._jarvis._needs.save(belief)
+        self._jarvis.needs.save(belief)
         for event in belief.pull_events():
             self._jarvis.nervous_system.publish(event)
         self._jarvis.nervous_system.dispatch()
@@ -87,57 +87,57 @@ class CapabilitySurface:
         need = CapabilityNeed(statement=statement, rationale=rationale)
         candidates = scout(need)
         for capability in candidates:
-            self._jarvis._capabilities.save(capability)
+            self._jarvis.capability_store.save(capability)
         return candidates
 
     def capability_needs(self) -> tuple[tuple[str, Confidence], ...]:
         needs = [
             (belief.statement, belief.confidence)
-            for belief in self._jarvis._needs.all_beliefs()
+            for belief in self._jarvis.needs.all_beliefs()
         ]
         needs.sort(key=lambda pair: pair[1].value, reverse=True)
         return tuple(needs)
 
     def recommend_capability(self, name: str) -> CapabilityRecommendation:
         need = self._need_for_capability(name)
-        capability = self._jarvis._capabilities.get_by_name(name)
+        capability = self._jarvis.capability_store.get_by_name(name)
         return recommend_capability(need, capability)
 
     def capability_stance(self, name: str) -> CapabilityStance:
         return recommend_capability(
             self._need_for_capability(name),
-            self._jarvis._capabilities.get_by_name(name),
+            self._jarvis.capability_store.get_by_name(name),
         ).stance
 
     def acquire_capability(self, name: str) -> Capability | None:
-        current = self._jarvis._capabilities.get_by_name(name)
+        current = self._jarvis.capability_store.get_by_name(name)
         if current is None:
             return None
         acquired = current.mark_acquired()
-        self._jarvis._capabilities.save(acquired)
+        self._jarvis.capability_store.save(acquired)
         return acquired
 
     def reject_capability(self, name: str) -> Capability | None:
-        current = self._jarvis._capabilities.get_by_name(name)
+        current = self._jarvis.capability_store.get_by_name(name)
         if current is None:
             return None
         rejected = current.mark_rejected()
-        self._jarvis._capabilities.save(rejected)
+        self._jarvis.capability_store.save(rejected)
         return rejected
 
     def remember_capability(self, capability: Capability) -> None:
-        self._jarvis._capabilities.save(capability)
+        self._jarvis.capability_store.save(capability)
 
     def capabilities(self) -> tuple[Capability, ...]:
-        return self._jarvis._capabilities.all_capabilities()
+        return self._jarvis.capability_store.all_capabilities()
 
     def can_do(self, capability: str) -> bool:
-        current = self._jarvis._capabilities.get_by_name(capability)
+        current = self._jarvis.capability_store.get_by_name(capability)
         if current is None or current.status is not CapabilityStatus.ACQUIRED:
             return False
         provider = (
-            self._jarvis._capability_providers.provider_for(capability)
-            if self._jarvis._capability_providers is not None
+            self._jarvis.capability_providers.provider_for(capability)
+            if self._jarvis.capability_providers is not None
             else None
         )
         return provider is not None and provider.is_available()
@@ -146,13 +146,13 @@ class CapabilitySurface:
         return tuple(
             sorted(
                 capability.name
-                for capability in self._jarvis._capabilities.all_capabilities()
+                for capability in self._jarvis.capability_store.all_capabilities()
                 if self.can_do(capability.name)
             )
         )
 
     def provision_live_capabilities(self) -> tuple[Capability, ...]:
-        registry = self._jarvis._capability_providers
+        registry = self._jarvis.capability_providers
         if registry is None:
             return ()
         provisioned: list[Capability] = []
@@ -160,20 +160,20 @@ class CapabilitySurface:
             provider = registry.provider_for(candidate.name)
             if provider is None or not provider.is_available():
                 continue
-            current = self._jarvis._capabilities.get_by_name(candidate.name)
+            current = self._jarvis.capability_store.get_by_name(candidate.name)
             if current is None:
                 acquired = candidate.mark_acquired()
-                self._jarvis._capabilities.save(acquired)
+                self._jarvis.capability_store.save(acquired)
                 provisioned.append(acquired)
             elif current.status is CapabilityStatus.PROPOSED:
                 acquired = current.mark_acquired()
-                self._jarvis._capabilities.save(acquired)
+                self._jarvis.capability_store.save(acquired)
                 provisioned.append(acquired)
         return tuple(provisioned)
 
     def observe_capability_gaps(self) -> tuple[CapabilityGap, ...]:
         return detect_capability_gaps(
-            self._jarvis.episodes.history(), knobs=self._jarvis._knobs
+            self._jarvis.episodes.history(), knobs=self._jarvis.knobs()
         )
 
     def unanswered_subjects(self) -> tuple[str, ...]:
@@ -199,7 +199,7 @@ class CapabilitySurface:
                 )
                 for record in gap.episodes
             ]
-            need = self._jarvis._needs.get_by_statement(
+            need = self._jarvis.needs.get_by_statement(
                 self._need_statement(statement)
             )
             if need is not None:

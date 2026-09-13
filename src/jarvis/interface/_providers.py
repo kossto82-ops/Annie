@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from jarvis.infrastructure import llm_config_store
@@ -19,7 +20,7 @@ from jarvis.infrastructure.perceiver_factory import (
     describe,
 )
 from jarvis.infrastructure.provider_settings import ProviderSettings
-from jarvis.interface._shared import _OFFLINE_PERCEIVERS, _provider_error, _recall_block
+from jarvis.interface._shared import OFFLINE_PERCEIVERS, provider_error, recall_block
 from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
@@ -54,7 +55,7 @@ def _perceiver(jarvis: Jarvis, payload: Reply) -> Reply:
     # The API key is write-only from the page: it is applied to the live process and
     # saved to .env, but never echoed back in any reply or snapshot.
     api_key = str(payload.get("api_key", "")).strip()
-    is_real = provider.lower() not in _OFFLINE_PERCEIVERS
+    is_real = provider.lower() not in OFFLINE_PERCEIVERS
     if is_real and not model:
         # A real provider needs a model — reject before staging/persisting anything.
         return {"error": f"a model id is required for provider {provider!r} (e.g. llama-3.3-70b)"}
@@ -112,7 +113,7 @@ def _provider_health(jarvis: Jarvis, payload: Reply) -> Reply:
     provider = str(payload.get("provider", "")).strip()
     if not provider:
         return {"error": "Name a provider to probe."}
-    if provider.lower() in _OFFLINE_PERCEIVERS:
+    if provider.lower() in OFFLINE_PERCEIVERS:
         return {
             "ok": True,
             "reply": f"{provider} is an offline rule — nothing live to verify (deterministic).",
@@ -144,7 +145,7 @@ def _provider_health(jarvis: Jarvis, payload: Reply) -> Reply:
     try:
         answer = model_adapter.complete("ok")
     except Exception as error:  # noqa: BLE001 - the external-provider boundary
-        return {"ok": False, "reply": _provider_error(error), "speak": False}
+        return {"ok": False, "reply": provider_error(error), "speak": False}
     latency = round(time.perf_counter() - started, 3)
     head = answer.strip().replace("\n", " ")[:120]
     return {
@@ -211,7 +212,7 @@ def _embeddings(jarvis: Jarvis, payload: Reply) -> Reply:
     if action and action != "reload":
         return {"reply": "Use embeddings with action 'reload' or none.", "speak": False}
     if not action:
-        mode = _recall_block(jarvis)["mode"]
+        mode = recall_block(jarvis)["mode"]
         detail = (
             "recall by meaning is live"
             if mode == "meaning"
@@ -247,16 +248,16 @@ def _speech(jarvis: Jarvis, payload: Reply) -> Reply:
     if action and action != "reload":
         return {"reply": "Use speech with action 'reload' or none.", "speak": False}
     if not action:
-        from jarvis.interface._state import _speech_block
+        from jarvis.interface._state import speech_block
 
-        return {"reply": _speech_status(jarvis), "speak": False, **_speech_block(jarvis)}
+        return {"reply": _speech_status(jarvis), "speak": False, **speech_block(jarvis)}
     try:
         jarvis.set_speech_perception(speech_perception_from_env())
     except ValueError as error:
         return {"reply": f"Couldn't rewire the ear: {error}", "speak": False}
-    from jarvis.interface._state import _speech_block
+    from jarvis.interface._state import speech_block
 
-    return {"reply": _speech_status(jarvis), "speak": False, **_speech_block(jarvis)}
+    return {"reply": _speech_status(jarvis), "speak": False, **speech_block(jarvis)}
 
 
 def _speech_status(jarvis: Jarvis) -> str:
@@ -268,3 +269,16 @@ def _speech_status(jarvis: Jarvis) -> str:
         model = f" ({source.model})" if source.model else ""
         return f"Live ear: {source.provider or 'server'}{model} — the mic records to it."
     return "Browser ear (Web Speech) — transcription happens in the page."
+
+
+Command = Callable[[Jarvis, Reply], Reply]
+
+# The commands this module serves, composed by the command-center router.
+COMMANDS: dict[str, Command] = {
+    "embeddings": _embeddings,
+    "perceiver": _perceiver,
+    "provider_health": _provider_health,
+    "provider_reset": _provider_reset,
+    "reasoner": _reasoner,
+    "speech": _speech,
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
@@ -129,3 +130,12 @@ def _recall(jarvis: Jarvis, payload: Reply) -> Reply:
         "speak": False,
         "memories": entries,
     }
+
+
+Command = Callable[[Jarvis, Reply], Reply]
+
+# The commands this module serves, composed by the command-center router.
+COMMANDS: dict[str, Command] = {
+    "conversations": _conversations,
+    "recall": _recall,
+}

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
 from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
-from jarvis.interface._shared import _capability_not_ready
+from jarvis.interface._shared import capability_not_ready
 from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
@@ -51,7 +52,7 @@ def _external_not_ready(jarvis: Jarvis, capability: str) -> Reply:
             ),
             "speak": False,
         }
-    return _capability_not_ready(jarvis, capability)
+    return capability_not_ready(jarvis, capability)
 
 
 def _external(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -132,7 +133,7 @@ def _research(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": False,
         }
     if not jarvis.can_do(_RESEARCH_CAPABILITY):
-        return _capability_not_ready(jarvis, _RESEARCH_CAPABILITY)
+        return capability_not_ready(jarvis, _RESEARCH_CAPABILITY)
     try:
         depth_raw = payload.get("depth", 1)
         try:
@@ -167,7 +168,7 @@ def _compare(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": False,
         }
     if not jarvis.can_do(_COMPARE_CAPABILITY):
-        return _capability_not_ready(jarvis, _COMPARE_CAPABILITY)
+        return capability_not_ready(jarvis, _COMPARE_CAPABILITY)
     try:
         selected = payload.get("models")
         models = None
@@ -267,3 +268,13 @@ def _external_search_reply(docs: tuple[RetrievedDocument, ...]) -> str:
             head = head[:200].rstrip() + "…"
         parts.append(f"{i}. ({doc.source}) {head}")
     return "Search results:\n" + "\n".join(parts)
+
+
+Command = Callable[[Jarvis, Reply], Reply]
+
+# The commands this module serves, composed by the command-center router.
+COMMANDS: dict[str, Command] = {
+    "compare": _compare,
+    "external": _external,
+    "research": _research,
+}

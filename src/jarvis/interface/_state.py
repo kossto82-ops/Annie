@@ -15,9 +15,9 @@ from jarvis.infrastructure.perceiver_factory import (
     saved_models,
 )
 from jarvis.interface._shared import (
-    _OFFLINE_PERCEIVERS,
-    _companion_name,
-    _recall_block,
+    OFFLINE_PERCEIVERS,
+    companion_name,
+    recall_block,
 )
 from jarvis.jarvis import Jarvis
 
@@ -49,9 +49,9 @@ def _provider_stats(jarvis: Jarvis) -> dict[str, object]:
 
 def _workflows_block_lazy(jarvis: Jarvis) -> list[Reply]:
     """Lazy wrapper to avoid circular import with _workflow at module level."""
-    from jarvis.interface._workflow import _workflows_block
+    from jarvis.interface._workflow import workflows_block
 
-    return _workflows_block(jarvis)
+    return workflows_block(jarvis)
 
 
 def snapshot(jarvis: Jarvis) -> Reply:
@@ -76,7 +76,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
             "deliberation_value": jarvis.deliberation_value().value,
         },
         "provider": _provider_stats(jarvis),
-        "speech": _speech_block(jarvis),
+        "speech": speech_block(jarvis),
         "tunables": {
             "grounded_confidence": jarvis.knobs().grounded_confidence,
             "insight_confidence": jarvis.knobs().insight_confidence,
@@ -86,7 +86,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
         "companion": [
             {"statement": s, "confidence": c} for s, c in summary.companion_traits
         ],
-        "companion_name": _companion_name(jarvis),
+        "companion_name": companion_name(jarvis),
         "goals": [{"goal": g, "count": n} for g, n in summary.recurring_goals],
         "actions": [
             {"description": a.description, "confidence": a.confidence, "stance": a.stance.name}
@@ -119,20 +119,20 @@ def snapshot(jarvis: Jarvis) -> Reply:
         ],
         "activity": _recent_activity(jarvis),
         "providers": _providers_block(jarvis),
-        "agents": _agents_block(jarvis),
+        "agents": agents_block(jarvis),
         "environment": _environment_block(),
         "calendar_events": _upcoming_events(jarvis),
         "calendar": _calendar_block(jarvis),
         "upcoming_tasks": _upcoming_tasks(jarvis),
         "notes": _notes_block(jarvis),
         "mail": _mail_block(jarvis),
-        "recall": _recall_block(jarvis),
+        "recall": recall_block(jarvis),
         "workflows": _workflows_block_lazy(jarvis),
         "memory": _memory_block(jarvis, summary),
     }
 
 
-def _speech_block(jarvis: Jarvis) -> Reply:
+def speech_block(jarvis: Jarvis) -> Reply:
     """The ear the console hears through, as a self-describing snapshot block.
 
     ``live`` is a promise, not a guess: an ear that turns raw audio into real text
@@ -242,7 +242,7 @@ def _agent_reason(
     return "proveedor no conectado"
 
 
-def _agents_block(jarvis: Jarvis) -> list[Reply]:
+def agents_block(jarvis: Jarvis) -> list[Reply]:
     """The real edge agents Jarvis runs on, honestly labelled (one per seam).
 
     ``active`` derives from ``can_do`` -- an acquired capability with a live backing
@@ -259,7 +259,7 @@ def _agents_block(jarvis: Jarvis) -> list[Reply]:
         cap.name: cap.status for cap in jarvis.capabilities()
     }
     kind = perception.get("kind") or "keyword"
-    perceiving = kind not in _OFFLINE_PERCEIVERS
+    perceiving = kind not in OFFLINE_PERCEIVERS
     edges: list[Reply] = [
         {
             "label": "Percepción",
@@ -408,10 +408,15 @@ def _environment_block() -> Reply:
 def _upcoming_events(jarvis: Jarvis, limit: int = 4) -> list[Reply]:
     """The next handful of calendar events, newest-first, for the mission timeline.
 
-    Offline (no store, not earned) honestly reads as an empty timeline.
+    Offline (no store, not earned) honestly reads as an empty timeline. A remote
+    (Google) store is skipped here too: the snapshot never performs a live
+    network read (the same rule the mail block documents) -- events load on
+    demand through ``calendar list``. Local stores read directly: cheap, bounded.
     """
     store = jarvis.calendar_store
     if store is None:
+        return []
+    if isinstance(store, google_calendar.GoogleCalendarStore):
         return []
     try:
         events = list(store.list_events(limit=limit))

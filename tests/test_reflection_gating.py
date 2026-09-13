@@ -59,37 +59,37 @@ class TestReflectionGating:
             evidence_count=5, weight=0.8, has_contradiction=True
         )
 
-        assert controller._should_reflect(belief) is True
+        assert controller.should_reflect(belief) is True
 
     def test_reflects_on_thin_belief(self):
         controller = _make_controller()
         belief = _make_belief(evidence_count=2, weight=0.9)
 
-        assert controller._should_reflect(belief) is True
+        assert controller.should_reflect(belief) is True
 
     def test_skips_reflection_for_established_belief(self):
         controller = _make_controller()
         belief = _make_belief(evidence_count=5, weight=0.9)
 
-        assert controller._should_reflect(belief) is False
+        assert controller.should_reflect(belief) is False
 
     def test_reflects_near_threshold(self):
         controller = _make_controller()
         # 2 evidence pieces → reflect (thin belief, ≤3)
         belief = _make_belief(evidence_count=2, weight=0.5)
 
-        assert controller._should_reflect(belief) is True
+        assert controller.should_reflect(belief) is True
 
     def test_skips_well_above_threshold(self):
         controller = _make_controller()
         # High confidence, 5 evidence pieces → skip
         belief = _make_belief(evidence_count=5, weight=0.9)
 
-        assert controller._should_reflect(belief) is False
+        assert controller.should_reflect(belief) is False
 
     def test_reflects_when_evidence_count_is_three(self):
         controller = _make_controller()
         # 3 evidence pieces → reflect (thin belief)
         belief = _make_belief(evidence_count=3, weight=0.9)
 
-        assert controller._should_reflect(belief) is True
+        assert controller.should_reflect(belief) is True

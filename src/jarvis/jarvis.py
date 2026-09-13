@@ -7,32 +7,16 @@ subscribe to cognitive events *before* thinking begins.
 
 from __future__ import annotations
 
-import difflib
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from jarvis.actions import (
-    _action_description as _action_description_fn,
-)
-from jarvis.actions import (
-    _action_statement as _action_statement_fn,
-)
-from jarvis.actions import (
-    _remember_reversibility as _remember_reversibility_fn,
-)
-from jarvis.actions import (
-    _reversibility_statement as _reversibility_statement_fn,
-)
-from jarvis.actions import (
     act as _act,
 )
 from jarvis.actions import (
     belief_about_action as _belief_about_action_fn,
-)
-from jarvis.actions import (
-    believed_reversible as _believed_reversible_fn,
 )
 from jarvis.actions import (
     recommend_action as _recommend_action_fn,
@@ -41,14 +25,12 @@ from jarvis.actions import (
     record_outcome as _record_outcome_fn,
 )
 from jarvis.capabilities import CapabilitySurface
+from jarvis.cognitive import EnergyLedger
 from jarvis.cognitive import (
     act_on_insight as _act_on_insight_fn,
 )
 from jarvis.cognitive import (
     challenge as _challenge_fn,
-)
-from jarvis.cognitive import (
-    charge as _charge_fn,
 )
 from jarvis.cognitive import (
     connections as _connections_fn,
@@ -93,19 +75,10 @@ from jarvis.cognitive import (
     rest as _rest_fn,
 )
 from jarvis.cognitive import (
-    run_episode as _run_episode_fn,
-)
-from jarvis.cognitive import (
     set_energy_budget as _set_energy_budget_fn,
 )
 from jarvis.cognitive import (
-    should_conserve as _should_conserve_fn,
-)
-from jarvis.cognitive import (
     think as _think_fn,
-)
-from jarvis.companion import (
-    _record_companion as _record_companion_fn,
 )
 from jarvis.companion import (
     acknowledge_companion as _acknowledge_companion_fn,
@@ -126,18 +99,6 @@ from jarvis.companion import (
     perceive_all_about_companion as _perceive_all_about_companion_fn,
 )
 from jarvis.curiosity import (
-    _already_mined as _already_mined_fn,
-)
-from jarvis.curiosity import (
-    _contested_working_belief as _contested_working_belief_fn,
-)
-from jarvis.curiosity import (
-    _is_contested as _is_contested_fn,
-)
-from jarvis.curiosity import (
-    _unmined_load_bearing as _unmined_load_bearing_fn,
-)
-from jarvis.curiosity import (
     ask_about as _ask_about_fn,
 )
 from jarvis.curiosity import (
@@ -154,7 +115,6 @@ from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.conversation.conversation_context import ConversationContext, Turn
 from jarvis.domain.entities.belief import Belief
-from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.document_owner import DocumentOwner
@@ -218,7 +178,7 @@ from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
-from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
+from jarvis.domain.value_objects.state_summary import StateSummary
 from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.domain.value_objects.tool_call import ToolCall
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
@@ -254,9 +214,6 @@ from jarvis.infrastructure.response_renderer import IdentityRenderer, ResponseRe
 from jarvis.infrastructure.silent_companion_perception import SilentCompanionPerception
 from jarvis.infrastructure.silent_reasoner import SilentReasoner
 from jarvis.infrastructure.text_embedder import TextEmbedder
-from jarvis.introspection import (
-    _summarise_action as _summarise_action_fn,
-)
 from jarvis.introspection import (
     introspect as _introspect,
 )
@@ -303,12 +260,6 @@ if TYPE_CHECKING:
 # The companion trait Jarvis learns about from help it received on a stuck goal.
 HELPFUL_COMPANION_TRAIT = "is helpful when I am stuck"
 
-# The internal identity prefix for a capability need belief (Odysseus). It
-# distinguishes a need from other belief kinds and keeps retrieval deterministic
-# (D17) -- but it is machine bookkeeping, never shown to the companion.
-_NEED_PREFIX = "I need the ability to: "
-
-
 def _is_silent_reasoner(reasoner: Reasoner | None) -> bool:
     """Whether ``reasoner`` is the offline no-op (never proposes anything).
 
@@ -316,24 +267,6 @@ def _is_silent_reasoner(reasoner: Reasoner | None) -> bool:
     it proposes nothing -- so it does not make that edge capability live.
     """
     return isinstance(reasoner, SilentReasoner)
-
-
-def _describe_document_change(before: str, after: str) -> str:
-    """Frame what actually changed between two texts, derived not guessed.
-
-    The note a surface shows for a rewrite comes from the real diff (Vision §26,
-    §38), never from what the editing model claims it did.
-    """
-    added = removed = 0
-    for line in difflib.unified_diff(before.splitlines(), after.splitlines(), lineterm=""):
-        if line.startswith("+") and not line.startswith("+++"):
-            added += 1
-        elif line.startswith("-") and not line.startswith("---"):
-            removed += 1
-    if added == 0 and removed == 0:
-        return "no change"
-    changed = f"{removed} line(s) removed, {added} added"
-    return changed
 
 
 # Provider names that mean "no real model": they must never back a live web-search
@@ -552,14 +485,12 @@ class Jarvis:
         # Cognitive energy (Vision §15): each episode costs by its attention level.
         # Configurable so a later command center can tune it; only made *visible*
         # here (accumulated), not yet a budget that constrains attention.
-        self._energy_costs = energy_costs or EnergyCosts()
-        self._energy_spent = 0
         # An optional current-capacity budget (Vision §15): when it runs low Jarvis
         # conserves -- answering briefly rather than running the full lifecycle --
         # and recovers on `rest()`. Config-driven (Track E). None = no budget, so
-        # behaviour is identical to before. Distinct from the cumulative tally above.
-        self._energy_budget = energy_budget
-        self._energy_available = energy_budget if energy_budget is not None else 0
+        # behaviour is identical to before. One ledger owns all four numbers so
+        # cognition, adaptation and the surface always read the same state.
+        self._energy_ledger = EnergyLedger(costs=energy_costs, budget=energy_budget)
         # How much a deliberation is *worth* by default (Vision §15): if nothing
         # else is said, Jarvis charges every episode this value. A caller can still
         # override per-call with `think(..., value=...)`.
@@ -623,7 +554,8 @@ class Jarvis:
         # The runtime-tunable cognition thresholds (grounded / insight / goal
         # gates). Absent -> the historical defaults; the command center swaps
         # them at runtime via :meth:`set_knobs` without rebuilding Jarvis.
-        self._knobs = cognitive_knobs or CognitiveKnobs()
+        # Owned by the executive (single authoritative copy, P0-C); this class
+        # reads them through :meth:`knobs` and never keeps a second copy.
         self._executive = ExecutiveController(
             self.nervous_system,
             self.beliefs,
@@ -633,7 +565,7 @@ class Jarvis:
             reasoner,
             weighting_policy,
             knowledge_source=knowledge_source,
-            knobs=self._knobs,
+            knobs=cognitive_knobs,
         )
         # Sub-facades: each wraps a coherent method group, keeping the public
         # API on Jarvis via thin delegators for backward compatibility.
@@ -1747,15 +1679,6 @@ class Jarvis:
         """
         return self._cap_surface.recommend_capability(name)
 
-    def _need_for_capability(self, capability_name: str) -> Belief | None:
-        """The need belief bearing on a named capability, if Jarvis recorded one.
-
-        Needs are keyed by their statement; this asks the one that most plausibly
-        names the capability's work. Best effort: it looks for any recorded need
-        whose plain-text subject mentions ``capability_name``, else None.
-        """
-        return self._cap_surface._need_for_capability(capability_name)
-
     def capability_stance(self, name: str) -> CapabilityStance:
         """The recommended stance toward acquiring ``name`` (Odysseus, Vision §28).
 
@@ -1861,10 +1784,6 @@ class Jarvis:
         """
         return self._cap_surface.auto_scout_gaps()
 
-    @staticmethod
-    def _need_statement(statement: str) -> str:
-        return f"{_NEED_PREFIX}{statement}"
-
     @classmethod
     def persistent(
         cls,
@@ -1929,24 +1848,6 @@ class Jarvis:
         """
         return _think_fn(self, trigger, evidence, goal, conversation, value)
 
-    def _run(
-        self,
-        episode: CognitiveEpisode,
-        evidence: Iterable[Evidence] = (),
-        conversation: tuple[Turn, ...] = (),
-        value: DeliberationValue | None = None,
-    ) -> CognitiveEpisode:
-        """Run an episode through the executive and charge its cognitive cost."""
-        return _run_episode_fn(self, episode, evidence, conversation, value)
-
-    def _charge(self, attention: Attention) -> None:
-        """Charge an episode's cognitive cost (Vision §15) and update the budget."""
-        return _charge_fn(self, attention)
-
-    def _should_conserve(self) -> bool:
-        """True when the budget is low enough that a full episode should be avoided."""
-        return _should_conserve_fn(self)
-
     def energy_spent(self) -> int:
         """Total cognitive energy spent so far (Vision §15)."""
         return _energy_spent_fn(self)
@@ -1988,21 +1889,75 @@ class Jarvis:
     def knobs(self) -> CognitiveKnobs:
         """The current cognition thresholds (grounded / insight / goal gates).
 
-        A read-only view of the tuning dials: returns the frozen value object,
-        so the surface can render them without mutating shared state.
+        A read-through to the executive's live copy -- the single authoritative
+        state (P0-C) -- so runtime adaptation is never shadowed by a stale copy.
         """
-        return self._knobs
+        return self._executive.knobs
 
     def set_knobs(self, knobs: CognitiveKnobs) -> None:
         """Swap the cognition thresholds at runtime (the command center's dials).
 
         Values are validated by :class:`CognitiveKnobs` at the value level (D7);
         an out-of-range threshold is rejected before it reaches cognition. The
-        executive (grounded gate) and Jarvis's own insight/goal gates read the
-        same object, so one swap tunes them all.
+        executive owns the live copy; every gate reads it through :meth:`knobs`.
         """
-        self._knobs = knobs
         self._executive.set_knobs(knobs)
+
+    # -- component collaboration seams -------------------------------------
+    # Read handles the sub-facades (split from this class in the audit's
+    # Phase 0) use instead of reaching into privates. They expose what this
+    # root already holds -- beliefs/episodes/actions style -- and change no
+    # behaviour.
+
+    @property
+    def executive(self) -> ExecutiveController:
+        """The episode lifecycle owner (recall / consult / reason / decide)."""
+        return self._executive
+
+    @property
+    def energy(self) -> EnergyLedger:
+        """The session's cognitive-energy accounting (Vision §15)."""
+        return self._energy_ledger
+
+    @property
+    def needs(self) -> BeliefRepository:
+        """Recorded capability needs (ordinary evidence-grounded beliefs)."""
+        return self._needs
+
+    @property
+    def goals(self) -> BeliefRepository:
+        """What Jarvis has learned about goal reachability."""
+        return self._goals
+
+    @property
+    def subgoals(self) -> BeliefRepository:
+        """Recorded parent→child goal structure."""
+        return self._subgoals
+
+    @property
+    def reversibility(self) -> BeliefRepository:
+        """What Jarvis has learned about action reversibility."""
+        return self._reversibility
+
+    @property
+    def refutations(self) -> RefutationRepository:
+        """Recorded observation/belief refutations (Vision §18)."""
+        return self._refutations
+
+    @property
+    def capability_store(self) -> CapabilityRepository:
+        """Proposed/acquired/rejected capability bookkeeping (Odysseus)."""
+        return self._capabilities
+
+    @property
+    def capability_providers(self) -> CapabilityRegistry | None:
+        """The live edge backing acquired capability names (D7)."""
+        return self._capability_providers
+
+    @property
+    def tool_registry(self) -> ToolRegistry:
+        """The gated tool surface (permission/approval live here, D6)."""
+        return self._tools
 
     def default_belief_policy(self) -> EvidenceWeightingPolicy:
         """The per-belief default source policy for newly created beliefs."""
@@ -2018,7 +1973,7 @@ class Jarvis:
         self._default_belief_policy = policy
         self.companion.set_default_policy(policy)
 
-    def _fresh_belief(self, statement: str) -> Belief:
+    def fresh_belief(self, statement: str) -> Belief:
         """A belief born with Jarvis's configured default weighting policy."""
         return Belief(statement=statement, weighting_policy=self._default_belief_policy)
 
@@ -2118,9 +2073,6 @@ class Jarvis:
         """
         return _state_summary(self)
 
-    def _summarise_action(self, statement: str, confidence: float) -> LearnedAction:
-        return _summarise_action_fn(self, statement, confidence)
-
     def feel_curious(self) -> CuriosityImpulse | None:
         """Decide whether any known self-tendency is worth investigating (Vision §16).
 
@@ -2129,17 +2081,6 @@ class Jarvis:
         None if nothing is confident enough (Vision §28).
         """
         return _feel_curious_fn(self)
-
-    @staticmethod
-    def _is_contested(belief: Belief) -> bool:
-        """True when a belief carries both supporting and contradicting evidence
-        *and* still leans neither way (confidence below the grounded threshold).
-        """
-        return _is_contested_fn(belief)
-
-    def _contested_working_belief(self) -> Belief | None:
-        """A working belief that is a live tension worth resolving (Vision §18)."""
-        return _contested_working_belief_fn(self)
 
     def ask_about(self, topic: str) -> str | None:
         """Voice an unresolved tension so the companion can settle it (Vision §18,
@@ -2224,10 +2165,6 @@ class Jarvis:
         """Adopt a reflective insight that survived challenge as a belief."""
         return _learn_from_reflection_fn(self)
 
-    @staticmethod
-    def _insight_trigger(observation: str) -> str:
-        return f'"{observation}" is a common cause behind several of my beliefs'
-
     def act_on_insight(self) -> ActionRecommendation | None:
         """Let a learned insight reach behaviour (Vision §27, §28, §31)."""
         return _act_on_insight_fn(self)
@@ -2235,13 +2172,6 @@ class Jarvis:
     def reflect_cycle(self) -> ReflectiveCycle:
         """Run the whole reflective cycle once and report what it produced."""
         return _reflect_cycle_fn(self)
-
-    def _unmined_load_bearing(self) -> Reflection | None:
-        """The top load-bearing observation not yet turned into a learned insight."""
-        return _unmined_load_bearing_fn(self)
-
-    def _already_mined(self, observation: str) -> bool:
-        return _already_mined_fn(self, observation)
 
     def refute(self, observation: str, belief_statement: str) -> None:
         """Record that a belief would hold *without* an observation."""
@@ -2327,10 +2257,6 @@ class Jarvis:
         """The parts recorded for ``parent`` (Vision §26), in the order first seen."""
         return self._goal_surface.sub_goals(parent)
 
-    def _first_unreached_part(self, parent: str) -> str | None:
-        """The first recorded part of ``parent`` never yet reached, or None."""
-        return self._goal_surface._first_unreached_part(parent)
-
     def goal_progress(self, parent: str) -> tuple[int, int]:
         """How far along a decomposed goal is, as ``(parts reached, parts known)``
         (Vision §26, §30).
@@ -2345,35 +2271,6 @@ class Jarvis:
         """What Jarvis has learned about whether a goal of this kind is reachable (Vision §26)."""
         return self._goal_surface.belief_about_goal(goal)
 
-    @staticmethod
-    def _goal_statement(goal_statement: str) -> str:
-        return GoalSurface._goal_statement(goal_statement)
-
-    def _is_stuck_goal(self, goal_statement: str) -> bool:
-        """True when Jarvis has *learned* this goal is not reliably reachable."""
-        return self._goal_surface._is_stuck_goal(goal_statement)
-
-    def _is_open_stuck_goal(self, goal_statement: str) -> bool:
-        """A stuck goal still worth wondering about."""
-        return self._goal_surface._is_open_stuck_goal(goal_statement)
-
-    def _is_exhausted_stuck_goal(self, goal_statement: str) -> bool:
-        """A stuck goal wondered about enough for now."""
-        return self._goal_surface._is_exhausted_stuck_goal(goal_statement)
-
-    def _reachability_note(self, goal_statement: str) -> str:
-        """A truthful annotation of what Jarvis has learned about reaching a goal.
-
-        Empty when no outcome is known yet; otherwise it reports learned
-        reachability from the derived confidence -- never asserting more than the
-        evidence supports (mirrors the grounded threshold, D14).
-        """
-        return self._goal_surface._reachability_note(goal_statement)
-
-    def _progress_note(self, goal_statement: str) -> str:
-        """A truthful annotation of how many of a goal's known parts are reached."""
-        return self._goal_surface._progress_note(goal_statement)
-
     def recommend_action_by_description(self, description: str) -> ActionRecommendation:
         """Recommend a stance for a *remembered* kind of action (Vision §28).
 
@@ -2384,16 +2281,6 @@ class Jarvis:
         """
         return _recommend_action_by_description_fn(self, description)
 
-    def _remember_reversibility(self, action: Action) -> None:
-        _remember_reversibility_fn(self, action)
-
-    def _believed_reversible(self, description: str) -> bool:
-        return _believed_reversible_fn(self, description)
-
-    @staticmethod
-    def _reversibility_statement(description: str) -> str:
-        return _reversibility_statement_fn(description)
-
     def recommend_action(self, action: Action) -> ActionRecommendation:
         """Recommend a stance toward ``action`` from experience (Vision §28).
 
@@ -2402,14 +2289,6 @@ class Jarvis:
         recommends -- it performs nothing (autonomy is earned).
         """
         return _recommend_action_fn(self, action)
-
-    @staticmethod
-    def _action_statement(description: str) -> str:
-        return _action_statement_fn(description)
-
-    @staticmethod
-    def _action_description(statement: str) -> str:
-        return _action_description_fn(statement)
 
     def observe_companion(self, trait: str, evidence: Evidence) -> Belief:
         """Record an observation about the companion and evolve Jarvis's model of
@@ -2446,9 +2325,6 @@ class Jarvis:
         belief less firmly now. A first or consistent observation is just noted.
         """
         return _acknowledge_companion_fn(self, trait, evidence)
-
-    def _record_companion(self, trait: str, evidence: Evidence) -> tuple[Belief, bool]:
-        return _record_companion_fn(self, trait, evidence)
 
     def explain_companion(self, trait: str) -> str:
         """Explain *why* Jarvis believes ``trait`` about its companion (Vision §5, §8).

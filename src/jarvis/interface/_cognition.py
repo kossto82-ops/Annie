@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -11,7 +12,7 @@ from jarvis.executive.executive_controller import subject_of, working_statement
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.perceiver_factory import describe
-from jarvis.interface._shared import _provenance
+from jarvis.interface._shared import provenance
 from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
         ),
         "speak": True,
         "confidence": belief.confidence.value,
-        "provenance": _provenance(belief),
+        "provenance": provenance(belief),
     }
 
 
@@ -187,7 +188,7 @@ def _learn(jarvis: Jarvis, payload: Reply) -> Reply:
     perceiver — the keyword rule can't read prose into traits. A provider failure is
     surfaced, not a crash.
     """
-    from jarvis.interface._shared import _provider_error
+    from jarvis.interface._shared import provider_error
 
     text = str(payload.get("text", "")).strip()
     if not text:
@@ -195,7 +196,7 @@ def _learn(jarvis: Jarvis, payload: Reply) -> Reply:
     try:
         learned = jarvis.note_companion(text)
     except Exception as error:  # noqa: BLE001 - the external-provider boundary
-        return {"reply": _provider_error(error), "speak": False}
+        return {"reply": provider_error(error), "speak": False}
     traits = [belief.explain().statement for belief in learned]
     if not traits:
         reply = (
@@ -308,7 +309,7 @@ def _belief(jarvis: Jarvis, payload: Reply) -> Reply:
                 "reply": f"I hold no belief recorded as {statement!r}.",
                 "speak": False,
             }
-        grounds = _provenance(belief)
+        grounds = provenance(belief)
         grounds["statement"] = belief.explain().statement
         return {
             "reply": belief.explain().narrate(subject_of(belief.explain().statement)),
@@ -321,3 +322,22 @@ def _belief(jarvis: Jarvis, payload: Reply) -> Reply:
 def _state(_jarvis: Jarvis, _payload: Reply) -> Reply:
     """Just the live snapshot (added by :func:`handle`); no side effects."""
     return {}
+
+
+Command = Callable[[Jarvis, Reply], Reply]
+
+# The commands this module serves, composed by the command-center router.
+COMMANDS: dict[str, Command] = {
+    "belief": _belief,
+    "deliberation": _deliberation,
+    "energy_budget": _energy_budget,
+    "explain": _explain,
+    "greeting": _greeting,
+    "introspect": _introspect,
+    "learn": _learn,
+    "reflect": _reflect,
+    "rest": _rest,
+    "state": _state,
+    "tunables": _tunables,
+    "wonder": _wonder,
+}

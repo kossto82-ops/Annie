@@ -320,6 +320,11 @@ class CognitiveEpisode:
             )
         )
 
+    @property
+    def reflection_note(self) -> str | None:
+        """The episode's recorded review note, if it reflected (Vision §19)."""
+        return self._reflection_note
+
     # -- events --------------------------------------------------------------
 
     def pull_events(self) -> list[CognitiveEvent]:

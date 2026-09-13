@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from jarvis.actions import action_description, action_statement, believed_reversible
+from jarvis.capabilities import NEED_PREFIX
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.services.action_advisor import recommend as recommend_stance
 from jarvis.domain.services.goal_reflection import recurring_goals, reflection_effort
@@ -22,12 +24,10 @@ from jarvis.domain.services.self_observation import (
     observe_prediction_accuracy as _observe_prediction_accuracy_svc,
 )
 from jarvis.domain.value_objects.state_summary import LearnedAction, StateSummary
+from jarvis.goals import belief_about_goal, goal_progress
 
 if TYPE_CHECKING:
     from jarvis.jarvis import Jarvis
-
-# The internal identity prefix for a capability need belief (Odysseus).
-_NEED_PREFIX = "I need the ability to: "
 
 
 # ---------------------------------------------------------------------------
@@ -43,8 +43,8 @@ def observe_self(jarvis: Jarvis):
     """
     return observe_evidence_habit(
         jarvis.episodes.history(),
-        knobs=jarvis._knobs,
-        policy=jarvis._default_belief_policy,
+        knobs=jarvis.knobs(),
+        policy=jarvis.default_belief_policy(),
     )
 
 
@@ -55,8 +55,8 @@ def observe_oc(jarvis: Jarvis):
     """
     return _observe_overconfidence_svc(
         jarvis.episodes.history(),
-        knobs=jarvis._knobs,
-        policy=jarvis._default_belief_policy,
+        knobs=jarvis.knobs(),
+        policy=jarvis.default_belief_policy(),
     )
 
 
@@ -67,8 +67,8 @@ def observe_prediction_accuracy(jarvis: Jarvis):
     """
     return _observe_prediction_accuracy_svc(
         jarvis.actions.all_beliefs(),
-        knobs=jarvis._knobs,
-        policy=jarvis._default_belief_policy,
+        knobs=jarvis.knobs(),
+        policy=jarvis.default_belief_policy(),
     )
 
 
@@ -90,18 +90,9 @@ def self_beliefs(jarvis: Jarvis):
 # ---------------------------------------------------------------------------
 
 
-def _goal_statement(goal_statement: str) -> str:
-    return f"The goal '{goal_statement}' is reachable"
-
-
-def _belief_about_goal(jarvis: Jarvis, goal_statement: str):
-    """What Jarvis has learned about whether a goal of this kind is reachable."""
-    return jarvis._goals.get_by_statement(_goal_statement(goal_statement))
-
-
 def _reachability_note(jarvis: Jarvis, goal_statement: str) -> str:
     """A truthful annotation of what Jarvis has learned about reaching a goal."""
-    belief = _belief_about_goal(jarvis, goal_statement)
+    belief = belief_about_goal(jarvis, goal_statement)
     if belief is None:
         return ""
     confidence = belief.confidence.value
@@ -117,22 +108,10 @@ def _reachability_note(jarvis: Jarvis, goal_statement: str) -> str:
 
 def _progress_note(jarvis: Jarvis, goal_statement: str) -> str:
     """A truthful annotation of how many of a goal's known parts are reached."""
-    reached, known = _goal_progress(jarvis, goal_statement)
+    reached, known = goal_progress(jarvis, goal_statement)
     if known == 0:
         return ""
     return f" ({reached} of {known} parts reached)"
-
-
-def _goal_progress(jarvis: Jarvis, parent: str) -> tuple[int, int]:
-    """How far along a decomposed goal is, as ``(parts reached, parts known)``."""
-    suffix = f"' is a part of '{parent}'"
-    children = [
-        belief
-        for belief in jarvis._subgoals.all_beliefs()
-        if belief.statement.endswith(suffix)
-    ]
-    reached = sum(1 for belief in children if belief.explain().supporting)
-    return (reached, len(children))
 
 
 # ---------------------------------------------------------------------------
@@ -140,14 +119,8 @@ def _goal_progress(jarvis: Jarvis, parent: str) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def _action_description(statement: str) -> str:
-    return statement.removeprefix(
-        "My predictions about the action '"
-    ).removesuffix("' hold")
-
-
 def _summarise_action(jarvis: Jarvis, statement: str, confidence: float) -> LearnedAction:
-    description = _action_description(statement)
+    description = action_description(statement)
     return LearnedAction(
         description=description,
         confidence=confidence,
@@ -162,23 +135,9 @@ def _summarise_action(jarvis: Jarvis, statement: str, confidence: float) -> Lear
 
 def recommend_action_by_description(jarvis: Jarvis, description: str):
     """Recommend a stance for a *remembered* kind of action (Vision §28)."""
-    outcome = jarvis.actions.get_by_statement(_action_statement(description))
-    reversible = _believed_reversible(jarvis, description)
+    outcome = jarvis.actions.get_by_statement(action_statement(description))
+    reversible = believed_reversible(jarvis, description)
     return recommend_stance(outcome, reversible=reversible)
-
-
-def _action_statement(description: str) -> str:
-    return f"My predictions about the action '{description}' hold"
-
-
-def _believed_reversible(jarvis: Jarvis, description: str) -> bool:
-    statement = _reversibility_statement(description)
-    belief = jarvis._reversibility.get_by_statement(statement)
-    return belief is not None and belief.confidence.value >= 0.5
-
-
-def _reversibility_statement(description: str) -> str:
-    return f"The action '{description}' is reversible"
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +185,7 @@ def introspect(jarvis: Jarvis) -> str:
 
     acquired = [
         capability
-        for capability in jarvis._capabilities.all_capabilities()
+        for capability in jarvis.capability_store.all_capabilities()
         if capability.status is CapabilityStatus.ACQUIRED
     ]
     if acquired:
@@ -272,23 +231,13 @@ def state_summary(jarvis: Jarvis) -> StateSummary:
             for belief in jarvis.actions.all_beliefs()
         ),
         recurring_goals=recurring_goals(jarvis.episodes.history()),
-        energy_spent=jarvis._energy_spent,
+        energy_spent=jarvis.energy.spent,
         capabilities=tuple(
             (capability.name, capability.status.value)
-            for capability in jarvis._capabilities.all_capabilities()
+            for capability in jarvis.capability_store.all_capabilities()
         ),
         capability_needs=tuple(
-            (statement.removeprefix(_NEED_PREFIX), confidence.value)
-            for statement, confidence in _capability_needs(jarvis)
+            (statement.removeprefix(NEED_PREFIX), confidence.value)
+            for statement, confidence in jarvis.capability_needs()
         ),
     )
-
-
-def _capability_needs(jarvis: Jarvis):
-    """The capability needs Jarvis has recognised, with derived confidence."""
-    needs = [
-        (belief.statement, belief.confidence)
-        for belief in jarvis._needs.all_beliefs()
-    ]
-    needs.sort(key=lambda pair: pair[1].value, reverse=True)
-    return tuple(needs)

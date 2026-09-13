@@ -28,18 +28,18 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _action_statement(description: str) -> str:
+def action_statement(description: str) -> str:
     return f"My predictions about the action '{description}' hold"
 
 
-def _action_description(statement: str) -> str:
-    # Exact inverse of _action_statement (a controlled template, not free text).
+def action_description(statement: str) -> str:
+    # Exact inverse of action_statement (a controlled template, not free text).
     return statement.removeprefix(
         "My predictions about the action '"
     ).removesuffix("' hold")
 
 
-def _reversibility_statement(description: str) -> str:
+def reversibility_statement(description: str) -> str:
     return f"The action '{description}' is reversible"
 
 
@@ -79,8 +79,8 @@ def record_outcome(
     The outcome becomes evidence for a belief about actions of this kind, so
     repeated matches build confidence and repeated mismatches erode it.
     """
-    statement = _action_statement(action.description)
-    belief = jarvis.actions.get_by_statement(statement) or jarvis._fresh_belief(statement)
+    statement = action_statement(action.description)
+    belief = jarvis.actions.get_by_statement(statement) or jarvis.fresh_belief(statement)
     belief.add_evidence(
         Evidence(
             content=(
@@ -109,7 +109,7 @@ def record_outcome(
 
 def belief_about_action(jarvis: Jarvis, description: str) -> Belief | None:
     """What Jarvis believes about how actions of this kind turn out."""
-    return jarvis.actions.get_by_statement(_action_statement(description))
+    return jarvis.actions.get_by_statement(action_statement(description))
 
 
 def recommend_action(jarvis: Jarvis, action: Action) -> ActionRecommendation:
@@ -129,8 +129,8 @@ def recommend_action(jarvis: Jarvis, action: Action) -> ActionRecommendation:
 
 
 def _remember_reversibility(jarvis: Jarvis, action: Action) -> None:
-    statement = _reversibility_statement(action.description)
-    belief = jarvis._reversibility.get_by_statement(statement) or jarvis._fresh_belief(
+    statement = reversibility_statement(action.description)
+    belief = jarvis.reversibility.get_by_statement(statement) or jarvis.fresh_belief(
         statement
     )
     manner = "reversibly" if action.reversible else "irreversibly"
@@ -143,12 +143,12 @@ def _remember_reversibility(jarvis: Jarvis, action: Action) -> None:
         )
     )
     belief.pull_events()  # bookkeeping belief -- its events are not dispatched
-    jarvis._reversibility.save(belief)
+    jarvis.reversibility.save(belief)
 
 
 def believed_reversible(jarvis: Jarvis, description: str) -> bool:
     """Whether Jarvis has learned this action kind is reversible."""
-    belief = jarvis._reversibility.get_by_statement(
-        _reversibility_statement(description)
+    belief = jarvis.reversibility.get_by_statement(
+        reversibility_statement(description)
     )
     return belief is not None and belief.confidence.value >= 0.5

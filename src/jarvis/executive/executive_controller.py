@@ -235,6 +235,20 @@ class ExecutiveController:
         """
         self._knobs = knobs
 
+    @property
+    def knobs(self) -> CognitiveKnobs:
+        """The live cognition thresholds (single authoritative copy, P0-C).
+
+        The executive owns the knobs that gate episodes; the composition root
+        reads them through here so adaptation is never shadowed by a stale copy.
+        """
+        return self._knobs
+
+    @property
+    def episodes(self) -> EpisodeRepository:
+        """The episode history store (read handle for observation and tests)."""
+        return self._episodes
+
     def adapt_from_meta_observation(self) -> str | None:
         """Evaluate meta-knowledge and return feedback about cognitive adjustments.
 
@@ -391,7 +405,7 @@ class ExecutiveController:
         self._flush(episode)  # dispatch evidence/belief events
 
         episode.begin_reflecting()
-        if episode.attention is Attention.FULL and self._should_reflect(belief):
+        if episode.attention is Attention.FULL and self.should_reflect(belief):
             self._reflect(episode, belief)
         self._flush(episode)
 
@@ -697,7 +711,7 @@ class ExecutiveController:
             and memory.content.strip().lower() == trigger.strip().lower()
         )
 
-    def _should_reflect(self, belief: Belief) -> bool:
+    def should_reflect(self, belief: Belief) -> bool:
         """Decide whether this episode warrants reflection.
 
         Reflection is gated to save cognitive work. We reflect when:
@@ -841,7 +855,7 @@ class ExecutiveController:
                 origin=episode.origin,
                 kind=episode.kind,
                 goal=episode.goal.statement if episode.goal is not None else None,
-                reflection_note=episode._reflection_note,
+                reflection_note=episode.reflection_note,
                 evidence_snapshot=evidence_snapshot,
             )
         )

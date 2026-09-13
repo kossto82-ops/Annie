@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
 from jarvis.jarvis import Jarvis
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 Reply = dict[str, object]
 
 # Predefined multi-step chains over the real edge commands (F4). Each step names
-# a command from _COMMANDS plus its static payload; ``from_inputs`` copies named
+# a command from COMMANDS plus its static payload; ``from_inputs`` copies named
 # caller inputs into that payload. A step with ``collect`` builds its payload
 # from the previous steps' replies instead (a genuine chain, not parallel calls).
 _WORKFLOWS: dict[str, Reply] = {
@@ -94,10 +95,10 @@ def _workflow_step_capability(command: str, payload: Reply) -> str | None:
 
 def _workflow_missing(jarvis: Jarvis, name: str) -> list[Reply]:
     """The inactive edges a workflow needs, each with its honest derived reason."""
-    from jarvis.interface._state import _agents_block
+    from jarvis.interface._state import agents_block
 
     definition = _WORKFLOWS[name]
-    reasons = {edge.get("capability"): edge.get("reason") for edge in _agents_block(jarvis)}
+    reasons = {edge.get("capability"): edge.get("reason") for edge in agents_block(jarvis)}
     missing: list[Reply] = []
     seen: set[str] = set()
     for step in cast("list[Reply]", definition["steps"]):
@@ -114,7 +115,7 @@ def _workflow_missing(jarvis: Jarvis, name: str) -> list[Reply]:
     return missing
 
 
-def _workflows_block(jarvis: Jarvis) -> list[Reply]:
+def workflows_block(jarvis: Jarvis) -> list[Reply]:
     """Every predefined workflow with its inputs and whether its edges are live."""
     block: list[Reply] = []
     for name, definition in _WORKFLOWS.items():
@@ -155,7 +156,7 @@ def _workflow(jarvis: Jarvis, payload: Reply) -> Reply:
     Steps run in order and stop on the first error (later steps read as
     omitted); the final reply joins every step's real outcome under headers.
     """
-    from jarvis.interface.command_center import _COMMANDS
+    from jarvis.interface.command_center import COMMANDS
 
     action = str(payload.get("action", "")).strip().lower()
     if not action:
@@ -164,7 +165,7 @@ def _workflow(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": False,
         }
     if action == "list":
-        block = _workflows_block(jarvis)
+        block = workflows_block(jarvis)
         lines = [
             f"- {entry['name']}: {entry['title']}"
             + (" (ready)" if entry["ready"] else " (blocked)")
@@ -254,7 +255,7 @@ def _workflow(jarvis: Jarvis, payload: Reply) -> Reply:
                 for key in cast("list[str]", step.get("from_inputs", [])):
                     if key in inputs:
                         step_payload[key] = inputs[key]
-            run = _COMMANDS.get(command)
+            run = COMMANDS.get(command)
             if run is None:
                 ran.append(
                     {"command": command, "state": "error", "reply": "unknown step command."}
@@ -288,3 +289,11 @@ def _workflow(jarvis: Jarvis, payload: Reply) -> Reply:
             "steps": ran,
         }
     return {"reply": "Unknown workflow action.", "speak": False}
+
+
+Command = Callable[[Jarvis, Reply], Reply]
+
+# The commands this module serves, composed by the command-center router.
+COMMANDS: dict[str, Command] = {
+    "workflow": _workflow,
+}

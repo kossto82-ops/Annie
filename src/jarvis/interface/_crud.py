@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -12,7 +13,7 @@ from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.infrastructure import google_calendar, llm_config_store
-from jarvis.interface._shared import _capability_not_ready
+from jarvis.interface._shared import capability_not_ready
 from jarvis.jarvis import Jarvis
 
 if TYPE_CHECKING:
@@ -222,7 +223,7 @@ def _calendar(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": False,
         }
     if not jarvis.can_do("manage calendar"):
-        return _capability_not_ready(jarvis, "manage calendar")
+        return capability_not_ready(jarvis, "manage calendar")
     try:
         if action == "list":
             limit_raw = payload.get("limit", 20)
@@ -346,7 +347,7 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": False,
         }
     if not jarvis.can_do("manage tasks"):
-        return _capability_not_ready(jarvis, "manage tasks")
+        return capability_not_ready(jarvis, "manage tasks")
     try:
         if action == "list":
             limit_raw = payload.get("limit", 20)
@@ -520,7 +521,7 @@ def _notes(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": False,
         }
     if not jarvis.can_do("manage notes"):
-        return _capability_not_ready(jarvis, "manage notes")
+        return capability_not_ready(jarvis, "manage notes")
     try:
         if action == "list":
             limit_raw = payload.get("limit", 20)
@@ -662,7 +663,7 @@ def _mail(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": False,
         }
     if not jarvis.can_do("send and read email"):
-        return _capability_not_ready(jarvis, "send and read email")
+        return capability_not_ready(jarvis, "send and read email")
     try:
         if action == "list":
             folder = str(payload.get("folder", "inbox")).strip() or "inbox"
@@ -750,7 +751,7 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
             "speak": False,
         }
     if not jarvis.can_do("work with files"):
-        return _capability_not_ready(jarvis, "work with files")
+        return capability_not_ready(jarvis, "work with files")
     try:
         if action == "list":
             names = jarvis.list_documents()
@@ -1010,3 +1011,16 @@ def _document_read_reply(name: str, raw: bytes) -> Reply:
         "encoding": "b64",
         "content": base64.b64encode(raw).decode("ascii"),
     }
+
+
+Command = Callable[[Jarvis, Reply], Reply]
+
+# The commands this module serves, composed by the command-center router.
+COMMANDS: dict[str, Command] = {
+    "calendar": _calendar,
+    "documents": _documents,
+    "google_calendar": _google_calendar,
+    "mail": _mail,
+    "notes": _notes,
+    "tasks": _tasks,
+}

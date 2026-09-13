@@ -8,11 +8,28 @@ outages without changing the core cognition (Vision §38, D33).
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import cast
 
 from jarvis.infrastructure.language_model import LanguageModel
 
 _log = logging.getLogger(__name__)
+
+
+def _stream_of(model: LanguageModel, prompt: str) -> Iterator[str]:
+    """The model's stream seam when it has one, else its completion in one piece.
+
+    Mirrors the probe used by the reasoner/renderer/instrumentation: the
+    ``LanguageModel`` seam is deliberately tiny (``complete`` only), so streaming
+    is detected, never assumed.
+    """
+    stream_fn = cast("Callable[[str], Iterator[str]]", getattr(model, "stream", None))
+    if callable(stream_fn):
+        yield from stream_fn(prompt)
+    else:
+        answer = model.complete(prompt)
+        if answer:
+            yield answer
 
 
 class FallbackLanguageModel:
@@ -42,7 +59,7 @@ class FallbackLanguageModel:
 
     def stream(self, prompt: str) -> Iterator[str]:
         try:
-            chunks = list(self._primary.stream(prompt))
+            chunks = list(_stream_of(self._primary, prompt))
             text = "".join(chunks).strip()
             if text:
                 return iter(chunks)
@@ -54,4 +71,4 @@ class FallbackLanguageModel:
                 type(exc).__name__,
                 exc,
             )
-        return self._backup.stream(prompt)
+        return _stream_of(self._backup, prompt)

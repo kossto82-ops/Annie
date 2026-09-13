@@ -21,6 +21,7 @@ from jarvis.domain.value_objects.challenge import Challenge as ChallengeVO
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.deliberation import Deliberation
+from jarvis.domain.value_objects.energy_costs import EnergyCosts
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.reflection import Reflection
@@ -28,10 +29,10 @@ from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
 from jarvis.executive.executive_controller import working_statement
 
 if TYPE_CHECKING:
+    from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
     from jarvis.domain.entities.belief import Belief
     from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
     from jarvis.domain.value_objects.challenge import Challenge
-    from jarvis.domain.value_objects.hypothesis_set import HypothesisSet
     from jarvis.jarvis import Jarvis
 
 
@@ -40,30 +41,70 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
+class EnergyLedger:
+    """Session-scoped cognitive-energy accounting (Vision §15).
+
+    One object owns the four numbers -- price list, cumulative spend, optional
+    budget and what is left of it -- so cognition, the surface and any future
+    adaptation all read and mutate the same state instead of four loose
+    attributes on the composition root. Behaviour is identical to the former
+    inline accounting: charging accumulates spend and drains the available
+    budget, ``rest()`` refills it without forgiving past spend, and ``None``
+    budget means unconstrained (``remaining()`` is ``None``).
+    """
+
+    def __init__(
+        self, costs: EnergyCosts | None = None, budget: int | None = None
+    ) -> None:
+        self.costs = costs or EnergyCosts()
+        self.budget = budget
+        self.spent = 0
+        self.available = budget if budget is not None else 0
+
+    def charge(self, attention: Attention) -> None:
+        """Charge one episode's cognitive cost and update the budget."""
+        cost = self.costs.for_attention(attention)
+        self.spent += cost
+        if self.budget is not None:
+            self.available = max(0, self.available - cost)
+
+    def should_conserve(self) -> bool:
+        """True when the budget is low enough that a full episode should be avoided."""
+        return self.budget is not None and self.available < self.costs.full
+
+    def remaining(self) -> int | None:
+        """Current energy left in the recoverable budget, or None when unbudgeted."""
+        return self.available if self.budget is not None else None
+
+    def rest(self) -> None:
+        """Restore energy to full (Vision §15)."""
+        if self.budget is not None:
+            self.available = self.budget
+
+    def set_budget(self, budget: int | None) -> None:
+        """Set (or clear) the recoverable energy budget at runtime."""
+        self.budget = budget
+        self.available = budget if budget is not None else 0
+
+
 def charge(jarvis: Jarvis, attention: Attention) -> None:
     """Charge an episode's cognitive cost (Vision §15) and update the budget."""
-    cost = jarvis._energy_costs.for_attention(attention)
-    jarvis._energy_spent += cost
-    if jarvis._energy_budget is not None:
-        jarvis._energy_available = max(0, jarvis._energy_available - cost)
+    jarvis.energy.charge(attention)
 
 
 def should_conserve(jarvis: Jarvis) -> bool:
     """True when the budget is low enough that a full episode should be avoided."""
-    return (
-        jarvis._energy_budget is not None
-        and jarvis._energy_available < jarvis._energy_costs.full
-    )
+    return jarvis.energy.should_conserve()
 
 
 def energy_spent(jarvis: Jarvis) -> int:
     """Total cognitive energy spent so far (Vision §15)."""
-    return jarvis._energy_spent
+    return jarvis.energy.spent
 
 
 def energy_remaining(jarvis: Jarvis) -> int | None:
     """Current energy left in the recoverable budget (Vision §15), or None."""
-    return jarvis._energy_available if jarvis._energy_budget is not None else None
+    return jarvis.energy.remaining()
 
 
 def is_conserving(jarvis: Jarvis) -> bool:
@@ -73,14 +114,12 @@ def is_conserving(jarvis: Jarvis) -> bool:
 
 def rest(jarvis: Jarvis) -> None:
     """Restore energy to full (Vision §15)."""
-    if jarvis._energy_budget is not None:
-        jarvis._energy_available = jarvis._energy_budget
+    jarvis.energy.rest()
 
 
 def set_energy_budget(jarvis: Jarvis, budget: int | None) -> None:
     """Set (or clear) the recoverable energy budget at runtime (Vision §15, §40)."""
-    jarvis._energy_budget = budget
-    jarvis._energy_available = budget if budget is not None else 0
+    jarvis.energy.set_budget(budget)
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +148,8 @@ def run_episode(
     value: DeliberationValue | None = None,
 ) -> CognitiveEpisode:
     """Run an episode through the executive and charge its cognitive cost."""
-    depth = jarvis._deliberation_value if value is None else value
-    result = jarvis._executive.run(
+    depth = jarvis.deliberation_value() if value is None else value
+    result = jarvis.executive.run(
         episode,
         evidence,
         conserve=should_conserve(jarvis),
@@ -128,7 +167,7 @@ def perceive(
     goal: Goal | None = None,
 ) -> CognitiveEpisode:
     """Perceive a raw observation and reason over what it yields (Vision §32, §8)."""
-    evidence = jarvis._perception.perceive(observation)
+    evidence = jarvis.perception.perceive(observation)
     return think(jarvis, trigger or observation, evidence=evidence, goal=goal)
 
 
@@ -141,7 +180,7 @@ def perceive_all(
     """Perceive a stream of observations and reason over all of it at once."""
     seen = list(observations)
     evidence = tuple(
-        piece for observation in seen for piece in jarvis._perception.perceive(observation)
+        piece for observation in seen for piece in jarvis.perception.perceive(observation)
     )
     resolved = trigger if trigger is not None else (seen[0] if seen else "")
     return think(jarvis, resolved, evidence=evidence, goal=goal)
@@ -154,9 +193,9 @@ def consider(
     value: DeliberationValue | None = None,
 ) -> Deliberation:
     """Weigh competing explanations for ``observation`` (Vision §17)."""
-    depth = jarvis._deliberation_value if value is None else value
-    deliberation = jarvis._executive.deliberate(observation, options, value=depth)
-    jarvis._charge(deliberation.attention)
+    depth = jarvis.deliberation_value() if value is None else value
+    deliberation = jarvis.executive.deliberate(observation, options, value=depth)
+    charge(jarvis, deliberation.attention)
     return deliberation
 
 
@@ -187,7 +226,7 @@ def related_beliefs_fn(jarvis: Jarvis, trigger: str) -> tuple[Connection, ...]:
 
 def reflect(jarvis: Jarvis) -> tuple[Reflection, ...]:
     """Look across the belief web and notice load-bearing observations."""
-    return find_reflections(list(jarvis.beliefs.all_beliefs()), jarvis._refutations.all())
+    return find_reflections(list(jarvis.beliefs.all_beliefs()), jarvis.refutations.all())
 
 
 def hypothesise(jarvis: Jarvis) -> HypothesisSet | None:
@@ -231,7 +270,7 @@ def learn_from_reflection(jarvis: Jarvis) -> Belief | None:
     if (
         leading is None
         or "common cause" not in leading.statement
-        or leading.confidence.value < jarvis._knobs.insight_confidence
+        or leading.confidence.value < jarvis.knobs().insight_confidence
     ):
         return None
     finding = reflect(jarvis)[0]
@@ -261,7 +300,7 @@ def act_on_insight(jarvis: Jarvis) -> ActionRecommendation | None:
     for finding in reflect(jarvis):
         statement = working_statement(_insight_trigger(finding.observation))
         belief = jarvis.beliefs.get_by_statement(statement)
-        if belief is not None and belief.confidence.value >= jarvis._knobs.insight_confidence:
+        if belief is not None and belief.confidence.value >= jarvis.knobs().insight_confidence:
             action = ActionVO(
                 description=f'verify that "{finding.observation}" still holds',
                 expected="the observation is confirmed",
@@ -298,4 +337,4 @@ def reflect_cycle(jarvis: Jarvis) -> ReflectiveCycle:
 
 def refute(jarvis: Jarvis, observation: str, belief_statement: str) -> None:
     """Record that a belief would hold *without* an observation."""
-    jarvis._refutations.add(observation, belief_statement)
+    jarvis.refutations.add(observation, belief_statement)

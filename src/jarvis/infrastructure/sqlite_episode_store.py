@@ -64,7 +64,7 @@ class SqliteEpisodeStore:
         self, subject: str, start: datetime | None = None, end: datetime | None = None
     ) -> tuple[EpisodeRecord, ...]:
         subject_lower = subject.lower()
-        results = []
+        results: list[EpisodeRecord] = []
         for r in self._records:
             if subject_lower not in r.trigger.lower():
                 continue

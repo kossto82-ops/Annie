@@ -12,6 +12,7 @@ Proves that:
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -116,7 +117,7 @@ class TestForgetMethod:
         result = store.forget("nonexistent")
         assert result is False
 
-    def test_forget_persists_in_json_store(self, tmp_path):
+    def test_forget_persists_in_json_store(self, tmp_path: Path) -> None:
         """forget() persists to JSON file."""
         from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 

@@ -23,7 +23,7 @@ def observe_companion(jarvis: Jarvis, trait: str, evidence: Evidence) -> Belief:
     them (Vision §5). Returns the (revisable) belief; its events flow through
     the nervous system.
     """
-    belief, _ = _record_companion(jarvis, trait, evidence)
+    belief, _ = record_companion(jarvis, trait, evidence)
     return belief
 
 
@@ -34,7 +34,7 @@ def perceive_about_companion(
     model of them (Vision §5, §32), or None if nothing is perceived.
     """
     belief: Belief | None = None
-    for piece in jarvis._perception.perceive(observation):
+    for piece in jarvis.perception.perceive(observation):
         belief = observe_companion(jarvis, trait, piece)
     return belief
 
@@ -62,7 +62,7 @@ def acknowledge_companion(
     so plainly -- the person has contradicted its model, and it holds the
     belief less firmly now. A first or consistent observation is just noted.
     """
-    _, contradicted = _record_companion(jarvis, trait, evidence)
+    _, contradicted = record_companion(jarvis, trait, evidence)
     if contradicted:
         return (
             f'You have contradicted what I believed about "{trait}". '
@@ -71,7 +71,7 @@ def acknowledge_companion(
     return f'Noted about "{trait}".'
 
 
-def _record_companion(
+def record_companion(
     jarvis: Jarvis, trait: str, evidence: Evidence
 ) -> tuple[Belief, bool]:
     """Record evidence about a companion trait and dispatch events.
@@ -112,7 +112,7 @@ def note_companion(jarvis: Jarvis, utterance: str) -> tuple[Belief, ...]:
     evidence; confidence is still derived and the belief remains contradictable.
     """
     learned: list[Belief] = []
-    for observation in jarvis._companion_perception.read_companion(utterance):
-        belief, _ = _record_companion(jarvis, observation.trait, observation.evidence)
+    for observation in jarvis.companion_perception.read_companion(utterance):
+        belief, _ = record_companion(jarvis, observation.trait, observation.evidence)
         learned.append(belief)
     return tuple(learned)

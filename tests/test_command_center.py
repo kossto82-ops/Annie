@@ -582,7 +582,8 @@ class TestProviderManagement:
         assert stats["calls"] == 0
         result = handle(jarvis, "provider_reset", {})
         assert "zero" in str(result["reply"]).lower()
-        stats = cast("dict[str, object]", result["state"]["provider"])
+        state = cast("dict[str, object]", result["state"])
+        stats = cast("dict[str, object]", state["provider"])
         assert stats["calls"] == 0
 
     def test_snapshot_stats_carry_averages(self) -> None:
@@ -641,13 +642,13 @@ class TestExternal:
             _web_able_jarvis(), "external", {"action": "read", "url": "https://example.com"}
         )
         assert isinstance(result["reply"], str)
-        assert "https://example.com" in result["reply"]
+        assert "https://example.com" in str(result["reply"])
         assert result["source"] == "web"
 
     def test_read_without_a_capability_is_a_clear_message(self) -> None:
         result = handle(Jarvis(), "external", {"action": "read", "url": "https://a.com"})
         assert isinstance(result["reply"], str)
-        assert "Internet capability" in result["reply"]
+        assert "Internet capability" in str(result["reply"])
 
     def test_read_needs_the_capability_to_be_earned(self) -> None:
         # A wired source alone is not enough: using the web capability is an
@@ -655,7 +656,7 @@ class TestExternal:
         jarvis = Jarvis(external_source=_FakeExternalSource())  # type: ignore[arg-type]
         result = handle(jarvis, "external", {"action": "read", "url": "https://a.com"})
         assert isinstance(result["reply"], str)
-        assert "earn" in result["reply"].lower()
+        assert "earn" in str(result["reply"]).lower()
 
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         result = handle(
@@ -664,7 +665,7 @@ class TestExternal:
             {"action": "read", "url": "https://example.com/fail"},
         )
         assert isinstance(result["reply"], str)
-        assert "couldn't fetch" in result["reply"]
+        assert "couldn't fetch" in str(result["reply"])
 
     def test_search_and_channels_work(self) -> None:
         jarvis = _web_able_jarvis()
@@ -677,7 +678,7 @@ class TestExternal:
     def test_missing_action_is_guided(self) -> None:
         result = handle(Jarvis(), "external", {})
         assert isinstance(result["reply"], str)
-        assert "read" in result["reply"]
+        assert "read" in str(result["reply"])
 
 
 class _FakeResearchSource:
@@ -703,21 +704,21 @@ class TestResearch:
         _grow(jarvis, "deep research")
         result = handle(jarvis, "research", {"query": "why is the sky blue"})
         assert isinstance(result["reply"], str)
-        assert "Found 1 result" in result["reply"]
-        assert "Why the sky is blue" in result["reply"]
-        assert "example.edu/sky" in result["reply"]
+        assert "Found 1 result" in str(result["reply"])
+        assert "Why the sky is blue" in str(result["reply"])
+        assert "example.edu/sky" in str(result["reply"])
         assert result["count"] == 1
 
     def test_research_without_a_source_is_a_clear_message(self) -> None:
         result = handle(Jarvis(), "research", {"query": "anything"})
         assert isinstance(result["reply"], str)
-        assert "research capability" in result["reply"]
+        assert "research capability" in str(result["reply"])
 
     def test_research_wired_but_not_earned_is_honest(self) -> None:
         jarvis = Jarvis(research_source=_FakeResearchSource())  # type: ignore[arg-type]
         result = handle(jarvis, "research", {"query": "why is the sky blue"})
         assert isinstance(result["reply"], str)
-        assert "haven't proposed or earned it yet" in result["reply"]
+        assert "haven't proposed or earned it yet" in str(result["reply"])
 
     def test_research_requires_a_query(self) -> None:
         result = handle(
@@ -726,14 +727,14 @@ class TestResearch:
             {},
         )
         assert isinstance(result["reply"], str)
-        assert "Provide a query" in result["reply"]
+        assert "Provide a query" in str(result["reply"])
 
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         jarvis = Jarvis(research_source=_FakeResearchSource())  # type: ignore[arg-type]
         _grow(jarvis, "deep research")
         result = handle(jarvis, "research", {"query": "fail now"})
         assert isinstance(result["reply"], str)
-        assert "couldn't complete that research" in result["reply"]
+        assert "couldn't complete that research" in str(result["reply"])
 
 
 class _FakeModelComparator:
@@ -773,8 +774,8 @@ class TestCompareCommand:
         _grow(jarvis, "compare language models")
         result = handle(jarvis, "compare", {"prompt": "is this a good idea?"})
         assert isinstance(result["reply"], str)
-        assert "alpha says: is this a good idea?" in result["reply"]
-        assert "beta says: is this a good idea?" in result["reply"]
+        assert "alpha says: is this a good idea?" in str(result["reply"])
+        assert "beta says: is this a good idea?" in str(result["reply"])
         assert result["count"] == 2
 
     def test_compare_can_select_models(self) -> None:
@@ -782,19 +783,19 @@ class TestCompareCommand:
         _grow(jarvis, "compare language models")
         result = handle(jarvis, "compare", {"prompt": "q", "models": ["beta"]})
         assert isinstance(result["reply"], str)
-        assert "beta says: q" in result["reply"]
-        assert "alpha" not in result["reply"]
+        assert "beta says: q" in str(result["reply"])
+        assert "alpha" not in str(result["reply"])
 
     def test_compare_without_a_comparator_is_a_clear_message(self) -> None:
         result = handle(Jarvis(), "compare", {"prompt": "anything"})
         assert isinstance(result["reply"], str)
-        assert "model comparison" in result["reply"]
+        assert "model comparison" in str(result["reply"])
 
     def test_compare_wired_but_not_earned_is_honest(self) -> None:
         jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
         result = handle(jarvis, "compare", {"prompt": "anything"})
         assert isinstance(result["reply"], str)
-        assert "haven't proposed or earned it yet" in result["reply"]
+        assert "haven't proposed or earned it yet" in str(result["reply"])
 
     def test_compare_requires_a_prompt(self) -> None:
         result = handle(
@@ -803,14 +804,14 @@ class TestCompareCommand:
             {},
         )
         assert isinstance(result["reply"], str)
-        assert "Provide a prompt" in result["reply"]
+        assert "Provide a prompt" in str(result["reply"])
 
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         jarvis = Jarvis(model_compare=_FakeModelComparator())  # type: ignore[arg-type]
         _grow(jarvis, "compare language models")
         result = handle(jarvis, "compare", {"prompt": "fail now"})
         assert isinstance(result["reply"], str)
-        assert "couldn't complete that comparison" in result["reply"]
+        assert "couldn't complete that comparison" in str(result["reply"])
 
 
 class TestToolCommand:
@@ -819,13 +820,13 @@ class TestToolCommand:
         jarvis.register_tool(EchoTool())
         result = handle(jarvis, "tool", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "echo" in result["reply"]
+        assert "echo" in str(result["reply"])
         assert result["count"] == 1
 
     def test_list_without_tools_is_honest(self) -> None:
         result = handle(Jarvis(), "tool", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "No tools are registered" in result["reply"]
+        assert "No tools are registered" in str(result["reply"])
 
     def test_run_executes_a_tool(self) -> None:
         jarvis = Jarvis()
@@ -834,7 +835,7 @@ class TestToolCommand:
             jarvis, "tool", {"action": "run", "name": "echo", "arguments": {"text": "hi"}}
         )
         assert isinstance(result["reply"], str)
-        assert "hi" in result["reply"]
+        assert "hi" in str(result["reply"])
         assert result["ok"] is True
 
     def test_run_refuses_an_unapproved_external_tool(self) -> None:
@@ -842,7 +843,7 @@ class TestToolCommand:
         jarvis.register_tool(_FakeExternalTool())
         result = handle(jarvis, "tool", {"action": "run", "name": "ping"})
         assert isinstance(result["reply"], str)
-        assert "approval" in result["reply"]
+        assert "approval" in str(result["reply"])
         assert result["ok"] is False
 
     def test_run_external_tool_with_approval(self) -> None:
@@ -852,19 +853,19 @@ class TestToolCommand:
             jarvis, "tool", {"action": "run", "name": "ping", "approved": True}
         )
         assert isinstance(result["reply"], str)
-        assert "pong" in result["reply"]
+        assert "pong" in str(result["reply"])
 
     def test_run_requires_a_name(self) -> None:
         result = handle(Jarvis(), "tool", {"action": "run"})
         assert isinstance(result["reply"], str)
-        assert "Name a tool" in result["reply"]
+        assert "Name a tool" in str(result["reply"])
 
     def test_unknown_tool_is_a_clear_message(self) -> None:
         result = handle(
             Jarvis(), "tool", {"action": "run", "name": "ghost", "approved": True}
         )
         assert isinstance(result["reply"], str)
-        assert "ghost" in result["reply"]
+        assert "ghost" in str(result["reply"])
 
 
 class _FakeExternalTool:
@@ -889,7 +890,7 @@ class TestCapabilityCommand:
             {"action": "scout", "statement": "search the web for current news"},
         )
         assert isinstance(result["reply"], str)
-        assert "search the web" in result["reply"]
+        assert "search the web" in str(result["reply"])
         assert jarvis.capabilities()  # proposals persisted for later acquire
 
     def test_scout_with_no_match_is_honest(self) -> None:
@@ -899,14 +900,14 @@ class TestCapabilityCommand:
             {"action": "scout", "statement": "compose symphonies"},
         )
         assert isinstance(result["reply"], str)
-        assert "see a candidate" in result["reply"].lower()
+        assert "see a candidate" in str(result["reply"]).lower()
 
     def test_acquiring_after_scout_updates_the_store(self) -> None:
         jarvis = Jarvis()
         handle(jarvis, "capability", {"action": "scout", "statement": "search the web"})
         result = handle(jarvis, "capability", {"action": "acquire", "name": "search the web"})
         assert isinstance(result["reply"], str)
-        assert "acquired" in result["reply"]
+        assert "acquired" in str(result["reply"])
         assert any(
             capability.status is CapabilityStatus.ACQUIRED
             for capability in jarvis.capabilities()
@@ -921,7 +922,7 @@ class TestCapabilityCommand:
             if c.status is CapabilityStatus.ACQUIRED
         ]
         assert acquired
-        assert all("(ready)" in result["reply"] for c in acquired if jarvis.can_do(c.name))
+        assert all("(ready)" in str(result["reply"]) for c in acquired if jarvis.can_do(c.name))
 
     def test_recommend_reports_a_derived_stance(self) -> None:
         jarvis = Jarvis()
@@ -933,7 +934,7 @@ class TestCapabilityCommand:
     def test_an_unknown_capability_action_is_answered_kindly(self) -> None:
         result = handle(Jarvis(), "capability", {"action": "teleport"})
         assert isinstance(result["reply"], str)
-        assert "unknown" in result["reply"].lower()
+        assert "unknown" in str(result["reply"]).lower()
 
     def test_notice_turns_unanswered_subjects_into_needs(self) -> None:
         jarvis = Jarvis()
@@ -941,7 +942,7 @@ class TestCapabilityCommand:
             jarvis.think("what is the internet")
         result = handle(jarvis, "capability", {"action": "notice"})
         assert isinstance(result["reply"], str)
-        assert "search the web" in result["reply"]
+        assert "search the web" in str(result["reply"])
         assert jarvis.capability_needs()  # a need was recorded
         assert any(
             c.name == "search the web"
@@ -966,7 +967,7 @@ class TestCapabilityCommand:
     def test_notice_with_no_gaps_says_so_honestly(self) -> None:
         result = handle(Jarvis(), "capability", {"action": "notice"})
         assert isinstance(result["reply"], str)
-        assert "haven't noticed" in result["reply"].lower()
+        assert "haven't noticed" in str(result["reply"]).lower()
 
 
 class _FakeCalendarStore:
@@ -1240,21 +1241,21 @@ class TestCalendarCommand:
         )
         result = handle(jarvis, "calendar", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "standup" in result["reply"]
-        assert "Room A" in result["reply"]
-        assert "ID: e1" in result["reply"]
+        assert "standup" in str(result["reply"])
+        assert "Room A" in str(result["reply"])
+        assert "ID: e1" in str(result["reply"])
         assert result["count"] == 1
 
     def test_list_without_a_store_is_a_clear_message(self) -> None:
         result = handle(Jarvis(), "calendar", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "calendar capability" in result["reply"]
+        assert "calendar capability" in str(result["reply"])
 
     def test_list_wired_but_not_earned_is_honest(self) -> None:
         jarvis = Jarvis(calendar_store=_FakeCalendarStore())  # type: ignore[arg-type]
         result = handle(jarvis, "calendar", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "capability" in result["reply"]
+        assert "capability" in str(result["reply"])
 
     def test_get_returns_one_event(self) -> None:
         jarvis = _calendar_able_jarvis()
@@ -1263,12 +1264,12 @@ class TestCalendarCommand:
         )
         result = handle(jarvis, "calendar", {"action": "get", "id": event.id})
         assert isinstance(result["reply"], str)
-        assert "review" in result["reply"]
+        assert "review" in str(result["reply"])
 
     def test_get_requires_an_id(self) -> None:
         result = handle(_calendar_able_jarvis(), "calendar", {"action": "get"})
         assert isinstance(result["reply"], str)
-        assert "id" in result["reply"].lower()
+        assert "id" in str(result["reply"]).lower()
 
     def test_create_persists_an_event(self) -> None:
         jarvis = _calendar_able_jarvis()
@@ -1279,7 +1280,7 @@ class TestCalendarCommand:
             "end": _event_end().isoformat(),
         })
         assert isinstance(result["reply"], str)
-        assert "demo" in result["reply"]
+        assert "demo" in str(result["reply"])
         assert jarvis.list_calendar_events()
 
     def test_create_requires_a_title(self) -> None:
@@ -1289,7 +1290,7 @@ class TestCalendarCommand:
             "end": _event_end().isoformat(),
         })
         assert isinstance(result["reply"], str)
-        assert "title" in result["reply"].lower()
+        assert "title" in str(result["reply"]).lower()
 
     def test_delete_removes_an_event(self) -> None:
         jarvis = _calendar_able_jarvis()
@@ -1298,7 +1299,7 @@ class TestCalendarCommand:
         )
         result = handle(jarvis, "calendar", {"action": "delete", "id": event.id})
         assert isinstance(result["reply"], str)
-        assert "Deleted" in result["reply"]
+        assert "Deleted" in str(result["reply"])
         assert not jarvis.list_calendar_events()
 
     def test_range_filters_events(self) -> None:
@@ -1313,14 +1314,14 @@ class TestCalendarCommand:
         end = _event_end(5).isoformat()
         result = handle(jarvis, "calendar", {"action": "range", "start": start, "end": end})
         assert isinstance(result["reply"], str)
-        assert "early" in result["reply"]
-        assert "late" not in result["reply"]
+        assert "early" in str(result["reply"])
+        assert "late" not in str(result["reply"])
         assert result["count"] == 1
 
     def test_missing_action_is_guided(self) -> None:
         result = handle(_calendar_able_jarvis(), "calendar", {})
         assert isinstance(result["reply"], str)
-        assert "calendar" in result["reply"]
+        assert "calendar" in str(result["reply"])
 
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         jarvis = _calendar_able_jarvis()
@@ -1329,7 +1330,7 @@ class TestCalendarCommand:
         )
         result = handle(jarvis, "calendar", {"action": "get", "id": "missing"})
         assert isinstance(result["reply"], str)
-        assert "couldn't" in result["reply"]
+        assert "couldn't" in str(result["reply"])
 
 
 class TestTasksCommand:
@@ -1340,33 +1341,33 @@ class TestTasksCommand:
         )
         result = handle(jarvis, "tasks", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "backup" in result["reply"]
-        assert "0 2 * * *" in result["reply"]
-        assert "ID: t1" in result["reply"]
+        assert "backup" in str(result["reply"])
+        assert "0 2 * * *" in str(result["reply"])
+        assert "ID: t1" in str(result["reply"])
         assert result["count"] == 1
 
     def test_list_without_a_scheduler_is_a_clear_message(self) -> None:
         result = handle(Jarvis(), "tasks", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "task-scheduler" in result["reply"]
+        assert "task-scheduler" in str(result["reply"])
 
     def test_list_wired_but_not_earned_is_honest(self) -> None:
         jarvis = Jarvis(task_scheduler=_FakeTaskScheduler())  # type: ignore[arg-type]
         result = handle(jarvis, "tasks", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "capability" in result["reply"]
+        assert "capability" in str(result["reply"])
 
     def test_get_returns_one_task(self) -> None:
         jarvis = _tasks_able_jarvis()
         task = jarvis.create_scheduled_task(name="cron", command="echo hi")
         result = handle(jarvis, "tasks", {"action": "get", "id": task.id})
         assert isinstance(result["reply"], str)
-        assert "cron" in result["reply"]
+        assert "cron" in str(result["reply"])
 
     def test_get_requires_an_id(self) -> None:
         result = handle(_tasks_able_jarvis(), "tasks", {"action": "get"})
         assert isinstance(result["reply"], str)
-        assert "id" in result["reply"].lower()
+        assert "id" in str(result["reply"]).lower()
 
     def test_create_persists_a_task(self) -> None:
         jarvis = _tasks_able_jarvis()
@@ -1377,7 +1378,7 @@ class TestTasksCommand:
             "cron": "0 9 * * *",
         })
         assert isinstance(result["reply"], str)
-        assert "daily report" in result["reply"]
+        assert "daily report" in str(result["reply"])
         assert jarvis.list_scheduled_tasks()
 
     def test_create_requires_a_name(self) -> None:
@@ -1385,7 +1386,7 @@ class TestTasksCommand:
             "action": "create", "command": "echo"
         })
         assert isinstance(result["reply"], str)
-        assert "name" in result["reply"].lower()
+        assert "name" in str(result["reply"]).lower()
 
     def test_enable_and_disable_toggle_state(self) -> None:
         jarvis = _tasks_able_jarvis()
@@ -1405,7 +1406,7 @@ class TestTasksCommand:
         task = jarvis.create_scheduled_task(name="cleanup", command="rm -rf /tmp/x")
         result = handle(jarvis, "tasks", {"action": "delete", "id": task.id})
         assert isinstance(result["reply"], str)
-        assert "Deleted" in result["reply"]
+        assert "Deleted" in str(result["reply"])
         assert not jarvis.list_scheduled_tasks()
 
     def test_due_returns_only_due_tasks(self) -> None:
@@ -1434,8 +1435,8 @@ class TestTasksCommand:
         scheduler.tasks[later.id] = later
         result = handle(jarvis, "tasks", {"action": "due"})
         assert isinstance(result["reply"], str)
-        assert "overdue" in result["reply"]
-        assert "later" not in result["reply"]
+        assert "overdue" in str(result["reply"])
+        assert "later" not in str(result["reply"])
 
     def test_create_with_a_bad_cron_is_clear_guidance(self, tmp_path: Path) -> None:
         from jarvis.infrastructure.task_scheduler import LocalTaskScheduler
@@ -1454,8 +1455,8 @@ class TestTasksCommand:
             "action": "create", "name": "bad", "command": "echo", "cron": "nonsense",
         })
         assert isinstance(result["reply"], str)
-        assert "cron" in result["reply"].lower()
-        assert "5 fields" in result["reply"]
+        assert "cron" in str(result["reply"]).lower()
+        assert "5 fields" in str(result["reply"])
 
     def test_run_executes_and_records_the_outcome(self) -> None:
         from jarvis.domain.value_objects.task_result import TaskResult
@@ -1469,7 +1470,7 @@ class TestTasksCommand:
         task = jarvis.create_scheduled_task(name="job", command="do it")
         result = handle(jarvis, "tasks", {"action": "run", "id": task.id})
         assert result["ok"] is True
-        assert "Ran it" in result["reply"]
+        assert "Ran it" in str(result["reply"])
         stored = jarvis.get_scheduled_task(task.id)
         assert stored.last_status == "ok"
         assert stored.last_output == "ran fine"
@@ -1478,7 +1479,7 @@ class TestTasksCommand:
         jarvis = _tasks_able_jarvis()
         task = jarvis.create_scheduled_task(name="job", command="do it")
         result = handle(jarvis, "tasks", {"action": "run", "id": task.id})
-        assert "executor" in result["reply"]
+        assert "executor" in str(result["reply"])
         assert jarvis.get_scheduled_task(task.id).last_run is None
 
     def test_run_refuses_a_disabled_task(self) -> None:
@@ -1486,11 +1487,11 @@ class TestTasksCommand:
         task = jarvis.create_scheduled_task(name="job", command="do it")
         jarvis.disable_scheduled_task(task.id)
         result = handle(jarvis, "tasks", {"action": "run", "id": task.id})
-        assert "disabled" in result["reply"]
+        assert "disabled" in str(result["reply"])
 
     def test_run_needs_an_id(self) -> None:
         result = handle(_tasks_able_jarvis(), "tasks", {"action": "run"})
-        assert "id" in result["reply"].lower()
+        assert "id" in str(result["reply"]).lower()
 
     def test_snapshot_task_entries_carry_last_runs(self) -> None:
         jarvis = _tasks_able_jarvis()
@@ -1508,13 +1509,13 @@ class TestTasksCommand:
     def test_missing_action_is_guided(self) -> None:
         result = handle(_tasks_able_jarvis(), "tasks", {})
         assert isinstance(result["reply"], str)
-        assert "tasks" in result["reply"]
+        assert "tasks" in str(result["reply"])
 
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         jarvis = _tasks_able_jarvis()
         result = handle(jarvis, "tasks", {"action": "get", "id": "missing"})
         assert isinstance(result["reply"], str)
-        assert "couldn't" in result["reply"]
+        assert "couldn't" in str(result["reply"])
 
 
 class TestDocumentsCommand:
@@ -1528,8 +1529,8 @@ class TestDocumentsCommand:
         })
         result = handle(jarvis, "documents", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "plan.md" in result["reply"]
-        assert "notes.txt" in result["reply"]
+        assert "plan.md" in str(result["reply"])
+        assert "notes.txt" in str(result["reply"])
         assert result["count"] == 2
         state = cast("dict[str, object]", result["state"])
         assert state["documents"] == ["notes.txt", "plan.md"]
@@ -1537,13 +1538,13 @@ class TestDocumentsCommand:
     def test_list_without_a_store_is_a_clear_message(self) -> None:
         result = handle(Jarvis(), "documents", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "documents capability" in result["reply"]
+        assert "documents capability" in str(result["reply"])
 
     def test_list_wired_but_not_earned_is_honest(self) -> None:
         jarvis = Jarvis(documents_store=_FakeDocumentStore())  # type: ignore[arg-type]
         result = handle(jarvis, "documents", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "capability" in result["reply"]
+        assert "capability" in str(result["reply"])
 
     def test_save_keeps_utf8_text(self) -> None:
         jarvis = _documents_able_jarvis()
@@ -1551,7 +1552,7 @@ class TestDocumentsCommand:
             "action": "save", "name": "hola.txt", "content": "hola\nmundo",
         })
         assert isinstance(result["reply"], str)
-        assert "hola.txt" in result["reply"]
+        assert "hola.txt" in str(result["reply"])
         assert jarvis.read_document("hola.txt") == b"hola\nmundo"
 
     def test_save_binary_keeps_exact_bytes_via_base64(self) -> None:
@@ -1568,7 +1569,7 @@ class TestDocumentsCommand:
             "content": "!!!", "encoding": "b64",
         })
         assert isinstance(result["reply"], str)
-        assert "base64" in result["reply"]
+        assert "base64" in str(result["reply"])
 
     def test_save_normalises_a_browser_path_to_its_basename(self) -> None:
         jarvis = _documents_able_jarvis()
@@ -1593,7 +1594,7 @@ class TestDocumentsCommand:
                 "action": "save", "name": "api.md", "path": evil, "content": "x",
             })
             assert isinstance(result["reply"], str)
-            assert "escape" in result["reply"].lower()
+            assert "escape" in str(result["reply"]).lower()
 
     def test_save_requires_name_and_content(self) -> None:
         jarvis = _documents_able_jarvis()
@@ -1609,14 +1610,14 @@ class TestDocumentsCommand:
         jarvis.write_document("readme.md", "# Lean\n\nnotes")
         result = handle(jarvis, "documents", {"action": "read", "name": "readme.md"})
         assert isinstance(result["reply"], str)
-        assert "Lean" in result["reply"]
+        assert "Lean" in str(result["reply"])
 
     def test_read_truncates_very_long_text_for_the_surface(self) -> None:
         jarvis = _documents_able_jarvis()
         jarvis.write_document("long.txt", "x" * 9000)
         result = handle(jarvis, "documents", {"action": "read", "name": "long.txt"})
         assert isinstance(result["reply"], str)
-        assert "chars total" in result["reply"]
+        assert "chars total" in str(result["reply"])
         assert len(result["reply"]) < 4000
 
     def test_read_reports_a_binary_document_as_base64(self) -> None:
@@ -1624,7 +1625,7 @@ class TestDocumentsCommand:
         jarvis.write_document("blob.bin", b"\x00\x01\xff")
         result = handle(jarvis, "documents", {"action": "read", "name": "blob.bin"})
         assert isinstance(result["reply"], str)
-        assert "binary" in result["reply"]
+        assert "binary" in str(result["reply"])
         assert result["encoding"] == "b64"
         assert result["content"] == "AAH/"
 
@@ -1633,7 +1634,7 @@ class TestDocumentsCommand:
         jarvis.write_document("old.txt", b"bye")
         result = handle(jarvis, "documents", {"action": "remove", "name": "old.txt"})
         assert isinstance(result["reply"], str)
-        assert "Removed" in result["reply"]
+        assert "Removed" in str(result["reply"])
         assert jarvis.list_documents() == ()
 
     def test_search_finds_documents_by_name(self) -> None:
@@ -1642,21 +1643,21 @@ class TestDocumentsCommand:
         jarvis.write_document("runbook.md", b"deployment runbook")
         result = handle(jarvis, "documents", {"action": "search", "query": "api"})
         assert isinstance(result["reply"], str)
-        assert "api.md" in result["reply"]
-        assert "runbook.md" not in result["reply"]
+        assert "api.md" in str(result["reply"])
+        assert "runbook.md" not in str(result["reply"])
         assert result["count"] == 1
 
     def test_search_requires_a_query(self) -> None:
         result = handle(_documents_able_jarvis(), "documents", {"action": "search"})
         assert isinstance(result["reply"], str)
-        assert "query" in result["reply"].lower()
+        assert "query" in str(result["reply"]).lower()
 
     def test_search_with_no_match_is_honest(self) -> None:
         jarvis = _documents_able_jarvis()
         jarvis.write_document("api.md", b"Jarvis api")
         result = handle(jarvis, "documents", {"action": "search", "query": "zebra"})
         assert isinstance(result["reply"], str)
-        assert "nothing" in result["reply"].lower()
+        assert "nothing" in str(result["reply"]).lower()
         assert result["count"] == 0
 
     def test_search_respects_an_invalid_limit(self) -> None:
@@ -1671,13 +1672,13 @@ class TestDocumentsCommand:
     def test_missing_action_is_guided(self) -> None:
         result = handle(_documents_able_jarvis(), "documents", {})
         assert isinstance(result["reply"], str)
-        assert "documents" in result["reply"]
+        assert "documents" in str(result["reply"])
 
     def test_failure_returns_a_message_not_a_crash(self) -> None:
         jarvis = _documents_able_jarvis()
         result = handle(jarvis, "documents", {"action": "read", "name": "missing"})
         assert isinstance(result["reply"], str)
-        assert "couldn't" in result["reply"]
+        assert "couldn't" in str(result["reply"])
 
 
 class TestDocumentProvenanceCommand:
@@ -1691,7 +1692,7 @@ class TestDocumentProvenanceCommand:
         })
         result = handle(jarvis, "documents", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "[jarvis] plan.md" in result["reply"]
+        assert "[jarvis] plan.md" in str(result["reply"])
 
     def test_list_leaves_companion_documents_untagged(self) -> None:
         jarvis = _documents_able_jarvis()
@@ -1700,17 +1701,17 @@ class TestDocumentProvenanceCommand:
         })
         result = handle(jarvis, "documents", {"action": "list"})
         assert isinstance(result["reply"], str)
-        assert "- notes.txt\n" in result["reply"]
-        assert "[jarvis]" not in result["reply"]
+        assert "- notes.txt\n" in str(result["reply"])
+        assert "[jarvis]" not in str(result["reply"])
 
     def test_info_reports_recorded_provenance(self) -> None:
         jarvis = _documents_able_jarvis()
         jarvis.write_document("plan.md", b"# plan")
         result = handle(jarvis, "documents", {"action": "info", "name": "plan.md"})
         assert isinstance(result["reply"], str)
-        assert "Owner" in result["reply"]
-        assert "companion" in result["reply"]
-        assert "Stored" in result["reply"]
+        assert "Owner" in str(result["reply"])
+        assert "companion" in str(result["reply"])
+        assert "Stored" in str(result["reply"])
         meta = cast("dict[str, object] | None", result["meta"])
         assert meta is not None
         assert meta["owner"] == "companion"
@@ -1720,18 +1721,18 @@ class TestDocumentProvenanceCommand:
         jarvis.write_document("plan.md", b"x", owner=DocumentOwner.JARVIS)
         result = handle(jarvis, "documents", {"action": "info", "name": "plan.md"})
         assert isinstance(result["reply"], str)
-        assert "jarvis" in result["reply"]
+        assert "jarvis" in str(result["reply"])
 
     def test_info_without_provenance_is_honest(self) -> None:
         jarvis = _documents_able_jarvis()
         result = handle(jarvis, "documents", {"action": "info", "name": "ancient.txt"})
         assert isinstance(result["reply"], str)
-        assert "no provenance" in result["reply"]
+        assert "no provenance" in str(result["reply"])
 
     def test_info_requires_a_name(self) -> None:
         result = handle(_documents_able_jarvis(), "documents", {"action": "info"})
         assert isinstance(result["reply"], str)
-        assert "name" in result["reply"]
+        assert "name" in str(result["reply"])
 
     def test_save_accepts_a_jarvis_owner(self) -> None:
         jarvis = _documents_able_jarvis()
@@ -1748,13 +1749,13 @@ class TestDocumentProvenanceCommand:
             "action": "save", "name": "a.txt", "content": "x", "owner": "weird",
         })
         assert isinstance(result["reply"], str)
-        assert "Owner must be" in result["reply"]
+        assert "Owner must be" in str(result["reply"])
         assert jarvis.list_documents() == ()
 
     def test_info_without_a_store_is_a_clear_message(self) -> None:
         result = handle(Jarvis(), "documents", {"action": "info", "name": "a.txt"})
         assert isinstance(result["reply"], str)
-        assert "documents capability" in result["reply"]
+        assert "documents capability" in str(result["reply"])
 
 
 class _FakeDocumentEditor:
@@ -1774,10 +1775,10 @@ class TestDocumentsEditCommand:
         jarvis = _editing_able_jarvis()
         result = handle(jarvis, "documents", {"action": "edit"})
         assert isinstance(result["reply"], str)
-        assert "name" in result["reply"]
+        assert "name" in str(result["reply"])
         result = handle(jarvis, "documents", {"action": "edit", "name": "plan.md"})
         assert isinstance(result["reply"], str)
-        assert "instruction" in result["reply"].lower()
+        assert "instruction" in str(result["reply"]).lower()
 
     def test_edit_without_an_editor_is_honestly_offline(self) -> None:
         jarvis = _documents_able_jarvis()
@@ -1786,7 +1787,7 @@ class TestDocumentsEditCommand:
             "action": "edit", "name": "plan.md", "instruction": "reword it",
         })
         assert isinstance(result["reply"], str)
-        assert "live model" in result["reply"]
+        assert "live model" in str(result["reply"])
         assert jarvis.read_document("plan.md") == b"old"
 
     def test_edit_reports_a_declining_editor_honestly(self) -> None:
@@ -1796,7 +1797,7 @@ class TestDocumentsEditCommand:
             "action": "edit", "name": "plan.md", "instruction": "reword it",
         })
         assert isinstance(result["reply"], str)
-        assert "couldn't" in result["reply"]
+        assert "couldn't" in str(result["reply"])
         assert jarvis.read_document("plan.md") == b"old"
 
     def test_edit_applies_the_rewrite_and_reports_the_note(self) -> None:
@@ -1806,7 +1807,7 @@ class TestDocumentsEditCommand:
             "action": "edit", "name": "plan.md", "instruction": "rewrite",
         })
         assert isinstance(result["reply"], str)
-        assert "Rewrote plan.md" in result["reply"]
+        assert "Rewrote plan.md" in str(result["reply"])
         assert "Revised complete text." in jarvis.read_document("plan.md").decode()
         assert isinstance(result["note"], str)
 
@@ -1827,14 +1828,14 @@ class TestDocumentsEditCommand:
             "action": "edit", "name": "data.bin", "instruction": "fix it",
         })
         assert isinstance(result["reply"], str)
-        assert "isn't text" in result["reply"]
+        assert "isn't text" in str(result["reply"])
         assert jarvis.read_document("data.bin") == b"\x00\xff\x01"
 
     def test_edit_surfaces_unknown_actions(self) -> None:
         jarvis = _editing_able_jarvis()
         result = handle(jarvis, "documents", {"action": "not-an-action"})
         assert isinstance(result["reply"], str)
-        assert "Unknown documents action" in result["reply"]
+        assert "Unknown documents action" in str(result["reply"])
 
 
 def _editing_able_jarvis(proposal: str | None = "Revised complete text.\n") -> Jarvis:
@@ -1863,8 +1864,8 @@ class TestDocumentChipInSay:
         jarvis.write_document("api.md", b"Jarvis api over websocket")
         result = handle(jarvis, "say", {"text": "¿cómo funciona la api?"})
         assert isinstance(result["reply"], str)
-        assert "api.md" in result["reply"]
-        assert "I remember that" not in result["reply"]
+        assert "api.md" in str(result["reply"])
+        assert "I remember that" not in str(result["reply"])
         chips = cast("list[dict[str, str]]", result["documents"])
         assert chips[0]["name"] == "api.md"
         assert chips[0]["snippet"]
@@ -1912,7 +1913,7 @@ class TestWorkflowCommand:
     def test_run_without_live_edges_blocks_every_step_honestly(self) -> None:
         result = handle(Jarvis(), "workflow", {"action": "run", "name": "brief"})
         assert result["ok"] is False
-        assert "manage calendar" in result["reply"]
+        assert "manage calendar" in str(result["reply"])
         states = [s["state"] for s in cast("list[dict[str, object]]", result["steps"])]
         assert states == ["bloqueado", "bloqueado"]
         assert all(s.get("reason") for s in cast("list[dict[str, object]]", result["steps"]))
@@ -1929,7 +1930,7 @@ class TestWorkflowCommand:
         )
         result = handle(jarvis, "workflow", {"action": "run", "name": "brief"})
         assert result["ok"] is True
-        assert "standup" in result["reply"]
+        assert "standup" in str(result["reply"])
         states = [s["state"] for s in cast("list[dict[str, object]]", result["steps"])]
         assert states == ["ok", "ok"]
 
@@ -1946,8 +1947,8 @@ class TestWorkflowCommand:
             {"action": "run", "name": "investigate", "inputs": {"query": "sky"}},
         )
         assert result["ok"] is True
-        assert "Title body text" in result["reply"]
-        assert "Rayleigh" in result["reply"]
+        assert "Title body text" in str(result["reply"])
+        assert "Rayleigh" in str(result["reply"])
 
     def test_run_dossier_saves_a_generated_document(self) -> None:
         jarvis = Jarvis(
@@ -1964,7 +1965,7 @@ class TestWorkflowCommand:
             {"action": "run", "name": "dossier", "inputs": {"query": "Blue Sky"}},
         )
         assert result["ok"] is True
-        assert "dossier-blue-sky.md" in result["reply"]
+        assert "dossier-blue-sky.md" in str(result["reply"])
         assert "dossier-blue-sky.md" in jarvis.list_documents()
 
 
@@ -1994,7 +1995,7 @@ class TestBeliefCommand:
         for entry in entries:
             assert entry["statement"] and entry["subject"]
             assert isinstance(entry["confidence"], float)
-            assert entry["supporting"] >= 1
+            assert cast(int, entry["supporting"]) >= 1
 
     def test_get_opens_the_full_provenance(self) -> None:
         jarvis = _thinking_jarvis()
@@ -2150,39 +2151,41 @@ def _mail_able_jarvis() -> Jarvis:
 class TestNotesCommand:
     def test_list_is_empty_but_honest_when_fresh(self) -> None:
         result = handle(_notes_able_jarvis(), "notes", {"action": "list"})
-        assert "No notes yet" in result["reply"]
+        assert "No notes yet" in str(result["reply"])
 
     def test_full_crud_round_trip(self) -> None:
         jarvis = _notes_able_jarvis()
         created = handle(jarvis, "notes", {
             "action": "create", "title": "ideas", "body": "build it", "tags": "a, b",
         })
-        assert "ideas" in created["reply"]
+        assert "ideas" in str(created["reply"])
         listed = handle(jarvis, "notes", {"action": "list"})
         assert listed["count"] == 1
-        assert listed["notes"][0]["tags"] == ["a", "b"]
-        note_id = listed["notes"][0]["id"]
+        notes = cast("list[dict[str, object]]", listed["notes"])
+        assert notes[0]["tags"] == ["a", "b"]
+        note_id = notes[0]["id"]
         got = handle(jarvis, "notes", {"action": "get", "id": note_id})
-        assert got["note"]["body"] == "build it"
+        note = cast("dict[str, object]", got["note"])
+        assert note["body"] == "build it"
         updated = handle(jarvis, "notes", {
             "action": "update", "id": note_id, "title": "ideas2",
             "body": "build it well", "tags": "c",
         })
-        assert "ideas2" in updated["reply"]
+        assert "ideas2" in str(updated["reply"])
         found = handle(jarvis, "notes", {"action": "search", "query": "well"})
         assert found["count"] == 1
         deleted = handle(jarvis, "notes", {"action": "delete", "id": note_id})
-        assert "Deleted" in deleted["reply"]
-        assert handle(jarvis, "notes", {"action": "list"})["reply"].startswith("No notes")
+        assert "Deleted" in str(deleted["reply"])
+        assert str(handle(jarvis, "notes", {"action": "list"})["reply"]).startswith("No notes")
 
     def test_create_needs_content(self) -> None:
         result = handle(_notes_able_jarvis(), "notes", {"action": "create"})
-        assert "title" in result["reply"].lower()
+        assert "title" in str(result["reply"]).lower()
 
     def test_offline_and_unearned_are_honest(self) -> None:
-        assert "notes capability" in handle(Jarvis(), "notes", {"action": "list"})["reply"]
+        assert "notes capability" in str(handle(Jarvis(), "notes", {"action": "list"})["reply"])
         jarvis = Jarvis(notes_store=_FakeNotesStore())  # type: ignore[arg-type]
-        assert "capability" in handle(jarvis, "notes", {"action": "list"})["reply"]
+        assert "capability" in str(handle(jarvis, "notes", {"action": "list"})["reply"])
 
     def test_snapshot_notes_block_counts(self) -> None:
         jarvis = _notes_able_jarvis()
@@ -2199,37 +2202,37 @@ class TestMailCommand:
         jarvis = _mail_able_jarvis()
         listed = handle(jarvis, "mail", {"action": "list"})
         assert listed["count"] == 1
-        assert "hello" in listed["reply"]
+        assert "hello" in str(listed["reply"])
         read = handle(jarvis, "mail", {"action": "read", "message_id": "m1"})
-        assert "hi there" in read["reply"]
+        assert "hi there" in str(read["reply"])
 
     def test_send_needs_explicit_approval(self) -> None:
         jarvis = _mail_able_jarvis()
         declined = handle(jarvis, "mail", {
             "action": "send", "to": "a@example.com", "subject": "hi", "body": "yo",
         })
-        assert "Nothing was sent" in declined["reply"]
+        assert "Nothing was sent" in str(declined["reply"])
         assert jarvis.mail_source.sent == []  # type: ignore[union-attr]
         sent = handle(jarvis, "mail", {
             "action": "send", "to": "a@example.com", "subject": "hi", "body": "yo",
             "approved": True,
         })
-        assert "Sent to a@example.com" in sent["reply"]
+        assert "Sent to a@example.com" in str(sent["reply"])
         assert len(jarvis.mail_source.sent) == 1  # type: ignore[union-attr]
 
     def test_send_needs_recipients_and_content(self) -> None:
         jarvis = _mail_able_jarvis()
-        assert "recipient" in handle(
-            jarvis, "mail", {"action": "send", "subject": "hi"}
-        )["reply"].lower()
-        assert "subject" in handle(
-            jarvis, "mail", {"action": "send", "to": "a@example.com"}
-        )["reply"].lower()
+        assert "recipient" in str(
+            handle(jarvis, "mail", {"action": "send", "subject": "hi"})["reply"]
+        ).lower()
+        assert "subject" in str(
+            handle(jarvis, "mail", {"action": "send", "to": "a@example.com"})["reply"]
+        ).lower()
 
     def test_offline_unearned_and_snapshot(self) -> None:
-        assert "mail capability" in handle(Jarvis(), "mail", {"action": "list"})["reply"]
+        assert "mail capability" in str(handle(Jarvis(), "mail", {"action": "list"})["reply"])
         jarvis = Jarvis(mail_source=_FakeMailBox())  # type: ignore[arg-type]
-        assert "capability" in handle(jarvis, "mail", {"action": "list"})["reply"]
+        assert "capability" in str(handle(jarvis, "mail", {"action": "list"})["reply"])
         assert snapshot(Jarvis())["mail"] == {"configured": False}
         assert snapshot(_mail_able_jarvis())["mail"] == {"configured": True}
 
@@ -2238,12 +2241,12 @@ class TestConfigEdgesCommand:
     def test_embeddings_reports_lexical_when_offline(self) -> None:
         result = handle(Jarvis(), "embeddings", {})
         assert result["mode"] == "lexical"
-        assert "lexical" in result["reply"]
+        assert "lexical" in str(result["reply"])
         assert snapshot(Jarvis())["recall"] == {"mode": "lexical"}
 
     def test_embeddings_reload_without_config_is_honest(self) -> None:
         result = handle(Jarvis(), "embeddings", {"action": "reload"})
-        assert "No embedder configured" in result["reply"]
+        assert "No embedder configured" in str(result["reply"])
 
     def test_speech_reports_the_browser_ear_by_default(self) -> None:
         from jarvis.infrastructure.speech_perception import EchoSpeechPerception
@@ -2251,7 +2254,7 @@ class TestConfigEdgesCommand:
         jarvis = Jarvis()
         jarvis.set_speech_perception(EchoSpeechPerception())
         result = handle(jarvis, "speech", {})
-        assert "Browser ear" in result["reply"]
+        assert "Browser ear" in str(result["reply"])
         assert result["live"] is False
 
     def test_speech_reload_rewires_from_the_environment(
@@ -2260,7 +2263,7 @@ class TestConfigEdgesCommand:
         monkeypatch.delenv("JARVIS_STT_PROVIDER", raising=False)
         monkeypatch.delenv("JARVIS_STT_MODEL", raising=False)
         result = handle(Jarvis(), "speech", {"action": "reload"})
-        assert "Browser ear" in result["reply"]
+        assert "Browser ear" in str(result["reply"])
 
     def test_tool_origins_are_reported_honestly(self) -> None:
         from jarvis.infrastructure.echo_tool import EchoTool

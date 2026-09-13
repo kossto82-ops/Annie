@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from jarvis.domain.entities.semantic_memory import SemanticMemory
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
+
+if TYPE_CHECKING:
+    from jarvis.domain.entities.belief import Belief
 
 _WORD = re.compile(r"\w+")
 
@@ -73,7 +78,7 @@ def _cluster_episodes(
 
 def abstract_patterns(
     episodes: Sequence[EpisodeRecord],
-    beliefs: Sequence = (),
+    beliefs: Sequence[Belief] = (),
     min_sources: int = 3,
 ) -> list[SemanticMemory]:
     """Detect recurrent patterns in episodes and beliefs, producing semantic memories.
@@ -94,10 +99,7 @@ def abstract_patterns(
             evidence_pieces.append(
                 Evidence(
                     content=f"episodio '{ep.trigger}'",
-                    source=__import__(
-                        "jarvis.domain.enums.evidence_source",
-                        fromlist=["EvidenceSource"],
-                    ).EvidenceSource.SYSTEM_OBSERVATION,
+                    source=EvidenceSource.SYSTEM_OBSERVATION,
                     weight=Confidence(0.5),
                     supports=True,
                 )

@@ -22,6 +22,10 @@ from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.infrastructure.mcp_tools import McpTool
 
 if TYPE_CHECKING:
+    from jarvis.domain.retrieval.external_source import ExternalSource
+    from jarvis.domain.retrieval.mail_source import MailBox
+    from jarvis.domain.retrieval.research_source import ResearchSource
+    from jarvis.domain.retrieval.task_agent_source import TaskAgent
     from jarvis.jarvis import Jarvis
 
 
@@ -31,89 +35,109 @@ class EdgesSurface:
     def __init__(self, jarvis: Jarvis) -> None:
         self._jarvis = jarvis
 
+    def _external(self) -> ExternalSource:
+        source = self._jarvis.external_source
+        if source is None:
+            raise RuntimeError("no Internet capability configured; set_external_source")
+        return source
+
+    def _research(self) -> ResearchSource:
+        source = self._jarvis.research_source
+        if source is None:
+            raise RuntimeError("no research capability configured; set research_source")
+        return source
+
+    def _mails(self) -> MailBox:
+        source = self._jarvis.mail_source
+        if source is None:
+            raise RuntimeError("no email capability configured; set_mail_source")
+        return source
+
+    def _agent(self) -> TaskAgent:
+        agent = self._jarvis.task_agent
+        if agent is None:
+            raise RuntimeError("no agent capability configured; set_task_agent")
+        return agent
+
+    def _openbot(self) -> TaskAgent:
+        agent = self._jarvis.openbot_agent
+        if agent is None:
+            raise RuntimeError(
+                "no OpenBot execution capability configured; set_openbot_agent"
+            )
+        return agent
+
+    def _instruction(self) -> TaskAgent:
+        agent = self._jarvis.instruction_agent
+        if agent is None:
+            raise RuntimeError(
+                "no instruction executor configured; set_instruction_agent"
+            )
+        return agent
+
     # -- Internet (ExternalSource) --------------------------------------------
 
     def read_external(self, url: str) -> RetrievedDocument:
-        if self._jarvis._external_source is None:
-            raise RuntimeError("no Internet capability configured; set_external_source")
-        return self._jarvis._external_source.read(url)
+        return self._external().read(url)
 
     def search_external(
         self, query: str, *, limit: int = 5
     ) -> tuple[RetrievedDocument, ...]:
-        if self._jarvis._external_source is None:
-            raise RuntimeError("no Internet capability configured; set_external_source")
-        return self._jarvis._external_source.search(query, limit=limit)
+        return self._external().search(query, limit=limit)
 
     def internet_channels(self) -> tuple[ChannelStatus, ...]:
-        if self._jarvis._external_source is None:
+        source = self._jarvis.external_source
+        if source is None:
             return ()
-        return self._jarvis._external_source.available_channels()
+        return source.available_channels()
 
     # -- Research -------------------------------------------------------------
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
-        if self._jarvis._research_source is None:
-            raise RuntimeError("no research capability configured; set research_source")
-        return self._jarvis._research_source.deep_research(query, depth=depth)
+        return self._research().deep_research(query, depth=depth)
 
     # -- Model comparison -----------------------------------------------------
 
     def compare_models(
         self, prompt: str, *, models: Sequence[str] | None = None
     ) -> tuple[ModelRun, ...]:
-        if self._jarvis._model_compare is None:
+        compared = self._jarvis.model_compare
+        if compared is None:
             raise RuntimeError("no model comparison configured; set model_compare")
-        return self._jarvis._model_compare.compare(prompt, models=models)
+        return compared.compare(prompt, models=models)
 
     # -- Email ----------------------------------------------------------------
 
     def list_emails(
         self, *, folder: str = "inbox", limit: int = 10
     ) -> tuple[EmailMessage, ...]:
-        if self._jarvis._mail_source is None:
-            raise RuntimeError("no email capability configured; set_mail_source")
-        return self._jarvis._mail_source.list_messages(folder=folder, limit=limit)
+        return self._mails().list_messages(folder=folder, limit=limit)
 
     def read_email(self, message_id: str, *, folder: str = "inbox") -> EmailMessage:
-        if self._jarvis._mail_source is None:
-            raise RuntimeError("no email capability configured; set_mail_source")
-        return self._jarvis._mail_source.read_message(message_id, folder=folder)
+        return self._mails().read_message(message_id, folder=folder)
 
     def send_email(
         self, *, to: tuple[str, ...], subject: str, body: str
     ) -> EmailMessage:
-        if self._jarvis._mail_source is None:
-            raise RuntimeError("no email capability configured; set_mail_source")
-        return self._jarvis._mail_source.send_message(
+        return self._mails().send_message(
             to=to, subject=subject, body=body
         )
 
     # -- Delegation (TaskAgent) -----------------------------------------------
 
     def delegate(self, task: str) -> TaskResult:
-        if self._jarvis._task_agent is None:
-            raise RuntimeError("no agent capability configured; set_task_agent")
-        return self._jarvis._task_agent.run_task(task)
+        return self._agent().run_task(task)
 
     def execute_on_computer(self, task: str) -> TaskResult:
-        if self._jarvis._openbot_agent is None:
-            raise RuntimeError(
-                "no OpenBot execution capability configured; set_openbot_agent"
-            )
-        return self._jarvis._openbot_agent.run_task(task)
+        return self._openbot().run_task(task)
 
     def execute(self, task: str) -> TaskResult:
-        if self._jarvis._instruction_agent is None:
-            raise RuntimeError(
-                "no instruction executor configured; set_instruction_agent"
-            )
-        return self._jarvis._instruction_agent.run_task(task)
+        return self._instruction().run_task(task)
 
     # -- Tools ----------------------------------------------------------------
 
     def register_tool(self, tool: Tool) -> None:
-        self._jarvis._tools.register(tool)
+        self._jarvis.tool_registry.register(tool)
 
     def run_tool(
         self,
@@ -124,23 +148,23 @@ class EdgesSurface:
     ) -> ToolCallResult:
         if arguments is None:
             arguments = {}
-        return self._jarvis._tools.run(name, dict(arguments), approved=approved)
+        return self._jarvis.tool_registry.run(name, dict(arguments), approved=approved)
 
     def tool_names(self) -> tuple[str, ...]:
-        return self._jarvis._tools.tool_names()
+        return self._jarvis.tool_registry.tool_names()
 
     def tool_spec(self, name: str) -> ToolSpec | None:
-        return self._jarvis._tools.spec(name)
+        return self._jarvis.tool_registry.spec(name)
 
     def tool_channels(self) -> tuple[ToolSpec, ...]:
         return tuple(
             spec
-            for name in self._jarvis._tools.tool_names()
-            if (spec := self._jarvis._tools.spec(name))
+            for name in self._jarvis.tool_registry.tool_names()
+            if (spec := self._jarvis.tool_registry.spec(name))
         )
 
     def tool_origin(self, name: str) -> str:
-        tool = self._jarvis._tools.tool(name)
+        tool = self._jarvis.tool_registry.tool(name)
         if tool is None:
             return "unknown"
         if isinstance(tool, McpTool):

@@ -16,30 +16,30 @@ from jarvis.infrastructure.openbot_transport import (
     OpenBotToolCall,
     OpenBotToolDef,
     OpenBotTransport,
-    _collect_result,
-    _parse_sse_events,
+    collect_result,
+    parse_sse_events,
 )
 
 
 class TestParseSseEvents:
     def test_single_text_delta(self) -> None:
         raw = 'data: {"type":"TEXT_MESSAGE_CONTENT","delta":"hello"}\n\n'
-        events = _parse_sse_events(raw)
+        events = parse_sse_events(raw)
         assert len(events) == 1
         assert events[0]["type"] == "TEXT_MESSAGE_CONTENT"
         assert events[0]["delta"] == "hello"
 
     def test_done_marker_is_ignored(self) -> None:
         raw = "data: [DONE]\n\n"
-        assert _parse_sse_events(raw) == []
+        assert parse_sse_events(raw) == []
 
     def test_non_data_lines_are_ignored(self) -> None:
         raw = ": this is a comment\nevent: test\ndata: {}\n\n"
-        assert len(_parse_sse_events(raw)) == 1
+        assert len(parse_sse_events(raw)) == 1
 
     def test_malformed_json_is_skipped(self) -> None:
         raw = "data: {invalid json\n\n"
-        assert _parse_sse_events(raw) == []
+        assert parse_sse_events(raw) == []
 
 
 class TestCollectResult:
@@ -49,14 +49,14 @@ class TestCollectResult:
             {"type": "TEXT_MESSAGE_CONTENT", "delta": " world"},
             {"type": "RUN_FINISHED"},
         ]
-        result = _collect_result(events, run_id="r1", thread_id="t1")
+        result = collect_result(events, run_id="r1", thread_id="t1")
         assert result.finished is True
         assert result.text == "Hello world"
         assert result.error == ""
 
     def test_run_error_records_error(self) -> None:
         events = [{"type": "RUN_ERROR", "message": "boom"}]
-        result = _collect_result(events, run_id="r2", thread_id="t2")
+        result = collect_result(events, run_id="r2", thread_id="t2")
         assert result.error == "boom"
         assert result.finished is False
 
@@ -67,7 +67,7 @@ class TestCollectResult:
             {"type": "TOOL_CALL_END"},
             {"type": "RUN_FINISHED"},
         ]
-        result = _collect_result(events, run_id="r3", thread_id="t3")
+        result = collect_result(events, run_id="r3", thread_id="t3")
         assert len(result.tool_calls) == 1
         tc = result.tool_calls[0]
         assert tc.name == "open"

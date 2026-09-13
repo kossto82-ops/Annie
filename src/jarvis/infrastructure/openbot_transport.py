@@ -140,7 +140,7 @@ def _encode_sse_request(
     return json.dumps(body).encode("utf-8")
 
 
-def _parse_sse_events(raw: str) -> list[dict[str, Any]]:
+def parse_sse_events(raw: str) -> list[dict[str, Any]]:
     """Parse an SSE text stream into a list of AG-UI event dicts.
 
     SSE format: lines starting with ``data: `` contain JSON; blank lines
@@ -237,14 +237,14 @@ class HttpOpenBotTransport:
             raise OpenBotError(
                 f"OpenBot timeout or connection error: {exc}"
             ) from exc
-        return _collect_result(
-            _parse_sse_events(raw),
+        return collect_result(
+            parse_sse_events(raw),
             run_id=run_id,
             thread_id=thread_id,
         )
 
 
-def _collect_result(
+def collect_result(
     events: list[dict[str, Any]],
     *,
     run_id: str,

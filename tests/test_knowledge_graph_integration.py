@@ -8,30 +8,11 @@ Proves that concluded beliefs automatically populate the knowledge graph:
 
 from __future__ import annotations
 
-from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
-from jarvis.executive.executive_controller import ExecutiveController
-from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
-from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
 from jarvis.infrastructure.in_memory_knowledge_graph_store import InMemoryKnowledgeGraphStore
-from jarvis.nervous_system.nervous_system import NervousSystem
-
-
-def _make_controller(
-    knowledge_graph: InMemoryKnowledgeGraphStore | None = None,
-) -> ExecutiveController:
-    return ExecutiveController(
-        nervous_system=NervousSystem(),
-        beliefs=InMemoryBeliefStore(),
-        episodes=InMemoryEpisodeStore(),
-        companion=CompanionModel(InMemoryBeliefStore()),
-        knowledge_graph=knowledge_graph,
-        knobs=CognitiveKnobs(),
-    )
 
 
 class TestKnowledgeGraphIntegration:

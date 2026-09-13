@@ -64,7 +64,7 @@ class TestProactiveCognition:
                 outcome,
                 now - timedelta(hours=5 - i),
             )
-            jarvis._executive._episodes.record(record)
+            jarvis.executive.episodes.record(record)
 
         impulse = feel_curious(jarvis)
 
@@ -90,7 +90,7 @@ class TestProactiveCognition:
                 EpisodeState.COMPLETED,
                 now - timedelta(hours=5 - i),
             )
-            jarvis._executive._episodes.record(record)
+            jarvis.executive.episodes.record(record)
 
         impulse = feel_curious(jarvis)
 

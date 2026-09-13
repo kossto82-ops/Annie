@@ -281,6 +281,7 @@ class TestSqliteKnowledgeGraphStore:
         assert result is not None
         nodes, edges = result
         assert len(nodes) == 3
+        assert len(edges) == 2
 
 
 # --- Entity extraction tests ---

@@ -29,6 +29,7 @@ def _make_record(
     kind: EpisodeKind = EpisodeKind.CONCLUSION,
 ) -> EpisodeRecord:
     """Create a minimal EpisodeRecord for testing."""
+    from jarvis.domain.enums.episode_state import EpisodeState
     from jarvis.domain.value_objects.confidence import Confidence
     from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
@@ -37,7 +38,7 @@ def _make_record(
         trigger=trigger,
         decision=f"decided about {trigger}",
         working_belief_id="bel-1",
-        outcome=None,
+        outcome=EpisodeState.COMPLETED,
         conclusion_confidence=Confidence(confidence),
         conclusion_stability=TemporalStability(stability),
         origin=origin,

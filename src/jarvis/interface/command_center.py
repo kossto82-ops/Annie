@@ -22,45 +22,33 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-# Re-export for backward compatibility with tests that patch llm_config_store.
-from jarvis.infrastructure import llm_config_store  # noqa: F401
-from jarvis.interface._capabilities import _capability, _tool
-from jarvis.interface._cognition import (
-    _belief,
-    _deliberation,
-    _energy_budget,
-    _explain,
-    _greeting,
-    _introspect,
-    _learn,
-    _reflect,
-    _rest,
-    _state,
-    _tunables,
-    _wonder,
-)
-from jarvis.interface._conversation import StreamEvent, _say, stream_say  # noqa: F401
-from jarvis.interface._crud import (
-    _calendar,
-    _documents,
-    _google_calendar,
-    _mail,
-    _notes,
-    _tasks,
-)
-from jarvis.interface._external import _compare, _external, _research
-from jarvis.interface._providers import (
-    _embeddings,
-    _perceiver,
-    _provider_health,
-    _provider_reset,
-    _reasoner,
-    _speech,
-)
-from jarvis.interface._recall import _conversations, _recall
+# Re-exported so the HTTP socket layer and tests share one contract.
+from jarvis.infrastructure import llm_config_store
+from jarvis.interface._capabilities import COMMANDS as _CAPABILITY_COMMANDS
+from jarvis.interface._cognition import COMMANDS as _COGNITION_COMMANDS
+from jarvis.interface._conversation import COMMANDS as _CONVERSATION_COMMANDS
+from jarvis.interface._conversation import StreamEvent, stream_say
+from jarvis.interface._crud import COMMANDS as _CRUD_COMMANDS
+from jarvis.interface._external import COMMANDS as _EXTERNAL_COMMANDS
+from jarvis.interface._providers import COMMANDS as _PROVIDER_COMMANDS
+from jarvis.interface._recall import COMMANDS as _RECALL_COMMANDS
 from jarvis.interface._state import snapshot
-from jarvis.interface._workflow import _workflow
+from jarvis.interface._workflow import COMMANDS as _WORKFLOW_COMMANDS
 from jarvis.jarvis import Jarvis
+
+__all__ = [
+    "COMMANDS",
+    "Command",
+    "Reply",
+    "Response",
+    "StreamEvent",
+    "handle",
+    "llm_config_store",
+    "parse_body",
+    "route",
+    "snapshot",
+    "stream_say",
+]
 
 _CONSOLE_HTML = Path(__file__).with_name("console.html")
 
@@ -78,40 +66,17 @@ class Response:
     body: bytes
 
 
-_COMMANDS: dict[str, Command] = {
-    "say": _say,
-    "explain": _explain,
-    "reflect": _reflect,
-    "introspect": _introspect,
-    "wonder": _wonder,
-    "rest": _rest,
-    "energy_budget": _energy_budget,
-    "deliberation": _deliberation,
-    "tunables": _tunables,
-    "perceiver": _perceiver,
-    "provider_health": _provider_health,
-    "reasoner": _reasoner,
-    "provider_reset": _provider_reset,
-    "embeddings": _embeddings,
-    "speech": _speech,
-    "learn": _learn,
-    "greeting": _greeting,
-    "state": _state,
-    "external": _external,
-    "research": _research,
-    "compare": _compare,
-    "capability": _capability,
-    "tool": _tool,
-    "calendar": _calendar,
-    "google_calendar": _google_calendar,
-    "tasks": _tasks,
-    "notes": _notes,
-    "mail": _mail,
-    "documents": _documents,
-    "workflow": _workflow,
-    "belief": _belief,
-    "recall": _recall,
-    "conversations": _conversations,
+# The full dispatch table, composed from each domain module's own COMMANDS so
+# every handler is referenced statically (and the router owns no handler list).
+COMMANDS: dict[str, Command] = {
+    **_CONVERSATION_COMMANDS,
+    **_COGNITION_COMMANDS,
+    **_PROVIDER_COMMANDS,
+    **_EXTERNAL_COMMANDS,
+    **_CAPABILITY_COMMANDS,
+    **_CRUD_COMMANDS,
+    **_RECALL_COMMANDS,
+    **_WORKFLOW_COMMANDS,
 }
 
 
@@ -121,7 +86,7 @@ def handle(jarvis: Jarvis, command: str, payload: Reply) -> Reply:
     An unknown command is a clear error, never a silent no-op. Every reply carries a
     fresh :func:`snapshot`, so a single round-trip updates the whole control center.
     """
-    run = _COMMANDS.get(command)
+    run = COMMANDS.get(command)
     if run is None:
         return {"error": f"unknown command: {command}", "state": snapshot(jarvis)}
     result = run(jarvis, payload)

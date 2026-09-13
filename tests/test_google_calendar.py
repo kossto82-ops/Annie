@@ -422,7 +422,7 @@ class TestGoogleCalendarCommand:
         monkeypatch.delenv(gc.ENV_CLIENT_ID, raising=False)
         result = handle(_google_env_jarvis(), "google_calendar", {"action": "auth"})
         assert "credentials first" in str(result["reply"])
-        assert result["redirect_uri"].endswith("/api/auth/google/callback")
+        assert str(result["redirect_uri"]).endswith("/api/auth/google/callback")
 
     def test_auth_accepts_and_saves_credentials_without_echoing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

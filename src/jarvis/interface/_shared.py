@@ -7,24 +7,7 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.executive.executive_controller import subject_of
 from jarvis.jarvis import Jarvis
 
-# A short reply that just affirms or denies is read as confirming (or correcting) the
-# last thing Jarvis said, so a provisional reasoned answer can mature (Vision §18, §20).
-_AFFIRM = frozenset(
-    {"sí", "si", "exacto", "correcto", "cierto", "eso", "vale", "claro", "perfecto",
-     "yes", "right", "correct", "exactly", "true", "ok", "okay", "yep", "yeah"}
-)
-_DENY = frozenset(
-    {"no", "incorrecto", "falso", "nope", "wrong", "incorrect", "false", "nah"}
-)
-# Light connectors/politeness allowed inside a *bare* yes/no ("no, gracias"; "sí, exacto"),
-# so a real sentence that merely starts with "no" ("no funcionas bien") is NOT a correction.
-_CONFIRMATION_FILLER = frozenset(
-    {"y", "pero", "pues", "bueno", "gracias", "por", "favor", "totalmente",
-     "the", "that", "please", "thanks", "really", "not"}
-)
-_MAX_CONFIRMATION_WORDS = 5
-
-_OFFLINE_PERCEIVERS = frozenset({"", "keyword", "scripted", "stub"})
+OFFLINE_PERCEIVERS = frozenset({"", "keyword", "scripted", "stub"})
 
 
 def _evidence_json(evidence: Evidence) -> dict[str, object]:
@@ -36,7 +19,7 @@ def _evidence_json(evidence: Evidence) -> dict[str, object]:
     }
 
 
-def _provenance(belief: Belief) -> dict[str, object]:
+def provenance(belief: Belief) -> dict[str, object]:
     """Why a belief is held: its derived confidence and the evidence for and against
     it (Vision §8, §40) — the grounds the reasoning panel shows, so the surface
     reveals *why*, not just *what*.
@@ -51,7 +34,7 @@ def _provenance(belief: Belief) -> dict[str, object]:
     }
 
 
-def _provider_error(error: Exception) -> str:
+def provider_error(error: Exception) -> str:
     """A clear, actionable message for a language-model failure (Vision §37).
 
     Surfaces the HTTP status and what it usually means, so a provider misconfiguration
@@ -84,7 +67,7 @@ def _provider_error(error: Exception) -> str:
     )
 
 
-def _capability_not_ready(jarvis: Jarvis, capability: str) -> dict[str, object]:
+def capability_not_ready(jarvis: Jarvis, capability: str) -> dict[str, object]:
     """An honest decline when a wired capability is not yet *earned*.
 
     A capability that is proposed but not acquired reads as "considered but not
@@ -106,12 +89,7 @@ def _capability_not_ready(jarvis: Jarvis, capability: str) -> dict[str, object]:
     return {"reply": prompt, "speak": False}
 
 
-def _ready_marker(jarvis: Jarvis, capability: str) -> str:
-    """A concise "(ready)" taste when an acquired capability is live-backed."""
-    return " (ready)" if jarvis.can_do(capability) else ""
-
-
-def _recall_block(jarvis: Jarvis) -> dict[str, object]:
+def recall_block(jarvis: Jarvis) -> dict[str, object]:
     """How recall works right now: by meaning or by surface tokens (F9).
 
     ``meaning`` is live only when the embedding edge is wired and earned
@@ -122,7 +100,7 @@ def _recall_block(jarvis: Jarvis) -> dict[str, object]:
     return {"mode": mode}
 
 
-def _companion_name(jarvis: Jarvis) -> str | None:
+def companion_name(jarvis: Jarvis) -> str | None:
     """The companion's name if Jarvis has learned it, for a warmer greeting (best effort)."""
     for belief in jarvis.companion.beliefs():
         statement = belief.explain().statement.lower()

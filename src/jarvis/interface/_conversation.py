@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING
 
 from jarvis.domain.conversation.intent import (
@@ -18,13 +18,9 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.response_renderer import uses_spanish
 from jarvis.interface._shared import (
-    _AFFIRM,
-    _CONFIRMATION_FILLER,
-    _DENY,
-    _MAX_CONFIRMATION_WORDS,
-    _companion_name,
-    _provenance,
-    _provider_error,
+    companion_name,
+    provenance,
+    provider_error,
 )
 from jarvis.jarvis import Jarvis
 
@@ -32,6 +28,23 @@ if TYPE_CHECKING:
     pass
 
 _WORD = re.compile(r"\w+")
+
+# A short reply that just affirms or denies is read as confirming (or correcting) the
+# last thing Jarvis said, so a provisional reasoned answer can mature (Vision §18, §20).
+_AFFIRM = frozenset(
+    {"sí", "si", "exacto", "correcto", "cierto", "eso", "vale", "claro", "perfecto",
+     "yes", "right", "correct", "exactly", "true", "ok", "okay", "yep", "yeah"}
+)
+_DENY = frozenset(
+    {"no", "incorrecto", "falso", "nope", "wrong", "incorrect", "false", "nah"}
+)
+# Light connectors/politeness allowed inside a *bare* yes/no ("no, gracias"; "sí, exacto"),
+# so a real sentence that merely starts with "no" ("no funcionas bien") is NOT a correction.
+_CONFIRMATION_FILLER = frozenset(
+    {"y", "pero", "pues", "bueno", "gracias", "por", "favor", "totalmente",
+     "the", "that", "please", "thanks", "really", "not"}
+)
+_MAX_CONFIRMATION_WORDS = 5
 
 # A reply the UI can render and (optionally) speak; some commands add extra fields.
 Reply = dict[str, object]
@@ -75,7 +88,7 @@ def _confirmation_reply(affirm: bool, belief: object) -> Reply:
         "speak": True,
         "stance": "confirmation",
         "confidence": confidence,
-        "provenance": _provenance(belief),
+        "provenance": provenance(belief),
         "trace": [],
     }
 
@@ -95,7 +108,7 @@ def _say(jarvis: Jarvis, payload: Reply) -> Reply:
     try:
         result = _say_core(jarvis, text)
     except Exception as error:  # noqa: BLE001 - the external-provider boundary
-        return {"reply": _provider_error(error), "speak": True, "provenance": None, "trace": []}
+        return {"reply": provider_error(error), "speak": True, "provenance": None, "trace": []}
     # Voice the decided reply in the companion's language (identity offline, Vision §40).
     result["reply"] = jarvis.voice.phrase(str(result["reply"]), like=text)
     return result
@@ -153,7 +166,7 @@ def _plain(reply: str, stance: str) -> Reply:
 
 
 def _greeting_reply(jarvis: Jarvis, text: str) -> Reply:
-    name = _companion_name(jarvis)
+    name = companion_name(jarvis)
     if uses_spanish(text):
         opener = f"Hola, {name}" if name else "Hola"
         return _plain(
@@ -216,10 +229,10 @@ def _try_external_search(jarvis: Jarvis, text: str) -> Reply | None:
                 else f"No results found for \"{query}\" on the web."
             )
             return _plain(no_results, "instruction")
-        lines = []
+        lines: list[str] = []
         for i, doc in enumerate(results, 1):
             title = doc.title or doc.url
-            snippet = doc.snippet[:200] if doc.snippet else ""
+            snippet = doc.content[:200]
             lines.append(f"{i}. **{title}**\n   {snippet}\n   {doc.url}")
         results_text = "\n\n".join(lines)
         prefix = (
@@ -416,7 +429,7 @@ def stream_say(jarvis: Jarvis, payload: Reply) -> Iterator[StreamEvent]:
     except Exception as error:  # noqa: BLE001 - the external-provider boundary
         yield (
             "done",
-            {"reply": _provider_error(error), "speak": True, "provenance": None, "trace": []},
+            {"reply": provider_error(error), "speak": True, "provenance": None, "trace": []},
         )
         return
     canonical = str(result["reply"])
@@ -431,3 +444,11 @@ def stream_say(jarvis: Jarvis, payload: Reply) -> Iterator[StreamEvent]:
         voiced.append(piece)
         yield ("chunk", {"text": piece})
     yield ("done", {"reply": "".join(voiced)})
+
+
+Command = Callable[[Jarvis, Reply], Reply]
+
+# The commands this module serves, composed by the command-center router.
+COMMANDS: dict[str, Command] = {
+    "say": _say,
+}

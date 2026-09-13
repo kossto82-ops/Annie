@@ -497,7 +497,7 @@ def test_f3_console_wires_provider_management() -> None:
 
 
 def test_f3_snapshot_stats_carry_averages() -> None:
-    stats = cast(dict[str, object], _snapshot_block("provider"))
+    stats = _snapshot_block("provider")
     assert "avg_seconds" in stats and "slowest_seconds" in stats
 
 
@@ -580,7 +580,7 @@ def test_f6_console_wires_task_runs_and_calendar_depth() -> None:
 
 
 def test_f6_snapshot_carries_calendar_source_and_task_runs() -> None:
-    cal = cast(dict[str, object], _snapshot_block("calendar"))
+    cal = _snapshot_block("calendar")
     assert cal == {"source": "none", "connected": False}
 
 
@@ -620,7 +620,8 @@ def test_f7_snapshot_carries_platform_and_companion_name() -> None:
     from jarvis.jarvis import Jarvis
 
     state = snapshot(Jarvis())
-    assert state["environment"]["platform"] == __import__("os").name
+    environment = cast(dict[str, object], state["environment"])
+    assert environment["platform"] == __import__("os").name
     assert state["companion_name"] is None
 
 

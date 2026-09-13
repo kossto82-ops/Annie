@@ -80,8 +80,8 @@ def _deserialise_memory(
             observed_at=datetime.fromisoformat(e_data["observed_at"]),
             id=e_data.get("id", ""),
         )
-        # Append directly to avoid incrementing reinforcement_count on load
-        memory._evidence.append(evidence)
+        # Rehydrate without incrementing reinforcement_count on load.
+        memory.restore_evidence(evidence)
     return memory
 
 

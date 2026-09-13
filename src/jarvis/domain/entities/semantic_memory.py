@@ -143,6 +143,15 @@ class SemanticMemory:
             )
         self._pending_events.append(event)
 
+    def restore_evidence(self, evidence: Evidence) -> None:
+        """Rehydrate one stored evidence item without side effects.
+
+        Load path only: appends without touching ``reinforcement_count``,
+        ``last_reinforced_at`` or the event buffer, so a restart replays
+        exactly what was stored (Vision §22: memory preserves experience).
+        """
+        self._evidence.append(evidence)
+
     def pull_events(self) -> list[CognitiveEvent]:
         """Drain buffered domain events (read-model pattern)."""
         events = list(self._pending_events)

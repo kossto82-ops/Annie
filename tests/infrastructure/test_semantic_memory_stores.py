@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import Any
 
 from jarvis.domain.entities.semantic_memory import SemanticMemory
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -12,7 +13,7 @@ from jarvis.infrastructure.in_memory_semantic_memory_store import InMemorySemant
 from jarvis.infrastructure.sqlite_semantic_memory_store import SqliteSemanticMemoryStore
 
 
-def _mem(pattern: str, **kwargs) -> SemanticMemory:
+def _mem(pattern: str, **kwargs: Any) -> SemanticMemory:
     return SemanticMemory(pattern=pattern, **kwargs)
 
 

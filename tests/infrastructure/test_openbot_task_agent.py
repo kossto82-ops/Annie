@@ -12,8 +12,8 @@ import pytest
 
 from jarvis.infrastructure.openbot_task_agent import (
     OpenBotTaskAgent,
-    _map_result,
     build_openbot_task_agent,
+    map_result,
 )
 from jarvis.infrastructure.openbot_transport import (
     FakeOpenBotTransport,
@@ -89,13 +89,13 @@ class TestAdapterMapping:
 class TestMapResult:
     def test_empty_text_no_tools_gives_no_output(self) -> None:
         r = OpenBotRunResult(finished=True)
-        result = _map_result("task", r)
+        result = map_result("task", r)
         assert result.success is True
         assert "no output" in result.summary.lower()
 
     def test_error_overrides_finished(self) -> None:
         r = OpenBotRunResult(error="fail", finished=True)
-        result = _map_result("t", r)
+        result = map_result("t", r)
         assert not result.success
 
 
