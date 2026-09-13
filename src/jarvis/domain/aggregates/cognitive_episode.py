@@ -84,6 +84,7 @@ class CognitiveEpisode:
     _recalled: tuple[RecalledMemory, ...] = field(default=(), repr=False)
     _inference: Inference | None = field(default=None, repr=False)
     _consulted: str | None = field(default=None, repr=False)
+    _reflection_note: str | None = field(default=None, repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
     )
@@ -304,10 +305,12 @@ class CognitiveEpisode:
         """Record the episode's review of its own reasoning (Vision §19).
 
         Reflection *notices*, it does not conclude: this appends an
-        :class:`EpisodeReflected` event to the episode's trace and changes neither
-        the working belief nor the decision. ``note`` is what the review observed;
-        ``contested`` marks that the conclusion rests on partly-contradicted evidence.
+        :class:`EpisodeReflected` event to the episode's trace and stores
+        the note on the episode for later persistence.  ``note`` is what
+        the review observed; ``contested`` marks that the conclusion rests
+        on partly-contradicted evidence.
         """
+        self._reflection_note = note
         self._record(
             EpisodeReflected(
                 episode_id=self.id,

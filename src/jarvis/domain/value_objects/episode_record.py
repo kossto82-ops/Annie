@@ -25,6 +25,20 @@ def _now() -> datetime:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class EvidenceSnapshot:
+    """A single piece of evidence at the time the episode completed.
+
+    This is a lightweight copy of the evidence, not a reference to the
+    mutable Evidence object on the Belief.
+    """
+
+    content: str
+    source: str
+    supports: bool
+    weight: float
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class EpisodeRecord:
     """A snapshot of a completed episode, kept in episodic memory.
 
@@ -37,6 +51,12 @@ class EpisodeRecord:
     ``belief_formed_at`` records when the working belief was first created
     (if it existed before this episode).  ``belief_confidence_at_end`` records
     the belief's derived confidence at the moment the episode completed.
+
+    ``reflection_note`` captures the reflect stage's assessment of the
+    conclusion's grounding (e.g. "well grounded", "contested", "thinly
+    grounded").  ``evidence_snapshot`` captures the belief's evidence list
+    at episode end so the reasoning context is preserved even if the belief
+    later evolves.
     """
 
     episode_id: str
@@ -51,5 +71,7 @@ class EpisodeRecord:
     goal: str | None = None  # what the episode was toward (Vision §26), if any
     belief_formed_at: datetime | None = None  # when the working belief was created
     belief_confidence_at_end: Confidence | None = None  # belief confidence at episode end
+    reflection_note: str | None = None  # reflect stage's assessment
+    evidence_snapshot: tuple[EvidenceSnapshot, ...] = ()  # evidence at episode end
     recorded_at: datetime = field(default_factory=_now)
     record_id: str = field(default_factory=lambda: str(uuid.uuid4()))

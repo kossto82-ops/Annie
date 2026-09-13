@@ -43,7 +43,7 @@ from jarvis.domain.services.self_observation import (
 from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.deliberation import Deliberation
-from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.episode_record import EpisodeRecord, EvidenceSnapshot
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.domain.value_objects.inference import Inference
@@ -733,6 +733,15 @@ class ExecutiveController:
         )
 
     def _remember(self, episode: CognitiveEpisode, belief: Belief, decision: str) -> None:
+        evidence_snapshot = tuple(
+            EvidenceSnapshot(
+                content=e.content,
+                source=e.source.value,
+                supports=e.supports,
+                weight=e.weight.value,
+            )
+            for e in belief.evidence
+        )
         self._episodes.record(
             EpisodeRecord(
                 episode_id=episode.id,
@@ -745,6 +754,8 @@ class ExecutiveController:
                 origin=episode.origin,
                 kind=episode.kind,
                 goal=episode.goal.statement if episode.goal is not None else None,
+                reflection_note=episode._reflection_note,
+                evidence_snapshot=evidence_snapshot,
             )
         )
 

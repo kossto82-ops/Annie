@@ -115,7 +115,30 @@ These answer the roadmap's three questions:
 
 Simple patterns (stable preference, changing preference, recurring contradiction) could be built on top of the timeline infrastructure but are not yet wired into cognition. Deferred.
 
-## Phases 4-11
+## Phase 4 — Unresolved Items ✅
+
+Codebase is clean: zero TODOs, FIXMEs, or HACKs. No incomplete-work markers found.
+
+## Phase 5 — Decision History with Reasoning ✅
+
+### 5A: Persist Reflection and Evidence Snapshot ✅
+
+**Implemented**:
+- Added `EvidenceSnapshot` dataclass to `episode_record.py` — lightweight immutable copy of evidence at episode end
+- Added `reflection_note: str | None` and `evidence_snapshot: tuple[EvidenceSnapshot, ...]` to `EpisodeRecord`
+- Added `_reflection_note: str | None` field to `CognitiveEpisode` — `record_reflection()` now stores the note on the episode (not just in the event trace)
+- Updated `ExecutiveController._remember()` to populate both fields from the episode and belief
+
+**What's now persistable**:
+1. What was decided → `decision` field
+2. Why (reflection) → `reflection_note` field
+3. What evidence supported it → `evidence_snapshot` field
+4. When → `recorded_at` field
+5. Confidence/stability at time → `conclusion_confidence`, `conclusion_stability`
+
+8 tests prove the new fields work and decision history is reconstructable.
+
+## Phases 6-11
 
 See the full roadmap in the user's instructions.
 
