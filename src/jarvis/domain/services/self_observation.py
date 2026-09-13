@@ -19,6 +19,7 @@ strategies, retrieval quality, and attention patterns via the
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from jarvis.domain.entities.belief import LOW_STABILITY_THRESHOLD, Belief
 from jarvis.domain.enums.episode_kind import EpisodeKind
@@ -187,3 +188,104 @@ def observe_prediction_accuracy(
             )
         )
     return belief
+
+
+# ---------------------------------------------------------------------------
+# Adaptation bridge: self-observation → CognitiveKnobs adjustment
+# ---------------------------------------------------------------------------
+
+# Maximum single-step adjustment to any confidence threshold.
+_ADAPTATION_STEP: float = 0.05
+
+# The baseline default knobs (used as the target for reversal).
+_DEFAULT_KNOBS = CognitiveKnobs()
+
+
+def adapt_knobs_from_self_observation(
+    knobs: CognitiveKnobs,
+    history: Sequence[EpisodeRecord],
+    *,
+    policy: EvidenceWeightingPolicy | None = None,
+) -> tuple[CognitiveKnobs, str | None]:
+    """Evaluate self-observation and return adjusted knobs if warranted.
+
+    When a self-observation belief crosses the learned-habit threshold, the
+    relevant knob is adjusted *toward* a more conservative posture. When the
+    habit fades, the knob drifts back toward the baseline.
+
+    Returns the (possibly unchanged) knobs and a reason string when an
+    adjustment was made, or None when no adjustment was needed.
+
+    Design principles:
+    - **Evidence-backed**: adjustment only happens when a self-belief has
+      sufficient evidence (>= 3 episodes, confidence >= 0.5).
+    - **Bounded**: max ±0.05 per call, knobs stay in [0.1, 0.9].
+    - **Reversible**: when the habit fades, knobs return toward baseline.
+    - **Inspectable**: the reason string explains what changed and why.
+    """
+    _HABIT_THRESHOLD = 0.5
+    _FLOOR = 0.1
+    _CEIL = 0.9
+
+    adjusted = knobs
+    reason: str | None = None
+
+    # Evidence habit: "I conclude without enough evidence"
+    # -> raise grounded_confidence (need more evidence before concluding)
+    evidence_belief = observe_evidence_habit(history, knobs=knobs, policy=policy)
+    if (
+        evidence_belief is not None
+        and evidence_belief.confidence.value >= _HABIT_THRESHOLD
+    ):
+        current = adjusted.grounded_confidence
+        baseline = _DEFAULT_KNOBS.grounded_confidence
+        if current < baseline:
+            # Drift back toward baseline
+            new_val = min(baseline, current + _ADAPTATION_STEP)
+        else:
+            # Habit detected, raise threshold (more conservative)
+            new_val = min(_CEIL, current + _ADAPTATION_STEP)
+        if new_val != current:
+            adjusted = replace(adjusted, grounded_confidence=new_val)
+            reason = (
+                f"raised grounded_confidence from {current:.2f} to {new_val:.2f} "
+                f"(evidence habit detected, confidence "
+                f"{evidence_belief.confidence.value:.2f})"
+            )
+
+    # Overconfidence habit: "I am overconfident on thin evidence"
+    # -> raise grounded_confidence (stricter bar for "grounded")
+    overconfidence_belief = observe_overconfidence(history, knobs=knobs, policy=policy)
+    if (
+        overconfidence_belief is not None
+        and overconfidence_belief.confidence.value >= _HABIT_THRESHOLD
+    ):
+        current = adjusted.grounded_confidence
+        baseline = _DEFAULT_KNOBS.grounded_confidence
+        if current < baseline:
+            new_val = min(baseline, current + _ADAPTATION_STEP)
+        else:
+            new_val = min(_CEIL, current + _ADAPTATION_STEP)
+        if new_val != current:
+            adjusted = replace(adjusted, grounded_confidence=new_val)
+            reason = (
+                f"raised grounded_confidence from {current:.2f} to {new_val:.2f} "
+                f"(overconfidence habit detected, confidence "
+                f"{overconfidence_belief.confidence.value:.2f})"
+            )
+
+    # When no habit is detected but the threshold was previously raised,
+    # drift it back toward baseline (reversibility).
+    if reason is None:
+        current = adjusted.grounded_confidence
+        baseline = _DEFAULT_KNOBS.grounded_confidence
+        if current > baseline:
+            new_val = max(baseline, current - _ADAPTATION_STEP)
+            if new_val != current:
+                adjusted = replace(adjusted, grounded_confidence=new_val)
+                reason = (
+                    f"lowered grounded_confidence from {current:.2f} to {new_val:.2f} "
+                    f"(no habit detected, drifting toward baseline)"
+                )
+
+    return adjusted, reason

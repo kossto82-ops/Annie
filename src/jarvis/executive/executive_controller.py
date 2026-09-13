@@ -36,6 +36,7 @@ from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.self_observation import (
+    adapt_knobs_from_self_observation,
     observe_evidence_habit,
     observe_overconfidence,
 )
@@ -347,6 +348,17 @@ class ExecutiveController:
         self._flush(episode)  # dispatch EpisodeCompleted
 
         self._remember(episode, belief, decision)
+
+        # Adaptation bridge (Phase 2A): self-observation → knobs adjustment.
+        # After the episode is recorded, evaluate self-observation and adjust
+        # thresholds if a habit is detected. This closes the learning loop:
+        # observation → self-model → cognitive adaptation → changed behaviour.
+        adapted, reason = adapt_knobs_from_self_observation(
+            self._knobs, self._episodes.history()
+        )
+        if reason is not None:
+            self.set_knobs(adapted)
+
         return episode
 
     def deliberate(
