@@ -68,6 +68,28 @@ def language_model_from_env(environ: Mapping[str, str] | None = None) -> Languag
     return build_language_model(settings_from_env(environ))
 
 
+_BACKUP_PREFIX = "JARVIS_LLM_BACKUP_"
+
+
+def backup_settings_from_env(environ: Mapping[str, str] | None = None) -> ProviderSettings | None:
+    """Build backup ProviderSettings from JARVIS_LLM_BACKUP_*, or None if unconfigured."""
+    env = environ if environ is not None else os.environ
+    provider = (env.get(f"{_BACKUP_PREFIX}PROVIDER") or "").strip()
+    if not provider:
+        return None
+    model = (env.get(f"{_BACKUP_PREFIX}MODEL") or "").strip()
+    if not model:
+        return None
+    return ProviderSettings(
+        provider=provider,
+        model=model,
+        base_url=(env.get(f"{_BACKUP_PREFIX}BASE_URL") or None),
+        api_key=(env.get(f"{_BACKUP_PREFIX}API_KEY") or None),
+        timeout=float(env.get(f"{_BACKUP_PREFIX}TIMEOUT", "30")),
+        temperature=float(env.get(f"{_BACKUP_PREFIX}TEMPERATURE", "0")),
+    )
+
+
 def stt_settings_from_env(environ: Mapping[str, str] | None = None) -> SttSettings:
     """Assemble `SttSettings` from `JARVIS_STT_*`. Defaults to the offline echo ear."""
     env = environ if environ is not None else os.environ

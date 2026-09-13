@@ -28,10 +28,12 @@ from jarvis.infrastructure.agent_reach_source import build_web_source, llm_searc
 from jarvis.infrastructure.calendar_store import build_calendar_store
 from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.env_settings import (
+    backup_settings_from_env,
     openbot_settings_from_env,
     settings_from_env,
     speech_perception_from_env,
 )
+from jarvis.infrastructure.fallback_model import FallbackLanguageModel
 from jarvis.infrastructure.filesystem_tool import FileSystemTool
 from jarvis.infrastructure.google_calendar import build_google_calendar_store
 from jarvis.infrastructure.instrumented_task_agent import InstrumentedTaskAgent
@@ -133,10 +135,21 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     acquired, so the assistant starts out owning what it was configured with (D37).
     """
     settings = settings_from_env()
-    perception: PerceptionSource = perceiver_from_settings(settings)
-    companion_perception = companion_perceiver_from_settings(settings)
-    reasoner = reasoner_from_settings(settings)
-    document_editor = document_editor_from_settings(settings)
+    # Build the language model with optional fallback (backup provider)
+    backup = backup_settings_from_env()
+    base_model: LanguageModel | None = None
+    if settings.model and settings.provider not in _OFFLINE_PROVIDERS:
+        base_model = build_language_model(settings)
+        if backup is not None:
+            try:
+                backup_model = build_language_model(backup)
+                base_model = FallbackLanguageModel(base_model, backup_model)
+            except Exception:
+                pass  # backup config invalid, use primary only
+    perception: PerceptionSource = perceiver_from_settings(settings, model_override=base_model)
+    companion_perception = companion_perceiver_from_settings(settings, model_override=base_model)
+    reasoner = reasoner_from_settings(settings, model_override=base_model)
+    document_editor = document_editor_from_settings(settings, model_override=base_model)
     external_source, research_source, model_compare, mail_source, task_agent, notes_store = (
         _build_edge(settings)
     )

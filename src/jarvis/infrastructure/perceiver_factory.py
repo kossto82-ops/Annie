@@ -27,6 +27,7 @@ from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.retrieval.document_editor import DocumentEditor
 from jarvis.infrastructure.keyword_perception import KeywordPerception
+from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.language_model_registry import available, build_language_model
 from jarvis.infrastructure.llm_companion_perception import LlmCompanionPerception
 from jarvis.infrastructure.llm_config_store import resolve_api_key, resolve_model
@@ -96,12 +97,15 @@ def describe(source: PerceptionSource) -> dict[str, str | None]:
     return {"kind": "custom", "provider": type(source).__name__, "model": None}
 
 
-def perceiver_from_settings(settings: ProviderSettings) -> PerceptionSource:
+def perceiver_from_settings(
+    settings: ProviderSettings, *, model_override: LanguageModel | None = None
+) -> PerceptionSource:
     """The `PerceptionSource` for fully-formed settings (including any API key).
 
     An offline provider yields the keyword rule (no LLM); any other provider is an
     LLM-backed perceiver built through the open registry, tagged with its identity so
-    the surface can name it.
+    the surface can name it. An optional ``model_override`` bypasses model construction
+    (e.g. for a fallback model).
     """
     if settings.provider in _OFFLINE:
         return KeywordPerception()
@@ -110,7 +114,9 @@ def perceiver_from_settings(settings: ProviderSettings) -> PerceptionSource:
             f"a model id is required for provider {settings.provider!r} "
             "(e.g. llama-3.3-70b)"
         )
-    if settings.provider == _STRUCTURED_PERCEPTION:
+    if model_override is not None:
+        model = model_override
+    elif settings.provider == _STRUCTURED_PERCEPTION:
         model = PydanticAiModel(
             settings,
             instructions=PERCEPTION_INSTRUCTIONS,
@@ -122,12 +128,13 @@ def perceiver_from_settings(settings: ProviderSettings) -> PerceptionSource:
 
 
 def companion_perceiver_from_settings(
-    settings: ProviderSettings,
+    settings: ProviderSettings, *, model_override: LanguageModel | None = None
 ) -> CompanionPerceptionSource:
     """The relational perceiver (Vision §5) for fully-formed settings.
 
     Offline -> silent (the dumb rule cannot read free utterances into traits); any real
     provider -> an LLM-backed companion perceiver over the same model as the world one.
+    An optional ``model_override`` bypasses model construction (e.g. for a fallback model).
     """
     if settings.provider in _OFFLINE:
         return SilentCompanionPerception()
@@ -136,7 +143,8 @@ def companion_perceiver_from_settings(
             f"a model id is required for provider {settings.provider!r} "
             "(e.g. llama-3.3-70b)"
         )
-    return LlmCompanionPerception(build_language_model(settings))
+    model = model_override if model_override is not None else build_language_model(settings)
+    return LlmCompanionPerception(model)
 
 
 def renderer_from_settings(settings: ProviderSettings) -> ResponseRenderer:
@@ -150,28 +158,36 @@ def renderer_from_settings(settings: ProviderSettings) -> ResponseRenderer:
     return LlmResponseRenderer(build_language_model(settings))
 
 
-def reasoner_from_settings(settings: ProviderSettings) -> Reasoner:
+def reasoner_from_settings(
+    settings: ProviderSettings, *, model_override: LanguageModel | None = None
+) -> Reasoner:
     """The reasoner (Vision §37) for fully-formed settings.
 
     Offline -> the silent reasoner (no inference; an unremembered question stays an
     honest "I don't have enough"); a real provider -> an LLM reasoner over the same
     model, so a provisional answer is reasoned when belief and memory have none.
+    An optional ``model_override`` bypasses model construction (e.g. for a fallback model).
     """
     if settings.provider in _OFFLINE or not settings.model:
         return SilentReasoner()
-    return LlmReasoner(build_language_model(settings))
+    model = model_override if model_override is not None else build_language_model(settings)
+    return LlmReasoner(model)
 
 
-def document_editor_from_settings(settings: ProviderSettings) -> DocumentEditor:
+def document_editor_from_settings(
+    settings: ProviderSettings, *, model_override: LanguageModel | None = None
+) -> DocumentEditor:
     """The document editor (Vision §38) for fully-formed settings.
 
     Offline -> the silent editor (no rewrite proposal; a chat edit honestly says
     it has no grounded rewrite); a real provider -> an LLM editor over the same
     model, so "hazle este cambio" to a document gets a concrete proposal to apply.
+    An optional ``model_override`` bypasses model construction (e.g. for a fallback model).
     """
     if settings.provider in _OFFLINE or not settings.model:
         return SilentDocumentEditor()
-    return LlmDocumentEditor(build_language_model(settings))
+    model = model_override if model_override is not None else build_language_model(settings)
+    return LlmDocumentEditor(model)
 
 
 def build_embedder(environ: Mapping[str, str] | None = None) -> TextEmbedder | None:
