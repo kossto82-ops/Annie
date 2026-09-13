@@ -184,6 +184,59 @@ def _feedback_reply(text: str) -> Reply:
     )
 
 
+# Web search cues (Spanish + English)
+_SEARCH_CUES = (
+    "busca", "búscame", "busca en", "buscar en", "buscar",
+    "search", "look up", "find out", "google", "search for",
+)
+
+def _try_external_search(jarvis: Jarvis, text: str) -> Reply | None:
+    """Try to route a web search request to the external source, or None."""
+    text_lower = text.lower().strip()
+    is_search = any(cue in text_lower for cue in _SEARCH_CUES)
+    if not is_search:
+        return None
+    if not jarvis.can_do("search the web"):
+        return None
+    # Extract the query (strip the search cue prefix)
+    query = text
+    for cue in ("búscame", "busca en", "buscar en", "buscar", "busca",
+                "search for", "look up", "find out", "google", "search"):
+        if text_lower.startswith(cue):
+            query = text[len(cue):].strip().strip(":").strip()
+            break
+    if not query:
+        return None
+    try:
+        results = jarvis.search_external(query, limit=3)
+        if not results:
+            no_results = (
+                f"No encontré resultados para \"{query}\" en la web."
+                if uses_spanish(text)
+                else f"No results found for \"{query}\" on the web."
+            )
+            return _plain(no_results, "instruction")
+        lines = []
+        for i, doc in enumerate(results, 1):
+            title = doc.title or doc.url
+            snippet = doc.snippet[:200] if doc.snippet else ""
+            lines.append(f"{i}. **{title}**\n   {snippet}\n   {doc.url}")
+        results_text = "\n\n".join(lines)
+        prefix = (
+            f"Encontré esto para \"{query}\":"
+            if uses_spanish(text)
+            else f"Here's what I found for \"{query}\":"
+        )
+        return _plain(f"{prefix}\n\n{results_text}", "instruction")
+    except Exception:
+        error = (
+            "No pude buscar en la web ahora mismo — el servicio puede estar caído."
+            if uses_spanish(text)
+            else "Web search is unavailable right now — the service may be down."
+        )
+        return _plain(error, "instruction")
+
+
 def _instruction_reply(jarvis: Jarvis, text: str) -> Reply:
     """Execute an instruction through an existing capability, or decline honestly.
 
@@ -191,6 +244,11 @@ def _instruction_reply(jarvis: Jarvis, text: str) -> Reply:
     knowledge. The reasoner receives the preceding dialogue so references such as
     "lo" resolve against what the companion and Jarvis were just discussing.
     """
+    # Check if this is a web search request and route to external source directly
+    search_result = _try_external_search(jarvis, text)
+    if search_result is not None:
+        return search_result
+
     inference = jarvis.reason(text, conversation=jarvis.conversation.before_current())
     if inference is None:
         unavailable = (
