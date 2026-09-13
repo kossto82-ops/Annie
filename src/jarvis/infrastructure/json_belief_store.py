@@ -111,6 +111,13 @@ class JsonBeliefStore:
             if pattern_lower in b.statement.lower()
         )
 
+    def forget(self, statement: str) -> bool:
+        if statement in self._by_statement:
+            del self._by_statement[statement]
+            self._flush()
+            return True
+        return False
+
     def _load(self) -> None:
         if not self._path.exists():
             return

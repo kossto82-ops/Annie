@@ -45,3 +45,9 @@ class InMemoryBeliefStore:
             b for b in self._by_statement.values()
             if pattern_lower in b.statement.lower()
         )
+
+    def forget(self, statement: str) -> bool:
+        if statement in self._by_statement:
+            del self._by_statement[statement]
+            return True
+        return False

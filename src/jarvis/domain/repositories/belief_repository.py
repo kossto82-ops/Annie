@@ -42,3 +42,7 @@ class BeliefRepository(Protocol):
     def beliefs_about(self, subject_pattern: str) -> tuple[Belief, ...]:
         """Beliefs whose statement contains the given subject pattern (case-insensitive)."""
         ...
+
+    def forget(self, statement: str) -> bool:
+        """Remove a belief by statement. Returns True if found and removed."""
+        ...

@@ -90,6 +90,16 @@ class SqliteBeliefStore:
             if pattern_lower in b.statement.lower()
         )
 
+    def forget(self, statement: str) -> bool:
+        if statement not in self._by_statement:
+            return False
+        del self._by_statement[statement]
+        self._conn.execute(
+            f'DELETE FROM "{self._table}" WHERE statement = ?', (statement,)
+        )
+        self._conn.commit()
+        return True
+
     def _ensure_schema(self) -> None:
         self._conn.execute(
             f'CREATE TABLE IF NOT EXISTS "{self._table}" '

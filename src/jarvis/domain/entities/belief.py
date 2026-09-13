@@ -219,6 +219,10 @@ class Belief:
         """The belief's strength, always derived from its current evidence."""
         return derive_confidence(tuple(self._evidence), self.weighting_policy)
 
+    def confidence_with_policy(self, policy: EvidenceWeightingPolicy) -> Confidence:
+        """Confidence using an overridden weighting policy (e.g. for decay checks)."""
+        return derive_confidence(tuple(self._evidence), policy)
+
     @property
     def stability(self) -> TemporalStability:
         """How steadily over time the belief has been supported (Vision §10).
