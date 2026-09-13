@@ -39,7 +39,7 @@ from jarvis.interface._cognition import (
     _tunables,
     _wonder,
 )
-from jarvis.interface._conversation import _say, stream_say, StreamEvent  # noqa: F401
+from jarvis.interface._conversation import StreamEvent, _say, stream_say  # noqa: F401
 from jarvis.interface._crud import (
     _calendar,
     _documents,

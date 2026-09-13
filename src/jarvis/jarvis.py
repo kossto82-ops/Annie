@@ -11,7 +11,7 @@ import difflib
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from jarvis.actions import (
     _action_description as _action_description_fn,
@@ -288,6 +288,14 @@ from jarvis.surfaces import (
     TaskSchedulerSurface,
 )
 
+if TYPE_CHECKING:
+    from jarvis.domain.repositories.conversation_repository import (
+        ConversationRepository,
+    )
+    from jarvis.domain.repositories.semantic_memory_repository import (
+        SemanticMemoryRepository,
+    )
+
 # The goal-reflection cap and the insight threshold now live in ``CognitiveKnobs``
 # (defaults 3 and 0.5, the historical constants), validated at the value level
 # (D7) and tunable at runtime from the command center.
@@ -377,6 +385,8 @@ class Jarvis:
         default_belief_policy: EvidenceWeightingPolicy | None = None,
         document_editor: DocumentEditor | None = None,
         instrumentation: InstrumentationStore | None = None,
+        semantic_memory_store: SemanticMemoryRepository | None = None,
+        conversation_repository: ConversationRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         # Live-provider instrumentation (Phase 4): a shared collector that recorded
@@ -574,6 +584,9 @@ class Jarvis:
         self._tools: ToolRegistry = ToolRegistry(
             policy=self._tool_policy, observer=_record_tool_call
         )
+        # Long-term memory repositories for recall augmentation (Phase 1A/1B).
+        self._semantic_memory_store = semantic_memory_store
+        self._conversation_repository = conversation_repository
         # Optional long-term-memory recall (Vision §3): when enabled, a deterministic
         # lexical retriever over Jarvis's own stores lets an episode answer from what
         # it remembers instead of a blank "insufficient evidence". Off by default, so
@@ -584,7 +597,12 @@ class Jarvis:
         memory_retriever: MemoryRetriever | None = (
             self._with_documents(
                 LexicalMemoryRetriever(
-                    self.beliefs, self.episodes, self.companion, self._goals
+                    self.beliefs,
+                    self.episodes,
+                    self.companion,
+                    self._goals,
+                    semantic_memories=self._semantic_memory_store,
+                    conversation=self._conversation_repository,
                 )
             )
             if enable_recall
@@ -596,7 +614,7 @@ class Jarvis:
         # Short-term conversational context (Vision §3): the last few turns of THIS
         # conversation, kept separate from long-term memory so follow-ups and pronouns
         # resolve against what was just said, not against the belief store.
-        self.conversation = ConversationContext()
+        self.conversation = ConversationContext(repository=conversation_repository)
         # The short-term thread of this session's reasoning: each answered question is
         # a step in a span the reasoner carries across turns, so follow-ups continue the
         # discussion instead of restarting it (Increment 145). Bounded, not persisted,
@@ -736,7 +754,12 @@ class Jarvis:
         executive still decides. Replaces whatever retriever was active.
         """
         lexical = LexicalMemoryRetriever(
-            self.beliefs, self.episodes, self.companion, self._goals
+            self.beliefs,
+            self.episodes,
+            self.companion,
+            self._goals,
+            semantic_memories=self._semantic_memory_store,
+            conversation=self._conversation_repository,
         )
         self._executive.set_memory_retriever(
             self._with_documents(
@@ -747,6 +770,8 @@ class Jarvis:
                     self._goals,
                     embedder,
                     fallback=lexical,
+                    semantic_memories=self._semantic_memory_store,
+                    conversation=self._conversation_repository,
                 )
             )
         )

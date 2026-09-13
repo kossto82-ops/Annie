@@ -20,12 +20,21 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.memory_candidates import gather_candidates
+
+if TYPE_CHECKING:
+    from jarvis.domain.repositories.conversation_repository import (
+        ConversationRepository,
+    )
+    from jarvis.domain.repositories.semantic_memory_repository import (
+        SemanticMemoryRepository,
+    )
 
 # Tokens shorter than this carry too little signal to rank on (articles, "me",
 # single letters). A short, language-agnostic floor -- not a stopword list.
@@ -56,11 +65,15 @@ class LexicalMemoryRetriever:
         episodes: EpisodeRepository,
         companion: CompanionModel,
         goals: BeliefRepository,
+        semantic_memories: SemanticMemoryRepository | None = None,
+        conversation: ConversationRepository | None = None,
     ) -> None:
         self._beliefs = beliefs
         self._episodes = episodes
         self._companion = companion
         self._goals = goals
+        self._semantic_memories = semantic_memories
+        self._conversation = conversation
 
     def recall(
         self,
@@ -75,7 +88,12 @@ class LexicalMemoryRetriever:
             return ()
         scored: list[RecalledMemory] = []
         for match_text, content, kind, provenance, confidence, observed_at in gather_candidates(
-            self._beliefs, self._episodes, self._companion, self._goals
+            self._beliefs,
+            self._episodes,
+            self._companion,
+            self._goals,
+            semantic_memories=self._semantic_memories,
+            conversation=self._conversation,
         ):
             if since is not None and (observed_at is None or observed_at < since):
                 continue

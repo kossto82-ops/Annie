@@ -18,6 +18,7 @@ from jarvis.infrastructure.agent_reach_source import (
 )
 from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.env_settings import settings_from_env
+from jarvis.infrastructure.in_memory_conversation_store import InMemoryConversationStore
 from jarvis.infrastructure.json_belief_store import JsonBeliefStore
 from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
@@ -26,6 +27,7 @@ from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
 from jarvis.infrastructure.speech_perception import EchoSpeechPerception
+from jarvis.infrastructure.sqlite_conversation_store import SqliteConversationStore
 from jarvis.infrastructure.sqlite_database import build_sqlite_repositories
 from jarvis.infrastructure.sqlite_episode_trace import SqliteEpisodeTrace
 
@@ -77,6 +79,7 @@ def build_persistent_kwargs(
         research_source=research,
         speech_perception=EchoSpeechPerception(),
         documents_store=build_document_store(base / "docs"),
+        conversation_repository=InMemoryConversationStore(),
     )
 
 
@@ -129,4 +132,5 @@ def build_database_kwargs(
         research_source=research,
         speech_perception=EchoSpeechPerception(),
         documents_store=build_document_store(base / "docs"),
+        conversation_repository=SqliteConversationStore(repositories.connection),
     )

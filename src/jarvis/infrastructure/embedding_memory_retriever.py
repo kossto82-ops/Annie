@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.repositories.belief_repository import BeliefRepository
@@ -28,6 +29,14 @@ from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.memory_candidates import gather_candidates
 from jarvis.infrastructure.text_embedder import TextEmbedder
+
+if TYPE_CHECKING:
+    from jarvis.domain.repositories.conversation_repository import (
+        ConversationRepository,
+    )
+    from jarvis.domain.repositories.semantic_memory_repository import (
+        SemanticMemoryRepository,
+    )
 
 # Below this cosine similarity a memory is not meaning-close enough to surface.
 # Calibrated against real bge-m3: identity-related queries score ~0.46-0.67 and clearly
@@ -60,6 +69,8 @@ class EmbeddingMemoryRetriever:
         embedder: TextEmbedder,
         *,
         fallback: MemoryRetriever | None = None,
+        semantic_memories: SemanticMemoryRepository | None = None,
+        conversation: ConversationRepository | None = None,
     ) -> None:
         self._beliefs = beliefs
         self._episodes = episodes
@@ -67,6 +78,8 @@ class EmbeddingMemoryRetriever:
         self._goals = goals
         self._embedder = embedder
         self._fallback = fallback
+        self._semantic_memories = semantic_memories
+        self._conversation = conversation
         self._cache: dict[str, tuple[float, ...]] = {}
 
     def recall(
@@ -80,7 +93,14 @@ class EmbeddingMemoryRetriever:
         if not query.strip():
             return ()
         candidates = list(
-            gather_candidates(self._beliefs, self._episodes, self._companion, self._goals)
+            gather_candidates(
+                self._beliefs,
+                self._episodes,
+                self._companion,
+                self._goals,
+                semantic_memories=self._semantic_memories,
+                conversation=self._conversation,
+            )
         )
         if not candidates:
             return ()
