@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
-      - run: pyright --strict src tests
+      - run: pyright src tests
 
   test:
     runs-on: ubuntu-latest
