@@ -218,7 +218,7 @@ the decider. The API secret lives only in `JARVIS_LLM_API_KEY`, never in code.
 Requires Python 3.13+.
 
 ```bash
-python -m pytest -q        # tests (~1701 tests, all passing)
+python -m pytest -q        # tests (~1704 tests, all passing)
 python -m ruff check .     # lint (clean)
 python -m pyright          # type check (strict, 0 errors)
 ```

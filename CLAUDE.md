@@ -80,7 +80,7 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-~1701 tests passing, ruff clean.
+~1704 tests passing, ruff clean.
 
 The current project is around Increment 160 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
@@ -124,7 +124,11 @@ as `ConversationIntent.ACT` and is *performed* through a new earned-agency seam,
 `Jarvis.execute`/`instruction_agent`, wired by `build_instruction_agent` to the same sandboxed
 `ToolRegistry` but at `approved=False` — sandbox reads/writes run, external (MCP)/destructive acts
 refuse honestly at the gate, and the chat reply narrates the real outcome ("Listo — …" / "No pude
-completarlo: …") or an honest decline when no executor is wired). A live LLM provider is
+completarlo: …") or an honest decline when no executor is wired); and a fallback provider
+(Increment 161: `FallbackLanguageModel` wraps primary + backup with automatic failover, configurable
+via `JARVIS_LLM_BACKUP_*` env vars; web search cues route directly to `ExternalSource`; factory
+functions accept `model_override` for injection; dashboard capability count shows only active). A
+live LLM provider is
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
 

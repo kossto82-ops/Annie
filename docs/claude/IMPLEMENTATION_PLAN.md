@@ -229,12 +229,33 @@ In `feel_curious()`, after the meta-knowledge check, iterates episode history su
 
 7 tests in `tests/test_memory_consolidation.py`.
 
+## Phase 12: Fallback Provider and Dashboard Integrity
+
+**Goal**: Add automatic failover for the LLM provider and ensure dashboard data is honest.
+
+**What was implemented**:
+- `FallbackLanguageModel` wraps a primary and backup `LanguageModel` with automatic failover
+- `backup_settings_from_env()` reads `JARVIS_LLM_BACKUP_*` environment variables
+- Factory functions accept `model_override` parameter for fallback model injection
+- `_instruction_reply()` routes web search cues directly to `ExternalSource`
+- Dashboard `capCount` badge shows only active capabilities (ready/acquired), not full catalog
+
+**Files changed**:
+- `src/jarvis/infrastructure/fallback_model.py` — new `FallbackLanguageModel`
+- `src/jarvis/infrastructure/env_settings.py` — added `backup_settings_from_env()`
+- `src/jarvis/infrastructure/perceiver_factory.py` — `model_override` param on 4 factory functions
+- `src/jarvis/interface/server.py` — `create_jarvis()` wired with fallback + `model_override`
+- `src/jarvis/interface/_conversation.py` — web search cue routing
+- `src/jarvis/interface/console.html` — `capCount` shows active-only count
+
+218 conversation/command-center tests pass. Ruff clean.
+
 ## Final State
 
 - **Tests**: ~1701 passing (1647 baseline + 54 new)
 - **Ruff**: clean
 - **Pyright**: strict mode via `pyproject.toml`
-- **11 commits pushed** to `origin/main`
+- **12 commits pushed** to `origin/main`
 
 ## Testing Standard
 

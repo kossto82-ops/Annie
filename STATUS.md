@@ -2615,6 +2615,32 @@ Conversation (Phase 4), Second-Order Reflection (Phase 5).
 
 ---
 
+### Increment 161 — Fallback provider and web search routing ✅ (2026-09-13)
+- **Fallback provider**: `FallbackLanguageModel` wraps a primary and backup `LanguageModel`.
+  When the primary fails (timeout, error, HTTP failure), the backup is tried automatically.
+  Configurable via `JARVIS_LLM_BACKUP_*` env vars (`backup_settings_from_env()` in `env_settings.py`).
+- **Web search routing fix**: `_instruction_reply()` in `_conversation.py` now detects web search
+  cues ("busca", "search", "look up", etc.) in user utterances and routes directly to
+  `jarvis.search_external()` instead of going through the LLM reasoner. Avoids token waste
+  and ensures real-time web data.
+- **Factory override**: `perceiver_from_settings()`, `companion_perceiver_from_settings()`,
+  `reasoner_from_settings()`, and `document_editor_from_settings()` accept an optional
+  `model_override` parameter for fallback model injection.
+- **Dashboard capability count fix**: `capCount` badge now shows only active capabilities
+  (`ready`/`acquired`), not the full catalog (15 entries including `available` not yet grown).
+
+**Files changed**:
+- `src/jarvis/infrastructure/fallback_model.py` — new `FallbackLanguageModel`
+- `src/jarvis/infrastructure/env_settings.py` — added `backup_settings_from_env()`
+- `src/jarvis/infrastructure/perceiver_factory.py` — `model_override` param on 4 factory functions
+- `src/jarvis/interface/server.py` — `create_jarvis()` wired with fallback + `model_override`
+- `src/jarvis/interface/_conversation.py` — web search cue routing
+- `src/jarvis/interface/console.html` — `capCount` shows active-only count
+
+218 conversation/command-center tests pass. Ruff clean.
+
+---
+
 ## Open blockers
 
 None.

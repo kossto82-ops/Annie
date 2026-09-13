@@ -269,6 +269,7 @@ The post-audit implementation wired existing systems into the cognitive loop:
 - **Phase 9** — Knowledge Graph Integration: `knowledge_graph` parameter on ExecutiveController, entity extraction in `_remember()`, 3 tests
 - **Phase 10** — Proactive Cognition: `detect_pattern()` wired into `feel_curious()` cascade, 2 tests
 - **Phase 11** — Memory Decay and Consolidation: `forget()` on BeliefRepository, `identify_forgetting_candidates()` in memory_consolidation.py, 7 tests
+- **Phase 12** — Fallback Provider: `FallbackLanguageModel` with automatic failover, `backup_settings_from_env()`, factory `model_override` param, web search routing fix, dashboard capability count honesty
 
 ## Known technical debt / future directions
 
