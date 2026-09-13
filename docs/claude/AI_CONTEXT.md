@@ -253,6 +253,23 @@ The deep architectural audit is complete. All 5 phases implemented:
 - **Phase 4** — Persistent Conversation: `PersistedTurn`, `ConversationRepository`, `CONVERSATION` in `MemoryKind`, SQLite stores
 - **Phase 5** — Second-Order Reflection: `MetaKnowledgeKind`, `MetaKnowledge` entity, `meta_observation` service (reasoning effectiveness, retrieval quality, attention allocation), curiosity integration
 
+### Post-Audit Implementation (Phases 0-11, 2026-09-13)
+
+The post-audit implementation wired existing systems into the cognitive loop:
+
+- **Phase 0** — Baseline: 1647 tests, ruff clean, pyright strict
+- **Phase 1A-C** — Wire What Already Exists: semantic memory + conversation → recall, conversation persistence, evidence deduplication
+- **Phase 2** — Close the Learning Loop: `adapt_knobs_from_self_observation()` wired into ExecutiveController.run(), 7 tests proving behavioral change
+- **Phase 3A** — Temporal Reasoning: `belief_timeline()`, `what_changed()`, `belief_snapshot_at()` in temporal_reasoning.py, 10 tests
+- **Phase 4** — Unresolved Items: codebase clean (zero TODOs/FIXMEs/HACKs)
+- **Phase 5A** — Decision History: `EvidenceSnapshot`, `reflection_note`, `evidence_snapshot` on EpisodeRecord, 8 tests
+- **Phase 6A** — Reflection Gating: `_should_reflect()` on ExecutiveController, 6 tests
+- **Phase 7A** — Meta-Knowledge Feedback: `adapt_from_meta_observation()` wired into run(), 5 tests
+- **Phase 8** — Temporal Pattern Detection: `TemporalPattern` enum, `detect_pattern()` in temporal_reasoning.py, 6 tests
+- **Phase 9** — Knowledge Graph Integration: `knowledge_graph` parameter on ExecutiveController, entity extraction in `_remember()`, 3 tests
+- **Phase 10** — Proactive Cognition: `detect_pattern()` wired into `feel_curious()` cascade, 2 tests
+- **Phase 11** — Memory Decay and Consolidation: `forget()` on BeliefRepository, `identify_forgetting_candidates()` in memory_consolidation.py, 7 tests
+
 ## Known technical debt / future directions
 
 - Reset the audit gates at HEAD: 5 ruff errors + 44 pyright errors (all in newer tests; see STATUS.md). *(DONE — Increment 135: ruff clean · pyright strict 0 errors.)*

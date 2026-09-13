@@ -66,7 +66,21 @@ The refactor and maintenance pass is complete (2026-09-12):
 - Phase 3: Narrowed 3 except Exception patterns
 - Phase 4: Python ≥3.11, ruff lint clean
 
-1647 tests passing, ruff clean.
+The post-audit implementation is complete (Phases 0-11, 2026-09-13):
+- Phase 0: Baseline (1647 tests, ruff clean, pyright strict)
+- Phase 1: Wire What Already Exists (semantic memory + conversation → recall, persistence, dedup)
+- Phase 2: Close the Learning Loop (adapt_knobs_from_self_observation, 7 behavioral tests)
+- Phase 3: Temporal Reasoning (belief_timeline, what_changed, belief_snapshot_at, 10 tests)
+- Phase 4: Unresolved Items (codebase clean)
+- Phase 5: Decision History (EvidenceSnapshot, reflection_note, evidence_snapshot, 8 tests)
+- Phase 6: Reflection Gating (_should_reflect, 6 tests)
+- Phase 7: Meta-Knowledge Feedback (adapt_from_meta_observation, 5 tests)
+- Phase 8: Temporal Pattern Detection (TemporalPattern, detect_pattern, 6 tests)
+- Phase 9: Knowledge Graph Integration (entity extraction in _remember, 3 tests)
+- Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
+- Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
+
+~1701 tests passing, ruff clean.
 
 The current project is around Increment 160 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now

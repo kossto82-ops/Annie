@@ -69,7 +69,9 @@ src/jarvis/
 │   │                         CalendarStore, TaskScheduler, MailBox, TaskAgent, DocumentStore, DocumentEditor
 │   ├── services/             weighting, self-observation, curiosity, action advisor, goal reflection,
 │   │                         reflection, hypothesis generation, association, capability scout/evaluator/
-│   │                         gap-observer, knowledge source, model compare, abstraction, meta_observation
+│   │                         gap-observer, knowledge source, model compare, abstraction, meta_observation,
+│   │                         temporal_reasoning (belief_timeline, what_changed, belief_snapshot_at, detect_pattern),
+│   │                         memory_consolidation (identify_forgetting_candidates)
 │   ├── tools/                Tool Protocol, ToolRegistry, ToolPolicy
 │   └── value_objects/        evidence, confidence, goals, actions, capabilities, notes, email,
 │                             calendar events, scheduled tasks, tool specs/calls/results, recalled

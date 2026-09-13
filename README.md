@@ -128,6 +128,24 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - Meta-observation service detects patterns in how Jarvis knows, not just what it knows.
 - Curiosity system considers meta-knowledge as a source of impulses.
 
+**Temporal Reasoning**
+- `belief_timeline(subject, history)` — time-ordered snapshots of a belief's evolution.
+- `what_changed(subject, start, end, history)` — detects confidence shifts within a time window.
+- `belief_snapshot_at(subject, at_time, history)` — reconstructs what was believed at a specific point in time.
+- `detect_pattern(subject, history)` — detects temporal patterns (STABLE, STRENGTHENING, WEAKENING, OSCILLATING, RECURRING_CONTRADICTION).
+- Oscillating/weakening beliefs trigger proactive curiosity impulses.
+
+**Memory Consolidation**
+- `identify_forgetting_candidates(beliefs)` — finds beliefs with low effective confidence, stale evidence, or no evidence.
+- `forget(statement)` — removes a belief from any store (in-memory, JSON, or SQLite).
+- `DecayingWeightingPolicy` — fades evidence contribution with a half-life clock (opt-in).
+
+**Knowledge Graph (wired)**
+- Entity extraction from beliefs populates the graph automatically during episode recording.
+- `KnowledgeNode` — entities (people, projects, concepts) with derived confidence.
+- `KnowledgeEdge` — directed relationships between nodes.
+- `KnowledgeGraphRepository` — CRUD, BFS traversal, path_between.
+
 **Model of its companion**
 - `observe_companion(trait, evidence)` — evolve a belief about the companion.
 - `explain_companion(trait)` — why it believes that (evidence, confidence, "I may be wrong"), or "no view yet".
@@ -200,7 +218,7 @@ the decider. The API secret lives only in `JARVIS_LLM_API_KEY`, never in code.
 Requires Python 3.13+.
 
 ```bash
-python -m pytest -q        # tests (1647 tests, all passing)
+python -m pytest -q        # tests (~1701 tests, all passing)
 python -m ruff check .     # lint (clean)
 python -m pyright          # type check (strict, 0 errors)
 ```

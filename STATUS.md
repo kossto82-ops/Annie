@@ -2084,6 +2084,74 @@ can now also **recall** (memory seam), **consult** (knowledge-source edge), and 
 
 ---
 
+## Post-Audit Implementation (Phases 0-11, 2026-09-13)
+
+The architectural audit is complete. Post-audit implementation wired existing systems into the cognitive loop.
+
+### Phase 0 — Baseline ✅
+- Tests: 1647 passed, 3 skipped (16.10s)
+- Ruff: 1 import-sort error (fixed with `--fix`)
+- Pyright strict: 354 errors (pre-existing; mostly `reportPrivateUsage`)
+- Zero runtime dependencies, Python ≥3.11
+- Generated `docs/claude/IMPLEMENTATION_PLAN.md`
+
+### Phase 1A-C — Wire What Already Exists ✅
+- **1A**: Semantic memory + conversation → recall (LexicalMemoryRetriever, EmbeddingMemoryRetriever)
+- **1B**: Conversation persistence (ConversationContext wired to repository)
+- **1C**: Evidence deduplication (optional `_dedup_policy` on Belief/SemanticMemory)
+
+### Phase 2 — Close the Learning Loop ✅
+- **2A**: `adapt_knobs_from_self_observation()` in self_observation.py, wired into ExecutiveController.run()
+- **2B**: 7 tests proving behavioral change (before/after learning, bounded, reversible, step-bounded, accumulative)
+
+### Phase 3A — Temporal Reasoning ✅
+- `belief_timeline()`, `what_changed()`, `belief_snapshot_at()` in temporal_reasoning.py
+- 10 tests proving temporal queries work across filtering, ordering, time windows, and edge cases
+
+### Phase 4 — Unresolved Items ✅
+- Codebase clean: zero TODOs, FIXMEs, or HACKs
+
+### Phase 5A — Decision History ✅
+- `EvidenceSnapshot` dataclass, `reflection_note` and `evidence_snapshot` fields on EpisodeRecord
+- `_reflection_note` field on CognitiveEpisode
+- 8 tests proving decision history is reconstructable
+
+### Phase 6A — Reflection Gating ✅
+- `_should_reflect()` on ExecutiveController: contested evidence → reflect; well-established → skip
+- 6 tests proving gating behavior
+
+### Phase 7A — Meta-Knowledge Feedback ✅
+- `adapt_from_meta_observation()` wired into ExecutiveController.run()
+- Two feedback mechanisms: reasoning effectiveness → prefer deliberation, attention allocation → raise threshold
+- Fixed evidence `supports` logic in meta_observation.py
+- 5 tests proving the feedback loop
+
+### Phase 8 — Temporal Pattern Detection ✅
+- `TemporalPattern` enum, `TemporalPatternResult` dataclass, `detect_pattern()` in temporal_reasoning.py
+- 5 patterns: STABLE, STRENGTHENING, WEAKENING, OSCILLATING, RECURRING_CONTRADICTION
+- 6 tests (16 total for temporal reasoning)
+
+### Phase 9 — Knowledge Graph Integration ✅
+- `knowledge_graph` parameter on ExecutiveController, entity extraction in `_remember()`
+- 3 tests proving graph population, deduplication, and traversal
+
+### Phase 10 — Proactive Cognition ✅
+- Wired `detect_pattern()` into `feel_curious()` cascade — OSCILLATING/RECURRING_CONTRADICTION trigger impulses
+- 2 tests proving oscillating beliefs trigger impulses
+
+### Phase 11 — Memory Decay and Consolidation ✅
+- `forget()` on BeliefRepository protocol and all three stores (in-memory, JSON, SQLite)
+- `confidence_with_policy()` on Belief for decay checks
+- `memory_consolidation.py`: `identify_forgetting_candidates()` finds stale/faded beliefs
+- 7 tests proving forgetting works across all stores and persists
+
+### CI Fix ✅
+- Removed invalid `--strict` flag from pyright CI step (strict mode configured in pyproject.toml)
+
+**Final state**: ~1701 tests, ruff clean, 11 commits pushed to origin/main
+
+---
+
 ## Decisions log (ADR-lite — settled, do not revisit)
 
 - **D1** `src/` layout; `pythonpath=["src"]` in pytest so no install step is needed for tests.

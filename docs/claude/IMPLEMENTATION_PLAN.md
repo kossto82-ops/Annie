@@ -171,7 +171,70 @@ Previously, reflection happened on every `FULL` attention episode. Now it only h
 
 ## Phases 8-11
 
-See the full roadmap in the user's instructions.
+### Phase 8 — Temporal Pattern Detection ✅
+
+**Implemented**: Added `TemporalPattern` enum, `TemporalPatternResult` dataclass, and `detect_pattern()` function to `domain/services/temporal_reasoning.py`.
+
+5 patterns detected from a belief's confidence trajectory:
+- `STABLE` — confidence range ≤0.1
+- `STRENGTHENING` — avg step ≥0.05, all non-negative
+- `WEAKENING` — avg step ≤-0.05, all non-positive
+- `OSCILLATING` — alternating signs (sign changes ≥ steps-1)
+- `RECURRING_CONTRADICTION` — outcomes alternate ≥ n-2 times
+
+**Files changed**:
+- `src/jarvis/domain/services/temporal_reasoning.py` — added `TemporalPattern`, `TemporalPatternResult`, `detect_pattern()`
+
+6 tests in `tests/test_temporal_reasoning.py` (total 16 for temporal reasoning).
+
+### Phase 9 — Knowledge Graph Integration ✅
+
+**Implemented**: Wired the existing knowledge graph into the cognitive loop via entity extraction.
+
+- Added `knowledge_graph: KnowledgeGraphRepository | None` param to `ExecutiveController.__init__`
+- In `_remember()`, after recording the episode, calls `extract_entities(belief, existing_nodes=graph.all_nodes())` to populate the graph with entities and relationships
+- Entity extraction uses existing regex-based extractor (no NLP needed)
+- Deduplicates against existing nodes by name
+
+**Files changed**:
+- `src/jarvis/executive/executive_controller.py` — added knowledge_graph param, entity extraction in `_remember()`
+
+3 tests in `tests/test_knowledge_graph_integration.py`.
+
+### Phase 10 — Proactive Cognition ✅
+
+**Implemented**: Wired temporal pattern detection into the curiosity cascade.
+
+In `feel_curious()`, after the meta-knowledge check, iterates episode history subjects and calls `detect_pattern()` for each. `OSCILLATING` and `RECURRING_CONTRADICTION` patterns trigger curiosity impulses to investigate unstable beliefs.
+
+**Files changed**:
+- `src/jarvis/curiosity.py` — added temporal pattern check as new priority level
+
+2 tests in `tests/test_proactive_cognition.py`.
+
+### Phase 11 — Memory Decay and Consolidation ✅
+
+**Implemented**:
+- Added `forget()` method to `BeliefRepository` protocol and all three stores (in-memory, JSON, SQLite)
+- Added `confidence_with_policy()` to `Belief` for decay checks
+- Created `domain/services/memory_consolidation.py` with `identify_forgetting_candidates()` — finds beliefs with low effective confidence, stale evidence, or no evidence
+
+**Files changed**:
+- `src/jarvis/domain/repositories/belief_repository.py` — added `forget()` to protocol
+- `src/jarvis/infrastructure/in_memory_belief_store.py` — implemented `forget()`
+- `src/jarvis/infrastructure/json_belief_store.py` — implemented `forget()`
+- `src/jarvis/infrastructure/sqlite_belief_store.py` — implemented `forget()`
+- `src/jarvis/domain/entities/belief.py` — added `confidence_with_policy()`
+- `src/jarvis/domain/services/memory_consolidation.py` — new consolidation service
+
+7 tests in `tests/test_memory_consolidation.py`.
+
+## Final State
+
+- **Tests**: ~1701 passing (1647 baseline + 54 new)
+- **Ruff**: clean
+- **Pyright**: strict mode via `pyproject.toml`
+- **11 commits pushed** to `origin/main`
 
 ## Testing Standard
 
