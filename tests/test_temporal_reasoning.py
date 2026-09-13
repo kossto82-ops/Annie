@@ -10,8 +10,10 @@ from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.temporal_reasoning import (
+    TemporalPattern,
     belief_snapshot_at,
     belief_timeline,
+    detect_pattern,
     what_changed,
 )
 from jarvis.domain.value_objects.confidence import Confidence
@@ -27,13 +29,14 @@ def _make_record(
     *,
     decision: str = "concluded",
     episode_id: str | None = None,
+    outcome: EpisodeState = EpisodeState.COMPLETED,
 ) -> EpisodeRecord:
     return EpisodeRecord(
         episode_id=episode_id or f"ep-{trigger}-{recorded_at.timestamp()}",
         trigger=trigger,
         decision=decision,
         working_belief_id="bel-1",
-        outcome=EpisodeState.COMPLETED,
+        outcome=outcome,
         conclusion_confidence=Confidence(confidence),
         conclusion_stability=TemporalStability(stability),
         origin=TriggerOrigin.COMPANION,
@@ -207,3 +210,92 @@ class TestBeliefSnapshotAt:
         )
 
         assert snapshot is None
+
+
+class TestDetectPattern:
+    def test_detects_stable_preference(self):
+        t1 = datetime(2026, 1, 1, tzinfo=UTC)
+        t2 = datetime(2026, 6, 1, tzinfo=UTC)
+        t3 = datetime(2026, 9, 1, tzinfo=UTC)
+        history = [
+            _make_record("weather", 0.5, 0.4, t1),
+            _make_record("weather", 0.52, 0.41, t2),
+            _make_record("weather", 0.48, 0.39, t3),
+        ]
+
+        result = detect_pattern("weather", history)
+
+        assert result is not None
+        assert result.pattern == TemporalPattern.STABLE
+        assert result.episode_count == 3
+
+    def test_detects_strengthening(self):
+        t1 = datetime(2026, 1, 1, tzinfo=UTC)
+        t2 = datetime(2026, 6, 1, tzinfo=UTC)
+        t3 = datetime(2026, 9, 1, tzinfo=UTC)
+        t4 = datetime(2026, 12, 1, tzinfo=UTC)
+        history = [
+            _make_record("weather", 0.3, 0.2, t1),
+            _make_record("weather", 0.5, 0.3, t2),
+            _make_record("weather", 0.7, 0.5, t3),
+            _make_record("weather", 0.9, 0.7, t4),
+        ]
+
+        result = detect_pattern("weather", history)
+
+        assert result is not None
+        assert result.pattern == TemporalPattern.STRENGTHENING
+
+    def test_detects_weakening(self):
+        t1 = datetime(2026, 1, 1, tzinfo=UTC)
+        t2 = datetime(2026, 6, 1, tzinfo=UTC)
+        t3 = datetime(2026, 9, 1, tzinfo=UTC)
+        t4 = datetime(2026, 12, 1, tzinfo=UTC)
+        history = [
+            _make_record("weather", 0.9, 0.7, t1),
+            _make_record("weather", 0.7, 0.5, t2),
+            _make_record("weather", 0.5, 0.3, t3),
+            _make_record("weather", 0.3, 0.2, t4),
+        ]
+
+        result = detect_pattern("weather", history)
+
+        assert result is not None
+        assert result.pattern == TemporalPattern.WEAKENING
+
+    def test_detects_recurring_contradiction(self):
+        t1 = datetime(2026, 1, 1, tzinfo=UTC)
+        t2 = datetime(2026, 3, 1, tzinfo=UTC)
+        t3 = datetime(2026, 6, 1, tzinfo=UTC)
+        t4 = datetime(2026, 9, 1, tzinfo=UTC)
+        history = [
+            _make_record("weather", 0.6, 0.5, t1, outcome=EpisodeState.COMPLETED),
+            _make_record("weather", 0.4, 0.3, t2, outcome=EpisodeState.FAILED),
+            _make_record("weather", 0.7, 0.6, t3, outcome=EpisodeState.COMPLETED),
+            _make_record("weather", 0.3, 0.2, t4, outcome=EpisodeState.FAILED),
+        ]
+
+        result = detect_pattern("weather", history)
+
+        assert result is not None
+        assert result.pattern == TemporalPattern.RECURRING_CONTRADICTION
+
+    def test_returns_none_with_insufficient_data(self):
+        t1 = datetime(2026, 1, 1, tzinfo=UTC)
+        t2 = datetime(2026, 6, 1, tzinfo=UTC)
+        history = [
+            _make_record("weather", 0.5, 0.4, t1),
+            _make_record("weather", 0.6, 0.5, t2),
+        ]
+
+        result = detect_pattern("weather", history)
+
+        assert result is None
+
+    def test_returns_none_when_no_match(self):
+        t1 = datetime(2026, 1, 1, tzinfo=UTC)
+        history = [_make_record("temperature", 0.5, 0.4, t1)]
+
+        result = detect_pattern("weather", history)
+
+        assert result is None
