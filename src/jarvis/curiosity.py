@@ -184,6 +184,26 @@ def feel_curious(jarvis: Jarvis) -> CuriosityImpulse | None:
             ),
         )
 
+    # Check for destabilizing temporal patterns (Phase 10)
+    from jarvis.domain.services.temporal_reasoning import TemporalPattern, detect_pattern
+    # Collect unique subjects from episode history
+    history = jarvis.episodes.history()
+    seen_subjects: set[str] = set()
+    for record in history:
+        subject = record.trigger
+        if subject in seen_subjects:
+            continue
+        seen_subjects.add(subject)
+        pattern = detect_pattern(subject, history)
+        if pattern is not None and pattern.pattern in (
+            TemporalPattern.OSCILLATING,
+            TemporalPattern.RECURRING_CONTRADICTION,
+        ):
+            return CuriosityImpulse(
+                trigger=f"Investigate unstable belief: {subject}",
+                rationale=pattern.description,
+            )
+
     return None
 
 
