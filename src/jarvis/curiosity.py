@@ -210,6 +210,20 @@ def feel_curious(jarvis: Jarvis) -> CuriosityImpulse | None:
                 rationale=pattern.description,
             )
 
+    # Open questions are attention candidates too (unresolved lifecycle): when
+    # nothing evidence-derived wins above, the oldest open question is worth
+    # investigating. Without any noted questions this changes nothing.
+    open_questions = jarvis.open_questions()
+    if open_questions:
+        oldest = open_questions[0]
+        return CuriosityImpulse(
+            trigger=f"Investigate the open question: {oldest.question}",
+            rationale=(
+                f'"{oldest.question}" has been open since '
+                f"{oldest.opened_at.date().isoformat()} without an answer"
+            ),
+        )
+
     return None
 
 

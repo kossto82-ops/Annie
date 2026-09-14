@@ -214,6 +214,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             learned_state_store=repositories.learned_state,
             semantic_memory_store=repositories.semantic_memories,
             knowledge_graph_store=repositories.knowledge_graph,
+            unresolved_store=repositories.unresolved,
             conversation_repository=SqliteConversationStore(repositories.connection),
             trace=SqliteEpisodeTrace(repositories.connection),
             perception=perception,

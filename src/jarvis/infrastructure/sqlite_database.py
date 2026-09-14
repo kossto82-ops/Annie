@@ -22,6 +22,7 @@ from jarvis.infrastructure.sqlite_knowledge_graph_store import SqliteKnowledgeGr
 from jarvis.infrastructure.sqlite_learned_state_store import SqliteLearnedStateStore
 from jarvis.infrastructure.sqlite_refutation_store import SqliteRefutationStore
 from jarvis.infrastructure.sqlite_semantic_memory_store import SqliteSemanticMemoryStore
+from jarvis.infrastructure.sqlite_unresolved_store import SqliteUnresolvedStore
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ class SqliteRepositories:
     learned_state: SqliteLearnedStateStore
     semantic_memories: SqliteSemanticMemoryStore
     knowledge_graph: SqliteKnowledgeGraphStore
+    unresolved: SqliteUnresolvedStore
 
     def close(self) -> None:
         """Release the underlying connection (call when the Jarvis shuts down)."""
@@ -86,4 +88,5 @@ def build_sqlite_repositories(
             connection, weighting_policy=weighting_policy
         ),
         knowledge_graph=SqliteKnowledgeGraphStore(connection),
+        unresolved=SqliteUnresolvedStore(connection),
     )

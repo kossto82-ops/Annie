@@ -132,6 +132,7 @@ from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraphRepository
 from jarvis.domain.repositories.learned_state_repository import LearnedStateRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
+from jarvis.domain.repositories.unresolved_repository import UnresolvedRepository
 from jarvis.domain.retrieval.calendar_store import CalendarStore
 from jarvis.domain.retrieval.document_editor import DocumentEditor
 from jarvis.domain.retrieval.document_store import DocumentStore
@@ -200,6 +201,7 @@ from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.domain.value_objects.tool_call import ToolCall
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
+from jarvis.domain.value_objects.unresolved_item import UnresolvedItem, UnresolvedStatus
 from jarvis.edges import EdgesSurface
 from jarvis.executive.executive_controller import (
     ExecutiveController,
@@ -339,6 +341,7 @@ class Jarvis:
         semantic_memory_store: SemanticMemoryRepository | None = None,
         conversation_repository: ConversationRepository | None = None,
         knowledge_graph_store: KnowledgeGraphRepository | None = None,
+        unresolved_store: UnresolvedRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         # Live-provider instrumentation (Phase 4): a shared collector that recorded
@@ -540,6 +543,11 @@ class Jarvis:
         # Entity/relationship graph (Phase 9, wired in the remediation): concluded
         # beliefs populate it and traversal enriches recall. None disables both.
         self._knowledge_graph_store = knowledge_graph_store
+        # First-class open questions. None -> session-local memory (still
+        # retrievable and resolvable, lost on restart); a wired store persists
+        # the lifecycle across restarts.
+        self._unresolved_store = unresolved_store
+        self._unresolved_memory: dict[str, UnresolvedItem] = {}
         # Optional long-term-memory recall (Vision §3): when enabled, a deterministic
         # lexical retriever over Jarvis's own stores lets an episode answer from what
         # it remembers instead of a blank "insufficient evidence". Off by default, so
@@ -2125,6 +2133,70 @@ class Jarvis:
         asks -- it asserts nothing and takes no action.
         """
         return self._goal_surface.ask_for_help()
+
+    def note_open_question(self, question: str) -> UnresolvedItem:
+        """Record a question Jarvis cannot settle yet (first-class open state).
+
+        Returns the item; without a wired unresolved store it lives for the
+        session only (still retrievable, still resolvable).
+        """
+        item = UnresolvedItem(question=question)
+        if self._unresolved_store is not None:
+            self._unresolved_store.save(item)
+        else:
+            self._unresolved_memory[item.id] = item
+        return item
+
+    def open_questions(self) -> tuple[UnresolvedItem, ...]:
+        """Every still-open question, oldest first -- attention candidates."""
+        if self._unresolved_store is not None:
+            return self._unresolved_store.open_items()
+        return tuple(
+            item
+            for item in self._unresolved_memory.values()
+            if item.status is UnresolvedStatus.OPEN
+        )
+
+    def unresolved_history(self) -> tuple[UnresolvedItem, ...]:
+        """Every question including resolved history, oldest first."""
+        if self._unresolved_store is not None:
+            return self._unresolved_store.all_items()
+        return tuple(
+            sorted(self._unresolved_memory.values(), key=lambda i: i.opened_at)
+        )
+
+    def resolve_open_question(self, question: str, resolution: str) -> UnresolvedItem:
+        """Settle an open question with an answer that keeps mattering.
+
+        Marks the item resolved (history preserved) and grounds the resolution
+        as companion-confirmed evidence through a real episode, so later
+        cognition reasons *with* the answer instead of re-asking the question.
+        Raises KeyError when no open question matches.
+        """
+        matches = [
+            item for item in self.open_questions() if item.question == question
+        ]
+        if not matches:
+            raise KeyError(f"no open question: {question!r}")
+        item = matches[0]
+        resolved = item.resolved(resolution)
+        if self._unresolved_store is not None:
+            self._unresolved_store.save(resolved)
+        else:
+            self._unresolved_memory[resolved.id] = resolved
+        self.think(
+            question,
+            evidence=[
+                Evidence(
+                    content=resolution,
+                    source=EvidenceSource.USER_STATEMENT,
+                    weight=Confidence(1.0),
+                    supports=True,
+                    context="answer to an open question",
+                )
+            ],
+        )
+        return resolved
 
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition
