@@ -24,6 +24,7 @@ from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 from jarvis.infrastructure.json_episode_trace import JsonEpisodeTrace
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
+from jarvis.infrastructure.json_semantic_memory_store import JsonSemanticMemoryStore
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
 from jarvis.infrastructure.speech_perception import EchoSpeechPerception
@@ -73,6 +74,7 @@ def build_persistent_kwargs(
         needs_store=JsonBeliefStore(base / "needs.json"),
         refutations_store=JsonRefutationStore(base / "refutations.json"),
         trace=JsonEpisodeTrace(base / "trace.jsonl"),
+        semantic_memory_store=JsonSemanticMemoryStore(base / "semantic_memories.json"),
         weighting_policy=weighting_policy,
         default_belief_policy=default_belief_policy,
         external_source=source,
@@ -126,6 +128,7 @@ def build_database_kwargs(
         needs_store=repositories.needs,
         refutations_store=repositories.refutations,
         trace=SqliteEpisodeTrace(repositories.connection),
+        semantic_memory_store=repositories.semantic,
         weighting_policy=weighting_policy,
         default_belief_policy=default_belief_policy,
         external_source=source,

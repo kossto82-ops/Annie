@@ -12,6 +12,10 @@ from typing import TYPE_CHECKING
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.services.attention_priority import (
+    ATTEND_THRESHOLD,
+    derive_attention_priorities,
+)
 from jarvis.domain.services.curiosity import wonder
 from jarvis.domain.services.goal_reflection import recurring_goals
 from jarvis.domain.value_objects.confidence import Confidence
@@ -205,6 +209,35 @@ def feel_curious(jarvis: Jarvis) -> CuriosityImpulse | None:
             )
 
     return None
+
+
+def wake(jarvis: Jarvis) -> CuriosityImpulse | None:
+    """Propose attending to the single most salient topic from experience.
+
+    Unlike :func:`feel_curious` -- whose cascade stages are a static class order
+    (audit §2.2) -- ``wake`` re-ranks the whole recent history by derived saliency:
+    the topic Jarvis keeps returning to, keeps failing to settle, or keeps
+    revising scores highest.  That is "what to attend to next" *learned from past
+    episodes*: a fresh Jarvis wakes to nothing, an experienced one wakes to what
+    it has most left open (Vision §16).  Nothing is mutated; the ranking is
+    re-derived per call and reversible.
+    """
+    priorities = derive_attention_priorities(jarvis.episodes.history())
+    if not priorities:
+        return None
+    top = priorities[0]
+    if top.priority < ATTEND_THRESHOLD:
+        return None
+    open_note = f", {top.unresolved} still open" if top.unresolved else ""
+    revision_note = " and still changing" if top.revised else ""
+    return CuriosityImpulse(
+        trigger=f"Attend to what I keep leaving open: {top.topic}",
+        rationale=(
+            f'"{top.topic}" recurs {top.episodes_on_topic} time(s) in my recent '
+            f"history{open_note}{revision_note} -- it ranks {top.priority:.2f} "
+            "on my attention"
+        ),
+    )
 
 
 def ask_about(jarvis: Jarvis, topic: str) -> str | None:

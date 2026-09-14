@@ -19,6 +19,7 @@ from jarvis.infrastructure.sqlite_belief_store import SqliteBeliefStore
 from jarvis.infrastructure.sqlite_capability_store import SqliteCapabilityStore
 from jarvis.infrastructure.sqlite_episode_store import SqliteEpisodeStore
 from jarvis.infrastructure.sqlite_refutation_store import SqliteRefutationStore
+from jarvis.infrastructure.sqlite_semantic_memory_store import SqliteSemanticMemoryStore
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class SqliteRepositories:
     needs: SqliteBeliefStore
     capabilities: SqliteCapabilityStore
     refutations: SqliteRefutationStore
+    semantic: SqliteSemanticMemoryStore
 
     def close(self) -> None:
         """Release the underlying connection (call when the Jarvis shuts down)."""
@@ -75,4 +77,5 @@ def build_sqlite_repositories(
         ),
         capabilities=SqliteCapabilityStore(connection),
         refutations=SqliteRefutationStore(connection),
+        semantic=SqliteSemanticMemoryStore(connection, weighting_policy=weighting_policy),
     )

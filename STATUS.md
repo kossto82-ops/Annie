@@ -2641,6 +2641,53 @@ Conversation (Phase 4), Second-Order Reflection (Phase 5).
 
 ---
 
+### Increment 162 — Semantic & Attention Development Loop (2026-09-14)
+
+Closes the two operational gaps of the `docs/claude/SEMANTIC_ATTENTION_AUDIT.md`
+(SEMANTIC LIMITED / ATTENTION PARTIAL). Full detail:
+`docs/claude/SEMANTIC_COGNITION_IMPLEMENTATION.md`.
+
+- **Semantic generalization is now the runtime loop**: `_remember` calls
+  `consolidate_semantic_memories` per episode against a wired `semantic_memory_store`.
+  Pipeline: stemmed English concept vocabulary (~170 stems, no LLM, no embeddings,
+  D15) → entity-independent signatures → union-find Jaccard clustering (≥0.2, ≥1 shared
+  non-entity concept) → intersection pattern `"recurrence: FAIL, PROMISE"` →
+  contradiction-aware evidence (mixed *positive* outcomes contest the pattern).
+- **Persistence through all composition roots**: new `JsonSemanticMemoryStore`
+  (`semantic_memories.json`); `SqliteRepositories.semantic` wires
+  `SqliteSemanticMemoryStore` in `jarvis.db`; `Jarvis.persistent()`,
+  `Jarvis.database()`, `create_jarvis()` all carry the store. Restart-safe.
+- **Concept-aware recall**: SEMANTIC candidates scored `max(lexical, concept_relevance)`;
+  strong concept hits bypass the live reasoner, weak ones reach it; recall stays
+  candidate context only (D35).
+- **Bounded consolidation**: clustering plus-updates only the most recent `window=50`
+  episodes, and `by_id` merging kills the quadratic full-history rescan.
+- **Attention development (ranked, honest)**: new `AttentionPriority` service deriving
+  recurrence/unresolved/revision/recency from the bounded recent history — derived per
+  read, window-capped to [0,1], no stored scores (D16). Public surface:
+  `Jarvis.attention_priorities()` + `Jarvis.wake()` (impulse when top saliency ≥ 0.40,
+  interoperable with `pursue()`). The `feel_curious()` cascade is untouched.
+- **Robustness**: signature cache keyed by trigger (fixes stale cross-test signatures);
+  `atomic_write` retries `os.replace` on Windows transient locks.
+
+**Files changed**: `src/jarvis/domain/services/abstraction.py` (rewritten),
+`src/jarvis/domain/value_objects/attention_priority.py`,
+`src/jarvis/domain/services/attention_priority.py`,
+`src/jarvis/infrastructure/json_semantic_memory_store.py` (new), `src/jarvis/curiosity.py`,
+`src/jarvis/jarvis.py`, `src/jarvis/persistence.py`,
+`src/jarvis/infrastructure/sqlite_database.py`, `src/jarvis/interface/server.py`,
+`src/jarvis/infrastructure/atomic_write.py`,
+`src/jarvis/infrastructure/lexical_memory_retriever.py`.
+
+`tests/semantic_attention/` grew 45 → 95 tests (lexical + semantic generalization across
+Tier 1–4, negative & contradiction-aware cases, adversarial anti-cheating, attention
+preferences, Day0–7 longitudinal fresh-vs-experienced, bounded consolidation); persistence
+restart tests added to `tests/test_jarvis_persistence.py`; `tests/domain/test_abstraction.py`
+rewritten to the conceptual model. Full suite: **1768 passed**, 6 skipped, 1 pre-existing
+env-dependent live-provider failure. Ruff clean. New decisions D15 + D16.
+
+---
+
 ## Open blockers
 
 None.

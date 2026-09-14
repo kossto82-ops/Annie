@@ -12,6 +12,7 @@ the ``.env`` secrets file in :mod:`jarvis.infrastructure.llm_config_store`.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 
@@ -20,8 +21,22 @@ def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> N
 
     The write goes to ``<path>.tmp`` first and is then renamed over ``path`` in a
     single atomic step, so an interrupted write can never corrupt the existing file.
+    On Windows the rename can transiently fail while an antivirus scanner holds the
+    target open; the replace is retried briefly before giving up.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(content, encoding=encoding)
-    os.replace(tmp, path)
+    for attempt in range(_MAX_REPLACE_ATTEMPTS):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == _MAX_REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_S)
+
+
+# Windows scanners can briefly lock a file being overwritten; give them a moment.
+_MAX_REPLACE_ATTEMPTS = 5
+_REPLACE_RETRY_DELAY_S = 0.02

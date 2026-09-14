@@ -75,3 +75,21 @@ D8. If Jarvis ever needs graph *retrieval* inside cognition, it goes behind a
 domain-owned `GraphRetriever` Protocol with Graphify as one swappable adapter
 (cf. D7/D10/D12) — never a direct dependency. Do not wire that interface into
 `src/` until a real consumer exists.
+
+## D15 — Semantic abstraction is deterministic and offline
+
+Semantic generalization (paraphrase/analogy/cross-domain ties) is implemented as a
+hand-maintained English concept vocabulary over stemmed tokens — an explicit,
+testable domain service, not an LLM call and not embeddings (D6, D8). LLMs remain
+perception providers that may extract evidence behind the provider seams; they must
+never be smuggled into the abstraction layer as a shortcut. The vocabulary is
+extended in `domain/services/abstraction.py` with tests, never rewritten per-use.
+
+## D16 — Attention priorities are derived, never stored
+
+Attention development is a *read-side ranking*: recurrence/unresolved/revision/recency
+signals are re-derived from the bounded recent episode history on every call
+(`Jarvis.attention_priorities()`, `Jarvis.wake()`), bounded by a window and capped to
+[0,1], so no second authoritative learning state and no unbounded score accumulation
+exist. The `feel_curious()` cascade keeps its static class order; ranked attention is
+a parallel honest surface, and nothing in it may mutate episode/belief state.
