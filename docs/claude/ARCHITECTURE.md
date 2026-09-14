@@ -446,3 +446,27 @@ The Command Center is a window onto Jarvis. If a UI feature requires new cogniti
 The UI does no perception, recall, or reasoning of its own: `handle`/`route`/`snapshot` call Jarvis's
 ordinary methods and render what the core derived. Intent classification lives in the domain
 (`domain/conversation/intent.py`), not the UI, so conversation routing is testable socket-free.
+
+## Remediation notes (2026-09-14)
+
+What the audit remediation changed structurally (see `REMEDIATION_REPORT.md`):
+
+- **Same-component seams are public.** The split god object (`jarvis.py` ↔ facades) and the
+  split router (`command_center.py` ↔ `_*` modules) communicate through public seams, not
+  privates: read-only repository/executive/ledger properties on `Jarvis` (mirroring the
+  existing `beliefs`/`episodes` precedent) and per-module `COMMANDS` tables composed into
+  the public router table.
+- **One energy ledger.** `EnergyLedger` owns costs/spent/budget/available; cognition,
+  surface and adaptation share it.
+- **Evidence identity.** `domain/services/evidence_identity.py` (`same_observation`) is the
+  single duplicate rule for beliefs, hypotheses and semantic memories (D15); distinct
+  world-events carry provenance (run ids, episode ids).
+- **Learned state.** `LearnedState` (knobs + reason + timestamp) persists behind repository
+  contracts (JSON + SQLite); only adaptation writes, the executive notifies, the root
+  rehydrates with explicit-wins precedence (D17).
+- **Snapshot purity.** Snapshots report wiring, never read remote stores (D16); graph
+  traversal reads through `_recall_into` as `MemoryKind.GRAPH_NODE` (depth-2, decaying
+  relevance); the reflective cycle gates hypothesise/challenge/learn and reports its path.
+- **New durable surfaces.** `learned.json`, `semantic.json`, `graph.json`,
+  `conversation.json`, `unresolved.json` (JSON twin); matching tables in `jarvis.db`
+  (SQLite twin, extended `SqliteRepositories`).

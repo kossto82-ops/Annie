@@ -271,6 +271,16 @@ The post-audit implementation wired existing systems into the cognitive loop:
 - **Phase 11** — Memory Decay and Consolidation: `forget()` on BeliefRepository, `identify_forgetting_candidates()` in memory_consolidation.py, 7 tests
 - **Phase 12** — Fallback Provider: `FallbackLanguageModel` with automatic failover, `backup_settings_from_env()`, factory `model_override` param, web search routing fix, dashboard capability count honesty
 
+### Audit remediation (2026-09-14, `docs/claude/REMEDIATION_PLAN.md` → `REMEDIATION_REPORT.md`)
+
+- **Types**: pyright strict 0 errors with no suppressions or scope cuts (was 461: facade/interface cross-module private use → public seams, COMMANDS-table router composition, consolidated duplicate helpers, deleted dead forwarders).
+- **Offline suite**: full suite deterministic in ~100 s (was: hang in `test_google_calendar.py` — the snapshot read live events through a wired Google store; snapshots never read remote stores now, D16; hostile-transport regression guard added).
+- **Knobs**: single authoritative copy in the executive (D17); energy unified in `EnergyLedger`.
+- **Epistemics**: default-ON `same_observation` identity across Belief/Hypothesis/SemanticMemory (D15); production runs/episodes carry provenance.
+- **Learning**: justified adaptations persist as `LearnedState` (JSON + SQLite, both factories); meta-knowledge re-derives from persisted history.
+- **Continuity proven**: conversation hydration (bounded ring + JSON store), semantic abstraction lifecycle, graph traversal reads (`GRAPH_NODE`, KEPT AND WIRED), `why_decision` + temporal reconstruction APIs, unresolved-item lifecycle, gated `reflect_cycle` (reports its path), adversarial suite.
+- **Deferred with reasons**: bounded proactive wake loop (needs shutdown-safe scheduling) and strategy-selection consumption (no automatic think-vs-consider router exists).
+
 ## Known technical debt / future directions
 
 - Reset the audit gates at HEAD: 5 ruff errors + 44 pyright errors (all in newer tests; see STATUS.md). *(DONE — Increment 135: ruff clean · pyright strict 0 errors.)*

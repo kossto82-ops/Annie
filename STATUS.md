@@ -2641,6 +2641,41 @@ Conversation (Phase 4), Second-Order Reflection (Phase 5).
 
 ---
 
+### Audit remediation ✅ (2026-09-14)
+
+Post-implementation adversarial audit → `docs/claude/REMEDIATION_PLAN.md` (Stage 1) →
+12 remediation commits (Stage 2). Full report: `docs/claude/REMEDIATION_REPORT.md`.
+
+- **P0-A types**: pyright strict 461 → 0 errors, no suppressions/exclusions; ruff clean.
+- **P0-B offline suite**: was hanging in `test_google_calendar.py` (snapshot read live
+  Google events); snapshots never read remote stores now; suite 1764 passed, 3 skipped
+  in ~100 s, offline and deterministic.
+- **P0-C knobs**: single authoritative copy in the executive; energy in one ledger.
+- **P0 epistemics**: default-ON `same_observation` identity (Belief/Hypothesis/
+  SemanticMemory); 50× replay and same-day floods no longer escalate; independent
+  sources/days still count; production runs/episodes carry provenance.
+- **P0 learning**: justified adaptations persist (`LearnedState`, JSON + SQLite);
+  restart restores behaviour (end-to-end + full-mistake-lifecycle tests).
+- **P1**: conversation hydration, semantic lifecycle, graph KEPT AND WIRED (2-hop
+  traversal proof), `why_decision` + temporal reconstruction, unresolved lifecycle,
+  gated `reflect_cycle` with execution path, 11 adversarial tests.
+- **Deferred**: bounded proactive wake loop, strategy-selection consumption (reasons
+  in report). Knowledge graph: KEPT AND WIRED.
+
+**Files changed (selection)**: `domain/services/evidence_identity.py`,
+`domain/value_objects/{learned_state,decision_account,unresolved_item}.py`,
+`domain/repositories/{learned_state,unresolved}_repository.py`,
+`infrastructure/{json,sqlite}_{learned_state,semantic_memory,knowledge_graph,
+conversation,unresolved,episode}_store.py`, `executive_controller.py` (knobs
+property, adaptation notify, graph recall), `jarvis.py` (seams, learned state,
+history APIs, unresolved surface), `cognitive.py` (ledger, gated cycle,
+abstraction consolidation), `capabilities/goals/actions/curiosity/
+introspection/companion/edges/surfaces/goal_surface.py` (public seams,
+provenance, dedup consolidation), `interface/` (COMMANDS composition, shared
+helper renames, snapshot purity), 14 new test files.
+
+---
+
 ## Open blockers
 
 None.

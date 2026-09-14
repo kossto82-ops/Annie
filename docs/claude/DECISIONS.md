@@ -75,3 +75,26 @@ D8. If Jarvis ever needs graph *retrieval* inside cognition, it goes behind a
 domain-owned `GraphRetriever` Protocol with Graphify as one swappable adapter
 (cf. D7/D10/D12) — never a direct dependency. Do not wire that interface into
 `src/` until a real consumer exists.
+
+## D15 — Evidence identity is default-ON deduplication
+
+The same observation re-injected (same evidence id, or the same claim
+fingerprint on the same UTC day) is skipped by Beliefs, Hypotheses and
+SemanticMemories through one shared `same_observation` policy. Independent
+confirmations (different source, provenance, or day) still count. Production
+code that models distinct world-events must carry distinguishing provenance
+(action run ids, episode ids); manufacturing distinctness to evade the
+policy is forbidden. See `domain/services/evidence_identity.py`.
+
+## D16 — Snapshots never perform live network reads
+
+The command-center snapshot reports what is wired (source/connected), never
+fetches through a remote store. On-demand commands (`calendar list`, …) do
+the reading. A test that wires a remote store must never stall the suite.
+
+## D17 — One authoritative copy of runtime-tunable state
+
+CognitiveKnobs live in the executive; the composition root reads through and
+never keeps a second copy. Learned adaptations persist as LearnedState
+(knobs + reason + timestamp) behind repository contracts; operator tuning
+never writes there. Meta-knowledge stays derived from persisted history.
