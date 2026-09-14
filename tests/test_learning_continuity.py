@@ -136,3 +136,53 @@ class TestLearningSurvivesRestart:
         jarvis = Jarvis.persistent(tmp_path)
         assert jarvis.knobs() == CognitiveKnobs()
         assert jarvis.learned_state() is None
+
+
+class TestFullLifeOfAMistake:
+    """Acceptance TEST J: one mistake end to end across a restart.
+
+    reasoning -> prediction -> decision -> outcome -> error -> reflection
+      -> learning -> persistent adaptation -> restart -> different behaviour
+    """
+
+    def test_a_mistake_changes_future_behaviour_after_restart(
+        self, tmp_path: Path
+    ) -> None:
+        from jarvis.domain.enums.action_stance import ActionStance
+
+        first_run = Jarvis.persistent(tmp_path)
+
+        # Baseline: the same borderline probe grounds before any learning.
+        probe = first_run.think(
+            "is the sky blue today?", evidence=_borderline_evidence()
+        )
+        assert probe.evidence_request is None
+
+        # Prediction, decision, outcome, error: three failed deployments.
+        for kind in ("deploy friday", "migrate database", "rotate secrets"):
+            for _ in range(3):
+                action = first_run.act(kind, expected="quiet weekend")
+                first_run.record_outcome(action, actual="outage", met_expectation=False)
+        pending = first_run.act("deploy friday", expected="quiet weekend")
+        assert first_run.recommend_action(pending).stance is ActionStance.WITHHOLD
+
+        # Reflection: Jarvis notices its poor predictive reliability.
+        reflection = first_run.observe_prediction_accuracy()
+        assert reflection is not None
+        assert reflection.confidence.value > 0.0
+
+        # Learning + persistence: repeated failures adapt the thresholds.
+        _drive_failures(first_run)
+        assert first_run.knobs().grounded_confidence > 0.5
+        assert first_run.learned_state() is not None
+
+        # Restart: the mistake is remembered and the future differs twice --
+        # the action stance stays withheld...
+        second_run = Jarvis.persistent(tmp_path)
+        reloaded = second_run.act("deploy friday", expected="quiet weekend")
+        assert second_run.recommend_action(reloaded).stance is ActionStance.WITHHOLD
+        # ...and the same borderline probe no longer grounds.
+        repeated = second_run.think(
+            "is the sky blue today?", evidence=_borderline_evidence()
+        )
+        assert repeated.evidence_request is not None
