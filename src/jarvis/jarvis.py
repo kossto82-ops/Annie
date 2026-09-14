@@ -151,6 +151,19 @@ from jarvis.domain.services.evidence_weighting import (
 )
 from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.model_compare import ModelComparator, ModelRun
+from jarvis.domain.services.temporal_reasoning import (
+    BeliefChange,
+    BeliefSnapshot,
+)
+from jarvis.domain.services.temporal_reasoning import (
+    belief_snapshot_at as _belief_snapshot_at_fn,
+)
+from jarvis.domain.services.temporal_reasoning import (
+    belief_timeline as _belief_timeline_fn,
+)
+from jarvis.domain.services.temporal_reasoning import (
+    what_changed as _what_changed_fn,
+)
 from jarvis.domain.tools.tool import Tool
 from jarvis.domain.tools.tool_policy import ToolPolicy
 from jarvis.domain.tools.tool_registry import ToolRegistry
@@ -164,6 +177,7 @@ from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
+from jarvis.domain.value_objects.decision_account import DecisionAccount
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.document_edit import DocumentEdit
 from jarvis.domain.value_objects.document_hit import DocumentHit
@@ -2274,6 +2288,81 @@ class Jarvis:
         deliberation's ``episode_id`` (Vision §26).
         """
         return self._trace.for_correlation(correlation_id)
+
+    def belief_timeline(self, subject: str) -> tuple[BeliefSnapshot, ...]:
+        """The time-ordered trajectory of what was concluded about ``subject``.
+
+        Reconstructed from persisted episode records (provenance), never from
+        current state plus timestamps: each snapshot is what Jarvis held when
+        that episode completed.
+        """
+        return _belief_timeline_fn(subject, self.episodes.history())
+
+    def what_changed(
+        self, subject: str, start: datetime, end: datetime
+    ) -> tuple[BeliefChange, ...]:
+        """What changed about ``subject`` between ``start`` and ``end``.
+
+        Pairs consecutive snapshots in range with their confidence/stability
+        deltas, so "what moved this belief?" has a grounded answer.
+        """
+        return _what_changed_fn(subject, start, end, self.episodes.history())
+
+    def belief_snapshot_at(self, subject: str, at_time: datetime) -> BeliefSnapshot | None:
+        """What Jarvis believed about ``subject`` at ``at_time`` (or None).
+
+        The last record before ``at_time`` -- historical state, not a projection
+        of today backwards.
+        """
+        return _belief_snapshot_at_fn(subject, at_time, self.episodes.history())
+
+    def why_decision(self, subject: str) -> DecisionAccount | None:
+        """Why a past decision about ``subject`` was made (Vision §26).
+
+        Answered from persisted state: the *original* recorded decision, its
+        confidence and evidence at the time, and the reflect note. Later
+        revisions belong to the timeline (see :meth:`belief_timeline`), not to
+        the origin being accounted for. The live view is re-derived from the
+        current belief (never backfilled into the past), and ``same_today``
+        is whether current support meets or exceeds the recorded support.
+        When nothing was ever
+        decided about ``subject``, the honest answer is None; alternatives
+        were never recorded, so they are not reconstructed.
+        """
+        records = self.episodes.history_about(subject)
+        if not records:
+            return None
+        record = records[0]
+        live = self.beliefs.get_by_statement(working_statement(record.trigger))
+        if live is None:
+            candidates = self.beliefs.beliefs_about(subject)
+            live = candidates[0] if candidates else None
+        if live is None:
+            return DecisionAccount(
+                subject=subject,
+                decision=record.decision,
+                decided_at=record.recorded_at,
+                confidence_then=record.conclusion_confidence.value,
+                evidence_then=record.evidence_snapshot,
+                reflection_note=record.reflection_note,
+                confidence_now=None,
+                same_today=None,
+            )
+        # "Same decision" means current support meets or exceeds the recorded
+        # support: strengthened-or-held conclusions stand, eroded ones would
+        # be decided differently today. Bars are session tuning, not the
+        # decision itself.
+        held = live.confidence.value >= record.conclusion_confidence.value
+        return DecisionAccount(
+            subject=subject,
+            decision=record.decision,
+            decided_at=record.recorded_at,
+            confidence_then=record.conclusion_confidence.value,
+            evidence_then=record.evidence_snapshot,
+            reflection_note=record.reflection_note,
+            confidence_now=live.confidence.value,
+            same_today=held,
+        )
 
     def act(
         self,

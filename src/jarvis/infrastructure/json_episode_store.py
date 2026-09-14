@@ -16,7 +16,7 @@ from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
-from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.episode_record import EpisodeRecord, EvidenceSnapshot
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.infrastructure.atomic_write import atomic_write_text
 
@@ -43,6 +43,16 @@ def serialise_record(record: EpisodeRecord) -> dict[str, Any]:
         ),
         "recorded_at": record.recorded_at.isoformat(),
         "record_id": record.record_id,
+        "reflection_note": record.reflection_note,
+        "evidence_snapshot": [
+            {
+                "content": snap.content,
+                "source": snap.source,
+                "supports": snap.supports,
+                "weight": snap.weight,
+            }
+            for snap in record.evidence_snapshot
+        ],
     }
 
 
@@ -53,6 +63,21 @@ def deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
     belief_confidence_at_end = None
     if data.get("belief_confidence_at_end") is not None:
         belief_confidence_at_end = Confidence(data["belief_confidence_at_end"])
+    # Decision provenance (Phase 5A fields): absent in files written before
+    # they existed, so .get defaults keep old files loadable (recovery).
+    snapshots: list[EvidenceSnapshot] = []
+    for entry in data.get("evidence_snapshot") or ():
+        try:
+            snapshots.append(
+                EvidenceSnapshot(
+                    content=entry["content"],
+                    source=entry["source"],
+                    supports=entry["supports"],
+                    weight=entry["weight"],
+                )
+            )
+        except (KeyError, TypeError):
+            continue
     return EpisodeRecord(
         episode_id=data["episode_id"],
         trigger=data["trigger"],
@@ -66,6 +91,8 @@ def deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
         goal=data.get("goal"),
         belief_formed_at=belief_formed_at,
         belief_confidence_at_end=belief_confidence_at_end,
+        reflection_note=data.get("reflection_note"),
+        evidence_snapshot=tuple(snapshots),
         recorded_at=datetime.fromisoformat(data["recorded_at"]),
         record_id=data["record_id"],
     )
