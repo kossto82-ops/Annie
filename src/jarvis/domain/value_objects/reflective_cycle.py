@@ -33,6 +33,7 @@ class ReflectiveCycle:
     learned: str | None  # the statement of the belief it adopted, if any
     action: ActionRecommendation | None  # the stance it would take on the insight (Act)
     capability_proposals: tuple[str, ...] = ()  # names of capabilities proposed (Odysseus)
+    path: tuple[str, ...] = ()  # stages that actually ran, in order (gating proof)
 
     @property
     def produced_insight(self) -> bool:

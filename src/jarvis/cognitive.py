@@ -313,24 +313,45 @@ def act_on_insight(jarvis: Jarvis) -> ActionRecommendation | None:
 
 
 def reflect_cycle(jarvis: Jarvis) -> ReflectiveCycle:
-    """Run the whole reflective cycle once and report what it produced."""
+    """Run the reflective cycle once, gating each stage on something worth pursuing.
+
+    Reflect always runs; hypothesise needs reflections, challenge needs a
+    leading hypothesis, and learn needs a raised challenge (each would
+    otherwise recompute the previous stage just to return None). Act, gap
+    scouting and consolidation are maintenance with their own internal guards
+    and always run. ``path`` records what actually executed, so idleness is
+    observable, not claimed.
+    """
+    path = ["connect", "reflect"]
     conns = connections(jarvis)
     reflections = reflect(jarvis)
     reflection = reflections[0] if reflections else None
-    hypotheses = hypothesise(jarvis)
-    leading = hypotheses.leading() if hypotheses is not None else None
-    chal = challenge(jarvis)
-    learned = learn_from_reflection(jarvis)
+    hypotheses = None
+    leading = None
+    chal = None
+    learned = None
+    if reflections:
+        hypotheses = hypothesise(jarvis)
+        path.append("hypothesise")
+        leading = hypotheses.leading() if hypotheses is not None else None
+        if leading is not None:
+            chal = challenge(jarvis)
+            path.append("challenge")
+            learned = learn_from_reflection(jarvis)
+            path.append("learn")
     action = act_on_insight(jarvis)
+    path.append("act")
     capability_proposals = tuple(
         cap.name for cap in jarvis.auto_scout_gaps()
     )
+    path.append("scout")
     # Consolidate experience into semantic memory (the Learn stage's durable
     # half): recurrent episode patterns become abstractions exactly once
     # (idempotent on pattern), so future recall can answer from them. Like
     # auto-scouting, this only writes; nothing here decides or concludes.
     store = jarvis.semantic_memories
     if store is not None:
+        path.append("consolidate")
         for memory in abstract_patterns(
             jarvis.episodes.history(), jarvis.beliefs.all_beliefs()
         ):
@@ -344,6 +365,7 @@ def reflect_cycle(jarvis: Jarvis) -> ReflectiveCycle:
         learned=learned.statement if learned is not None else None,
         action=action,
         capability_proposals=capability_proposals,
+        path=tuple(path),
     )
 
 
