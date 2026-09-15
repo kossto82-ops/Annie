@@ -26,6 +26,7 @@ approved MCP call possible and observable.
 from __future__ import annotations
 
 import asyncio
+import importlib
 import importlib.util
 import json
 import os
@@ -224,14 +225,17 @@ def build_mcp_toolset(config_path: str | os.PathLike[str]) -> McpTransport | Non
     if importlib.util.find_spec("pydantic_ai") is None:
         return None
     try:
-        from pydantic_ai.mcp import load_mcp_toolsets
+        mcp_mod = cast(Any, importlib.import_module("pydantic_ai.mcp"))
     except ImportError:
         return None
+    load_mcp_toolsets = getattr(mcp_mod, "load_mcp_toolsets", None)
+    if not callable(load_mcp_toolsets):
+        return None
 
-    toolsets = load_mcp_toolsets(os.fspath(config_path))
+    toolsets: Any = load_mcp_toolsets(os.fspath(config_path))
     if not toolsets:
         return None
-    first = toolsets[0]
+    first: Any = toolsets[0]
     label = str(getattr(first, "prefix", "") or getattr(first, "label", "mcp"))
     wrapped = getattr(first, "wrapped", first)
     return PydanticAiMcpToolset(wrapped, label=label)
