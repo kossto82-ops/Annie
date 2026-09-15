@@ -33,3 +33,13 @@ class CuriosityImpulse:
     # when it was raised from a confidently-needed, not-yet-acquired capability.
     # When set, pursuing the impulse marks that capability acquired. None otherwise.
     capability_to_acquire: str | None = None
+    # The topic this impulse points at (attention repair C2): the canonical topic
+    # identity wake() selected. Persisted with the pursued episode so curiosity
+    # provenance survives restarts without re-deriving. None for impulses raised
+    # by static curiosity stages, which are not about a particular topic.
+    target_topic_id: str | None = None
+    # The real trigger pursue() should run when carrying out the impulse: the
+    # selected topic's representative, never a narrative. Display/narration is
+    # ``trigger``; this is the actual experience. None when the impulse was not
+    # raised from a resolved topic (pursue then falls back to ``trigger``).
+    representative_trigger: str | None = None

@@ -15,10 +15,14 @@ from dataclasses import dataclass
 class AttentionPriority:
     """One topic's bounded saliency, derived from the recent episode history.
 
-    ``priority`` is a deterministic, bounded number in ``[0, 1]``; higher means
-    Jarvis should attend to ``topic`` sooner.  ``episodes_on_topic``,
-    ``unresolved``, ``revised`` and ``last_episode_recency`` expose the raw
-    signals so an observer can see *why* the topic earned its rank.
+    ``topic`` is the topic's canonical identity (its conceptual signature, or
+    the bootstrap trigger for a concept-free topic) -- never the raw trigger of
+    one episode.  ``priority`` is a deterministic, bounded number in ``[0, 1]``;
+    higher means Jarvis should attend to ``topic`` sooner.
+    ``episodes_on_topic``, ``unresolved``, ``revised`` and ``last_episode_recency``
+    expose the raw signals so an observer can see *why* the topic earned its
+    rank.  ``representative`` is *display* metadata only: the most recent
+    episode's trigger, shown to the companion, never used as identity.
     """
 
     topic: str
@@ -27,3 +31,4 @@ class AttentionPriority:
     unresolved: int
     revised: bool
     last_episode_recency: float
+    representative: str

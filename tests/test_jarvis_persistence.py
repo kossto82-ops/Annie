@@ -222,7 +222,7 @@ class TestSemanticMemoryPersistence:
         self._seed_pattern(first)
         assert first._semantic_memory_store is not None
         assert first._semantic_memory_store.all_memories()
-        assert (tmp_path / "semantic_memories.json").exists()
+        assert (tmp_path / "semantic.json").exists()
 
         second = Jarvis.persistent(tmp_path)
         memories = second._semantic_memory_store.all_memories()

@@ -73,5 +73,6 @@ class EpisodeRecord:
     belief_confidence_at_end: Confidence | None = None  # belief confidence at episode end
     reflection_note: str | None = None  # reflect stage's assessment
     evidence_snapshot: tuple[EvidenceSnapshot, ...] = ()  # evidence at episode end
+    target_topic_id: str | None = None  # the topic identity this episode belongs to
     recorded_at: datetime = field(default_factory=_now)
     record_id: str = field(default_factory=lambda: str(uuid.uuid4()))

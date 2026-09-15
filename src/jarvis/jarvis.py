@@ -102,7 +102,13 @@ from jarvis.curiosity import (
     ask_about as _ask_about_fn,
 )
 from jarvis.curiosity import (
+    contested_working_belief as _contested_working_belief_fn,
+)
+from jarvis.curiosity import (
     feel_curious as _feel_curious_fn,
+)
+from jarvis.curiosity import (
+    is_contested as _is_contested_fn,
 )
 from jarvis.curiosity import (
     pursue as _pursue_fn,

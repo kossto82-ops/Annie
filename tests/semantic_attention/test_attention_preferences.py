@@ -156,7 +156,10 @@ class TestAttentionPriorityDevelopment:
         priorities = j.attention_priorities()
         assert priorities
         top = priorities[0]
-        assert top.topic == "the contractor keeps failing deliveries"
+        # Topic identity is the canonical concept signature, never the raw
+        # trigger; the representative is the real trigger shown to the companion.
+        assert top.topic == "FAIL"
+        assert top.representative == "the contractor keeps failing deliveries"
         assert top.episodes_on_topic == 4
         assert top.priority >= ATTEND_THRESHOLD
 

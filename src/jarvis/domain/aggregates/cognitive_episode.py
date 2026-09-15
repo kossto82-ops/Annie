@@ -79,6 +79,7 @@ class CognitiveEpisode:
     origin: TriggerOrigin = TriggerOrigin.COMPANION
     attention: Attention = Attention.FULL
     goal: Goal | None = None
+    target_topic_id: str | None = None  # the topic identity this episode is about
     _conclusion: Belief | HypothesisSet | None = field(default=None, repr=False)
     _evidence_request: EvidenceRequest | None = field(default=None, repr=False)
     _recalled: tuple[RecalledMemory, ...] = field(default=(), repr=False)

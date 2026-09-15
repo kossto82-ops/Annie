@@ -44,6 +44,7 @@ def serialise_record(record: EpisodeRecord) -> dict[str, Any]:
         "recorded_at": record.recorded_at.isoformat(),
         "record_id": record.record_id,
         "reflection_note": record.reflection_note,
+        "target_topic_id": record.target_topic_id,
         "evidence_snapshot": [
             {
                 "content": snap.content,
@@ -93,6 +94,7 @@ def deserialise_record(data: dict[str, Any]) -> EpisodeRecord:
         belief_confidence_at_end=belief_confidence_at_end,
         reflection_note=data.get("reflection_note"),
         evidence_snapshot=tuple(snapshots),
+        target_topic_id=data.get("target_topic_id"),
         recorded_at=datetime.fromisoformat(data["recorded_at"]),
         record_id=data["record_id"],
     )

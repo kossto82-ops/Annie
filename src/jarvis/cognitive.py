@@ -14,7 +14,6 @@ from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.services.abstraction import abstract_patterns
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.hypothesis_generation import generate_hypotheses
 from jarvis.domain.services.reflection import find_reflections
@@ -345,18 +344,6 @@ def reflect_cycle(jarvis: Jarvis) -> ReflectiveCycle:
         cap.name for cap in jarvis.auto_scout_gaps()
     )
     path.append("scout")
-    # Consolidate experience into semantic memory (the Learn stage's durable
-    # half): recurrent episode patterns become abstractions exactly once
-    # (idempotent on pattern), so future recall can answer from them. Like
-    # auto-scouting, this only writes; nothing here decides or concludes.
-    store = jarvis.semantic_memories
-    if store is not None:
-        path.append("consolidate")
-        for memory in abstract_patterns(
-            jarvis.episodes.history(), jarvis.beliefs.all_beliefs()
-        ):
-            if store.get_by_pattern(memory.pattern) is None:
-                store.save(memory)
     return ReflectiveCycle(
         connections=conns,
         reflection=reflection,

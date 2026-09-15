@@ -29,6 +29,9 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 
+if TYPE_CHECKING:
+    from jarvis.domain.entities.belief import Belief
+
 # ---------------------------------------------------------------------------
 # Conceptual vocabulary: stem -> canonical concept token
 # ---------------------------------------------------------------------------

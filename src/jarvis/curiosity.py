@@ -251,12 +251,14 @@ def wake(jarvis: Jarvis) -> CuriosityImpulse | None:
     open_note = f", {top.unresolved} still open" if top.unresolved else ""
     revision_note = " and still changing" if top.revised else ""
     return CuriosityImpulse(
-        trigger=f"Attend to what I keep leaving open: {top.topic}",
+        trigger=f"Attend to what I keep leaving open: {top.representative}",
         rationale=(
             f'"{top.topic}" recurs {top.episodes_on_topic} time(s) in my recent '
             f"history{open_note}{revision_note} -- it ranks {top.priority:.2f} "
             "on my attention"
         ),
+        target_topic_id=top.topic,
+        representative_trigger=top.representative,
     )
 
 
@@ -303,8 +305,16 @@ def pursue(jarvis: Jarvis, impulse: CuriosityImpulse):
         jarvis.acquire_capability(impulse.capability_to_acquire)
     goal = Goal(statement=impulse.goal) if impulse.goal is not None else None
     from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
+    # A wake() impulse carries the *real* trigger of the selected topic (its
+    # representative) so the episode records an actual experience, not a
+    # narration; its canonical topic identity travels with the episode so
+    # curiosity provenance survives persistence.
+    trigger = impulse.representative_trigger or impulse.trigger
     episode = CognitiveEpisode(
-        trigger=impulse.trigger, origin=TriggerOrigin.CURIOSITY, goal=goal
+        trigger=trigger,
+        origin=TriggerOrigin.CURIOSITY,
+        goal=goal,
+        target_topic_id=impulse.target_topic_id,
     )
     return run_episode(jarvis, episode)
 
@@ -315,3 +325,9 @@ def subject_of(statement: str) -> str:
         if statement.startswith(prefix):
             return statement[len(prefix):]
     return statement
+
+
+# Public aliases so the Jarvis facade can import the helpers without the
+# pyright reportPrivateUsage rule firing on cross-module underscore imports.
+is_contested = _is_contested
+contested_working_belief = _contested_working_belief

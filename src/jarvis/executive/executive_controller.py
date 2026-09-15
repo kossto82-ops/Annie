@@ -935,6 +935,8 @@ class ExecutiveController:
                 goal=episode.goal.statement if episode.goal is not None else None,
                 reflection_note=episode.reflection_note,
                 evidence_snapshot=evidence_snapshot,
+                belief_confidence_at_end=belief.confidence,
+                target_topic_id=episode.target_topic_id,
             )
         )
 
