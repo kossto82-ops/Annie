@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-15 (Increments 163-165, pyright strict 0 at HEAD)
+Last updated: 2026-09-15 (Increments 163-166, pyright strict 0 at HEAD)
 
 ---
 
@@ -2797,6 +2797,37 @@ was at ~124 after the merge; this increment brings the **whole repo to pyright s
 
 **Verification**: full suite **1885 passed, 3 skipped**; ruff clean; **pyright strict 0
 errors** across `src/` + `tests/`. Pushed: `8d9190c → 0a6a73e main` (Increments 163–165).
+
+### Increment 166 — Relation-aware graph recall + retrieval-strategy selection (2026-09-15, commit `2a34c40`)
+
+Reintegrates the P2 workstreams **B and C** from the pre-162 local stash onto HEAD. P2-A
+(bounded proactive wake) is **dropped**: Increment 163 shipped the canonical
+`Jarvis.wake(`target_topic_id`)` with a real representative trigger, so re-opening wake
+under the P2 seam would be rework, not progress. Decisions: D20, D21 (D18–D19 already
+taken by abstraction/attention at HEAD).
+
+- **Relation-aware graph recall (P2-B)**: `relation_cues_for(trigger, stored_relations)`
+  in the executive stems trigger tokens (trailing-`s` plural bridge) and matches each
+  stored relation's parts; a hit narrows `_recall_graph_into` to that relation per seed
+  (`via <relation>` provenance, depth 1/2 decaying relevance); no cue keeps the old
+  unfiltered traversal byte-for-byte. Relations stay **recall context, never evidence**
+  (D20) — a poisoned edge cannot move derived confidence.
+- **Retrieval-strategy selection (P2-C)**: `RetrievalStrategy`/`StrategyOutcome`/
+  `RetrievalStrategyStats` (bounded 100, `success_rate`), `select_retrieval_strategy()`
+  (default LEXICAL; EMBEDDING only after ≥5 samples per side *and* a ≥0.15 gain gap),
+  durable via `JsonStrategyStatsStore` (`retrieval_strategy.json`, atomic + recovery) and
+  `SqliteStrategyStatsStore` (`retrieval_strategy_outcomes`, both factories). The
+  executive routes each recall through it: with no embedding retriever wired the path is
+  unchanged and records nothing; a preferred-side miss falls back once so both sides stay
+  revisable. New public seams: `Jarvis.retrieval_strategy_for(query)` /
+  `.strategy_stats()` / `.record_retrieval_outcome(...)` and
+  `ExecutiveController.set_embedding_retriever`.
+- `enable_embedding_recall` rewritten to keep the lexical retriever as the default side
+  and install the embedding retriever as the strategy-choice alternative (fallback=lexical
+  inside), preserving the existing meaning-based-recall behaviour through the miss path.
+
+**Tests**: +21 (7 `test_relation_aware_recall.py`, 14 `test_strategy_selection.py`). Full
+suite: **1906 passed, 3 skipped**; ruff clean; **pyright strict 0**.
 
 ---
 
