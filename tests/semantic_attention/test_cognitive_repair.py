@@ -282,3 +282,153 @@ class TestPhaseCCuriosityProvenance:
 def test_signature_of_is_public_and_pure():
     assert signature_of("supplier failed to deliver") == frozenset({"FAIL", "DELIVER"})
     assert signature_of("nonsense quux") == frozenset()
+
+
+class TestPhaseDExternalOnlyAbstraction:
+    """Correction #4: consolidation feeds on external episodes only.
+
+    Generalized from attention (phase B) to the abstraction/consolidation
+    service: internal cognition (curiosity pursuits) must not manufacture
+    semantic memories out of its own echoes.
+    """
+
+    @staticmethod
+    def _internal(episode_id: str, trigger: str) -> EpisodeRecord:
+        return EpisodeRecord(
+            episode_id=episode_id,
+            trigger=trigger,
+            decision="decided",
+            working_belief_id=f"b-{episode_id}",
+            outcome=EpisodeState.COMPLETED,
+            conclusion_confidence=Confidence(0.9),
+            conclusion_stability=TemporalStability(0.5),
+            origin=TriggerOrigin.CURIOSITY,
+            kind=EpisodeKind.CONCLUSION,
+        )
+
+    def test_internal_echoes_never_form_patterns(self):
+        from jarvis.domain.services.abstraction import (
+            consolidate_semantic_memories,
+        )
+        from jarvis.infrastructure.in_memory_semantic_memory_store import (
+            InMemorySemanticMemoryStore,
+        )
+
+        store = InMemorySemanticMemoryStore()
+        episodes: list[EpisodeRecord] = [
+            self._internal(f"c{i}", "supplier failed to deliver") for i in range(3)
+        ]
+        stored = consolidate_semantic_memories(episodes, store, min_sources=3)
+        assert stored == []
+        assert store.all_memories() == ()
+
+    def test_mixed_history_seeds_only_external_memories(self):
+        from jarvis.domain.services.abstraction import (
+            consolidate_semantic_memories,
+        )
+        from jarvis.infrastructure.in_memory_semantic_memory_store import (
+            InMemorySemanticMemoryStore,
+        )
+
+        external: list[EpisodeRecord] = [
+            _external(f"e{i}", "supplier failed to deliver") for i in range(3)
+        ]
+        internal: list[EpisodeRecord] = [
+            self._internal(f"c{i}", "the vendor broke the contract") for i in range(3)
+        ]
+        store = InMemorySemanticMemoryStore()
+        stored = consolidate_semantic_memories(
+            [*external, *internal], store, min_sources=3
+        )
+        assert len(stored) == 1
+        assert "FAIL" in stored[0].pattern and "DELIVER" in stored[0].pattern
+        assert set(stored[0].source_episode_ids) == {ep.episode_id for ep in external}
+
+    def test_neutral_valence_produces_undirected_evidence(self):
+        from jarvis.domain.services.abstraction import abstract_patterns
+
+        memories = abstract_patterns(
+            [_external(str(i), "the delivery was scheduled") for i in range(3)],
+            min_sources=3,
+        )
+        assert len(memories) == 1
+        evidence = memories[0].evidence
+        assert evidence and all(e.is_neutral for e in evidence)
+        # Neutral evidence emits neither SemanticMemoryReinforced nor Contested,
+        # and adds no direction to confidence: it stays at the zero-evidence prior.
+        assert memories[0].pull_events() == []
+        assert memories[0].confidence.value == 0.0
+
+    def test_neutral_evidence_does_not_count_as_contradiction(self):
+        from jarvis.domain.services.abstraction import (
+            consolidate_semantic_memories,
+        )
+        from jarvis.infrastructure.in_memory_semantic_memory_store import (
+            InMemorySemanticMemoryStore,
+        )
+
+        # 2 directionless episodes + 1 failure: with neutral evidence counted the
+        # neutrals would be treated as contradictions (~0.16); skipped, the single
+        # support alone clears ~0.23. Neutrality must not drag the pattern down.
+        episodes: list[EpisodeRecord] = [
+            _external("1", "the delivery was scheduled"),
+            _external("2", "the delivery was scheduled"),
+            _external("3", "the supplier failed the delivery"),
+        ]
+        store = InMemorySemanticMemoryStore()
+        stored = consolidate_semantic_memories(episodes, store, min_sources=3)
+        assert len(stored) == 1
+        assert stored[0].confidence.value > 0.2
+
+
+class TestPhaseENegationAndVocabularyEdges:
+    """Correction #5: parity negation, bounded cache, irregular verbs."""
+
+    def test_negation_parity_inverts_valence(self):
+        from jarvis.domain.services.abstraction import valence
+
+        # Single marker inverts
+        assert valence("the supplier did not fail") == "positive"
+        assert valence("the deadline was never missed") == "positive"
+        assert valence("he has not succeeded") == "negative"
+        # Double marker self-cancels
+        assert valence("he never not failed") == "negative"
+        # Zero markers leave the outcome column as-is
+        assert valence("the supplier failed") == "negative"
+        assert valence("the supplier delivered") == "positive"
+        # Placeholders unchanged
+        assert valence("checked the weather") == "neutral"
+
+    def test_irregular_verbs_map_to_concepts(self):
+        from jarvis.domain.services.abstraction import conceptual_tokens
+
+        assert conceptual_tokens("the supplier broke the contract") == frozenset({"FAIL"})
+        assert "COST" in conceptual_tokens("we bought the parts and sold them")
+        assert conceptual_tokens("they won the account") == frozenset({"SUCCEED"})
+        assert "DELIVER" in conceptual_tokens("they brought the goods")
+        assert "DECREASE" in conceptual_tokens("prices fell sharply")
+        assert conceptual_tokens("she vowed to improve") == frozenset({"PROMISE", "INCREASE"})
+
+    def test_signature_cache_is_bounded_and_clearable(self):
+        from jarvis.domain.services.abstraction import (
+            _cached_signature,
+            clear_signature_cache,
+            conceptual_tokens,
+        )
+
+        clear_signature_cache()
+        first = conceptual_tokens("he promised delivery")
+        assert _cached_signature(
+            _external("c1", "he promised delivery")
+        ) == first
+        # Clearing never breaks subsequent calls
+        clear_signature_cache()
+        assert _cached_signature(_external("c2", "he promised delivery")) == first
+        # The lru is bounded at 1024 entries: 1025 distinct triggers cannot bloom.
+        from jarvis.domain.services.abstraction import _signature_for_trigger
+
+        for i in range(1025):
+            _cached_signature(_external(f"bulk-{i}", f"token {i} failed"))
+        info = _signature_for_trigger.cache_info()
+        assert info.maxsize == 1024
+        assert info.currsize == 1024

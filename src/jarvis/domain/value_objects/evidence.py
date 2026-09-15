@@ -33,6 +33,7 @@ class Evidence:
     source: EvidenceSource
     weight: Confidence
     supports: bool = True
+    is_neutral: bool = False
     context: str | None = None
     observed_at: datetime = field(default_factory=_now)
     id: str = field(default_factory=_new_id)

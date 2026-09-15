@@ -1,4 +1,4 @@
-"""Part 2: Semantic abstraction – conceptual clustering.
+﻿"""Part 2: Semantic abstraction – conceptual clustering.
 
 Tests the reworked abstract_patterns() function for:
 - Tier 1: Same concept, different wording (stemmed + synonym-aware)
@@ -15,12 +15,13 @@ from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.abstraction import (
-    _episode_signature,
-    _valence,
     abstract_patterns,
+    episode_signature,
+    valence,
 )
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
+from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
 
 def _ep(trigger: str) -> EpisodeRecord:
@@ -33,7 +34,7 @@ def _ep(trigger: str) -> EpisodeRecord:
         working_belief_id="b1",
         outcome=EpisodeState.COMPLETED,
         conclusion_confidence=Confidence(0.7),
-        conclusion_stability=Confidence(0.7),
+        conclusion_stability=TemporalStability(0.7),
         origin=TriggerOrigin.COMPANION,
         kind=EpisodeKind.CONCLUSION,
         recorded_at=now,
@@ -138,22 +139,22 @@ class TestConceptualNormalization:
 
     def test_stemming_aware(self):
         """'promised' and 'promising' both stem to PROMISE."""
-        sig1 = _episode_signature("he promised delivery")
-        sig2 = _episode_signature("he was promising delivery")
+        sig1 = episode_signature("he promised delivery")
+        sig2 = episode_signature("he was promising delivery")
         assert "PROMISE" in sig1, f"promised -> PROMISE: {sig1}"
         assert "PROMISE" in sig2, f"promising -> PROMISE: {sig2}"
 
     def test_synonym_aware(self):
         """'missed' and 'failed' both map to FAIL."""
-        sig1 = _episode_signature("he missed the deadline")
-        sig2 = _episode_signature("he failed the deadline")
+        sig1 = episode_signature("he missed the deadline")
+        sig2 = episode_signature("he failed the deadline")
         assert "FAIL" in sig1
         assert "FAIL" in sig2
 
     def test_entity_independence(self):
         """Role words (supplier, contractor) are excluded from signature."""
-        sig1 = _episode_signature("supplier missed promised dates")
-        sig2 = _episode_signature("contractor missed promised dates")
+        sig1 = episode_signature("supplier missed promised dates")
+        sig2 = episode_signature("contractor missed promised dates")
         assert "ROLE" not in sig1, "ROLE should not appear in signature"
         assert "ROLE" not in sig2
         # Both should share FAIL + PROMISE (and TIME for 'dates')
@@ -161,16 +162,16 @@ class TestConceptualNormalization:
 
     def test_valence_detection(self):
         """Negation flips valence: 'not fail' = positive, 'fail' = negative."""
-        assert _valence("missed deadline") == "negative"
-        assert _valence("delivered successfully") == "positive"
-        assert _valence("not fail") == "positive"
-        assert _valence("not succeed") == "negative"
-        assert _valence("checked weather") == "neutral"
+        assert valence("missed deadline") == "negative"
+        assert valence("delivered successfully") == "positive"
+        assert valence("not fail") == "positive"
+        assert valence("not succeed") == "negative"
+        assert valence("checked weather") == "neutral"
 
     def test_signature_empty_for_no_concepts(self):
         """Triggers with no concept tokens get empty signature."""
-        assert _episode_signature("foo bar baz") == frozenset()
-        assert _episode_signature("the quick brown fox") == frozenset()
+        assert episode_signature("foo bar baz") == frozenset()
+        assert episode_signature("the quick brown fox") == frozenset()
 
 
 class TestAbstractionOldLimitationsRemoved:

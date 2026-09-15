@@ -130,6 +130,10 @@ class SemanticMemory:
         self.last_reinforced_at = _now()
         self.reinforcement_count += 1
 
+        # Neutral evidence (e.g. an undirected observer report) bears no
+        # direction: it says neither "reinforced" nor "contested".
+        if evidence.is_neutral:
+            return
         if evidence.supports:
             event = SemanticMemoryReinforced(
                 memory_id=self.id,

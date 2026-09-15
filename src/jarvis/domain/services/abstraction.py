@@ -1,4 +1,4 @@
-"""Abstraction service — detecting patterns across episodes and beliefs.
+﻿"""Abstraction service — detecting patterns across episodes and beliefs.
 
 Turns individual experiences into higher-order knowledge (semantic memories).
 Each pattern must be grounded in at least ``min_sources`` independent episodes
@@ -21,10 +21,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from jarvis.domain.entities.semantic_memory import SemanticMemory
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.repositories.semantic_memory_repository import SemanticMemoryRepository
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
@@ -124,6 +127,23 @@ _CONCEPT_MAP: dict[str, str] = {
     "delivery": "DELIVER", "failure": "FAIL",
     "commitment": "PROMISE", "deadlines": "TIME",
     "dates": "TIME", "estimat": "TIME",
+    # Irregular past forms -> canonical concept
+    "broke": "FAIL", "lost": "FAIL",
+    "bought": "COST", "sold": "COST", "repaid": "COST",
+    "underpaid": "COST", "overpaid": "COST", "outbid": "COST",
+    "brought": "DELIVER", "gave": "DELIVER", "given": "DELIVER",
+    "shipped": "DELIVER",
+    "chose": "DECIDE", "chosen": "DECIDE", "picked": "DECIDE",
+    "selected": "DECIDE",
+    "fell": "DECREASE", "shrank": "DECREASE",
+    "raised": "INCREASE", "rose": "INCREASE", "doubled": "INCREASE",
+    "soared": "INCREASE",
+    "won": "SUCCEED", "overcame": "SUCCEED",
+    "forbade": "PREVENT", "banned": "PREVENT", "barred": "PREVENT",
+    "built": "CAUSE", "sparked": "CAUSE",
+    "vowed": "PROMISE", "swore": "PROMISE",
+    "threatened": "RISK", "secured": "SAFE",
+    "overdue": "TIME",
 }
 
 # Role nouns → ROLE (entity-independent)
@@ -142,16 +162,6 @@ _MIN_CONCEPT_LEN = 2
 # Only the most recent episodes feed consolidation, so repeated think() calls
 # re-cluster a bounded slice instead of rescaling the whole history.
 _CONSOLIDATION_WINDOW = 50
-
-
-def _stem(word: str) -> str:
-    """Minimal English suffix-stripping stemmer."""
-    if len(word) <= _MIN_CONCEPT_LEN:
-        return word
-    for suffix in _STEM_SUFFIXES:
-        if word.endswith(suffix) and len(word) - len(suffix) >= _MIN_CONCEPT_LEN:
-            return word[: -len(suffix)]
-    return word
 
 
 def _normalise_token(word: str) -> str | None:
@@ -179,18 +189,23 @@ def _normalise_token(word: str) -> str | None:
     return None
 
 
-def _detect_negation(words: list[str]) -> bool:
-    """True if any negation marker appears in the word list."""
-    return any(w.lower() in _NEGATION for w in words)
+def _count_negation_markers(words: list[str]) -> int:
+    """Count negation markers; parity decides whether the clause is negated.
+
+    Multiple markers carry semantic weight: "didn't ever not fail" contains
+    three negations, so per parity (odd -> negated) it reads positively, and
+    the alternating count is a first-class signal rather than a single flag.
+    """
+    return sum(1 for w in words if w.lower() in _NEGATION)
 
 
-def _episode_signature(trigger: str) -> frozenset[str]:
+def episode_signature(trigger: str) -> frozenset[str]:
     """Compute canonical concept signature for a trigger string.
 
     Entity tokens (ROLE) are excluded from the signature — clustering is
     entity-independent.
     """
-    return conceptual_tokens(trigger)
+    return _signature_for_trigger(trigger)
 
 
 def conceptual_tokens(text: str) -> frozenset[str]:
@@ -208,18 +223,18 @@ def conceptual_tokens(text: str) -> frozenset[str]:
     return frozenset(concepts)
 
 
-def _valence(trigger: str) -> str:
+def valence(trigger: str) -> str:
     """Valence of a trigger: negative for fail-like, positive for succeed-like."""
     tokens = re.findall(r"\w+", trigger)
-    has_negation = _detect_negation(tokens)
+    negated = _count_negation_markers(tokens) % 2 == 1
     has_fail = any(
         _normalise_token(t) == "FAIL" for t in tokens
     )
     has_succeed = any(
         _normalise_token(t) == "SUCCEED" for t in tokens
     )
-    if has_negation:
-        # "not fail" = positive; "not succeed" = negative
+    if negated:
+        # "did not fail" = positive; "did not succeed" = negative
         if has_fail:
             return "positive"
         if has_succeed:
@@ -232,40 +247,27 @@ def _valence(trigger: str) -> str:
     return "neutral"
 
 
-def _concept_tokens_for_clustering(trigger: str) -> frozenset[str]:
-    """Full concept set including ROLE for clustering (but signature is entity-independent)."""
-    tokens = re.findall(r"\w+", trigger)
-    concepts: set[str] = set()
-    for tok in tokens:
-        concept = _normalise_token(tok)
-        if concept is not None:
-            concepts.add(concept)
-    return frozenset(concepts)
-
-
 # ---------------------------------------------------------------------------
-# Memoization cache: episode_id -> normalised signature
+# Memoization cache: trigger text -> normalised signature
 # ---------------------------------------------------------------------------
 
-_sig_cache: dict[str, frozenset[str]] = {}
+
+@lru_cache(maxsize=1024)
+def _signature_for_trigger(trigger: str) -> frozenset[str]:
+    """The signature is a pure function of the trigger text, so the memo key is
+    the trigger itself -- identical triggers share one cache entry.
+    """
+    return conceptual_tokens(trigger)
 
 
 def _cached_signature(episode: EpisodeRecord) -> frozenset[str]:
-    """Return the signature for an episode's trigger, computing if needed.
-
-    The signature is a pure function of the trigger text, so the memo key is the
-    trigger itself -- identical triggers share, and a colliding ``episode_id``
-    can never serve a stale signature for a different trigger.
-    """
-    trigger = episode.trigger
-    if trigger not in _sig_cache:
-        _sig_cache[trigger] = _episode_signature(trigger)
-    return _sig_cache[trigger]
+    """Return the signature for an episode's trigger (memoized per trigger)."""
+    return episode_signature(episode.trigger)
 
 
 def clear_signature_cache() -> None:
     """Clear the memoization cache (for tests or memory pressure)."""
-    _sig_cache.clear()
+    _signature_for_trigger.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -353,11 +355,19 @@ def abstract_patterns(
 
     Beliefs are accepted for API compatibility but are not used for clustering
     (episode triggers carry richer signal).
+
+    Only externally-triggered episodes (``TriggerOrigin.COMPANION``) feed
+    abstraction: internal cognition (e.g. a curiosity pursuit) must not
+    manufacture semantic memories out of its own echoes.
     """
     if not episodes:
         return []
 
-    clusters = _cluster_episodes(episodes, min_sources)
+    external = [ep for ep in episodes if ep.origin is TriggerOrigin.COMPANION]
+    if not external:
+        return []
+
+    clusters = _cluster_episodes(external, min_sources)
     results: list[SemanticMemory] = []
 
     for cluster_eps in clusters:
@@ -386,21 +396,24 @@ def abstract_patterns(
         # reading of the pattern; a positive outcome contests it (SemanticMemory
         # emits SemanticMemoryContested via supports=False), so contradictions
         # stay representable and confidence cannot collapse to a certainty.
+        # Valence-less episodes contribute *neutral* evidence: it neither
+        # strengthens nor contests the pattern, and is skipped by confidence
+        # derivation (P6).
+        pattern_evidence: list[Evidence] = []
         for ep in cluster_eps:
-            valence = _valence(ep.trigger)
-            supports = valence != "positive"
-            evidence_content = (
-                f"episode '{ep.trigger}' (outcome: {valence})"
-            )
-            memory.add_evidence(
+            val = valence(ep.trigger)
+            pattern_evidence.append(
                 Evidence(
-                    content=evidence_content,
+                    content=f"episode '{ep.trigger}' (outcome: {val})",
                     source=EvidenceSource.SYSTEM_OBSERVATION,
                     weight=Confidence(0.5),
-                    supports=supports,
+                    supports=val != "positive",
+                    is_neutral=val == "neutral",
                 )
             )
-            memory.pull_events()
+        for evidence_item in pattern_evidence:
+            memory.add_evidence(evidence_item)
+        memory.pull_events()
 
         results.append(memory)
 
@@ -410,7 +423,7 @@ def abstract_patterns(
 
 def consolidate_semantic_memories(
     episodes: Sequence[EpisodeRecord],
-    store,  # SemanticMemoryRepository
+    store: SemanticMemoryRepository,
     min_sources: int = 3,
     window: int = _CONSOLIDATION_WINDOW,
 ) -> list[SemanticMemory]:
@@ -445,13 +458,14 @@ def consolidate_semantic_memories(
                 ep = by_id.get(sid)
                 if ep is None:
                     continue
-                valence = _valence(ep.trigger)
+                val = valence(ep.trigger)
                 existing.add_evidence(
                     Evidence(
-                        content=f"episode '{ep.trigger}' (outcome: {valence})",
+                        content=f"episode '{ep.trigger}' (outcome: {val})",
                         source=EvidenceSource.SYSTEM_OBSERVATION,
                         weight=Confidence(0.5),
-                        supports=valence != "positive",
+                        supports=val != "positive",
+                        is_neutral=val == "neutral",
                     )
                 )
                 existing.pull_events()

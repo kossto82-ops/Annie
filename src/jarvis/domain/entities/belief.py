@@ -75,8 +75,14 @@ def derive_confidence(
     from its source), so explicit confirmation counts for more than an isolated
     observation (Vision §11) without altering the raw evidence.
     """
-    supporting = sum(policy.effective_weight(e) for e in evidence if e.supports)
-    contradicting = sum(policy.effective_weight(e) for e in evidence if e.contradicts)
+    supporting = sum(
+        policy.effective_weight(e) for e in evidence if e.supports and not e.is_neutral
+    )
+    contradicting = sum(
+        policy.effective_weight(e)
+        for e in evidence
+        if e.contradicts and not e.is_neutral
+    )
     return Confidence(supporting / (supporting + contradicting + _PRIOR))
 
 
@@ -88,7 +94,7 @@ def derive_stability(evidence: tuple[Evidence, ...]) -> TemporalStability:
     stable. This is distinct from confidence: it depends on *when* evidence
     arrived, not how much of it there is (Vision §10, §11).
     """
-    times = sorted(e.observed_at for e in evidence if e.supports)
+    times = sorted(e.observed_at for e in evidence if e.supports and not e.is_neutral)
     if len(times) < 2:
         return TemporalStability.none()
     span = (times[-1] - times[0]).total_seconds()
@@ -270,7 +276,11 @@ class Belief:
             )
         )
         # A contradiction is only meaningful against a belief actually held.
-        if evidence.contradicts and before.is_stronger_than(Confidence.none()):
+        if (
+            evidence.contradicts
+            and not evidence.is_neutral
+            and before.is_stronger_than(Confidence.none())
+        ):
             self._record(
                 ContradictionDetected(
                     belief_id=self.id, correlation_id=correlation, evidence_id=evidence.id
@@ -295,8 +305,8 @@ class Belief:
             statement=self.statement,
             confidence=self.confidence,
             stability=self.stability,
-            supporting=tuple(e for e in self._evidence if e.supports),
-            contradicting=tuple(e for e in self._evidence if e.contradicts),
+            supporting=tuple(e for e in self._evidence if e.supports and not e.is_neutral),
+            contradicting=tuple(e for e in self._evidence if e.contradicts and not e.is_neutral),
         )
 
     def pull_events(self) -> list[CognitiveEvent]:
