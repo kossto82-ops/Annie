@@ -83,7 +83,7 @@ def build_sqlite_repositories(
         ),
         capabilities=SqliteCapabilityStore(connection),
         refutations=SqliteRefutationStore(connection),
-        learned_state=SqliteLearnedStateStore(connection),
+learned_state=SqliteLearnedStateStore(connection),
         semantic_memories=SqliteSemanticMemoryStore(
             connection, weighting_policy=weighting_policy
         ),

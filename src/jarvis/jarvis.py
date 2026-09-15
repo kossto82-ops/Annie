@@ -110,6 +110,9 @@ from jarvis.curiosity import (
 from jarvis.curiosity import (
     resolve as _resolve_fn,
 )
+from jarvis.curiosity import (
+    wake as _wake_fn,
+)
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
@@ -143,6 +146,9 @@ from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.retrieval.task_scheduler import TaskScheduler
+from jarvis.domain.services.attention_priority import (
+    derive_attention_priorities as _derive_attention_priorities_fn,
+)
 from jarvis.domain.services.capability_gap_observation import (
     CapabilityGap,
 )
@@ -170,6 +176,7 @@ from jarvis.domain.tools.tool_policy import ToolPolicy
 from jarvis.domain.tools.tool_registry import ToolRegistry
 from jarvis.domain.value_objects.action import Action
 from jarvis.domain.value_objects.action_recommendation import ActionRecommendation
+from jarvis.domain.value_objects.attention_priority import AttentionPriority
 from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.capability_recommendation import CapabilityRecommendation
@@ -604,9 +611,10 @@ class Jarvis:
             reasoner,
             weighting_policy,
             knowledge_source=knowledge_source,
-            knowledge_graph=knowledge_graph_store,
+knowledge_graph=knowledge_graph_store,
             knobs=initial_knobs,
             on_knobs_adapted=self._save_learned_state,
+            semantic_memory_store=self._semantic_memory_store,
         )
         # Sub-facades: each wraps a coherent method group, keeping the public
         # API on Jarvis via thin delegators for backward compatibility.
@@ -2230,6 +2238,36 @@ class Jarvis:
         None if nothing is confident enough (Vision §28).
         """
         return _feel_curious_fn(self)
+
+    def attention_priorities(self) -> tuple[AttentionPriority, ...]:
+        """Rank topics by saliency learned from recent experience (Vision §16).
+
+        Derived per call from the bounded recent episode history -- recurrence,
+        unresolved endings and revision signal -- never persisted, reversible,
+        and bounded so no amount of living can inflate a priority without limit.
+        """
+        return _derive_attention_priorities_fn(self.episodes.history())
+
+    def wake(self) -> CuriosityImpulse | None:
+        """Propose attending to the single most salient topic from experience.
+
+        ``feel_curious`` follows a fixed cascade of classes; ``wake`` instead
+        re-ranks the whole recent history by what Jarvis has most left open, so
+        attention priorities actually *develop* with experience (audit §2.2). A
+        fresh Jarvis wakes to nothing. Nothing is mutated.
+        """
+        return _wake_fn(self)
+
+    @staticmethod
+    def _is_contested(belief: Belief) -> bool:
+        """True when a belief carries both supporting and contradicting evidence
+        *and* still leans neither way (confidence below the grounded threshold).
+        """
+        return _is_contested_fn(belief)
+
+    def _contested_working_belief(self) -> Belief | None:
+        """A working belief that is a live tension worth resolving (Vision §18)."""
+        return _contested_working_belief_fn(self)
 
     def ask_about(self, topic: str) -> str | None:
         """Voice an unresolved tension so the companion can settle it (Vision §18,

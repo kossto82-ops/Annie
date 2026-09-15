@@ -34,6 +34,7 @@ from jarvis.domain.reasoning.reasoning_span import SpanThread
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraphRepository
+from jarvis.domain.repositories.semantic_memory_repository import SemanticMemoryRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.entity_extraction import extract_entities
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
@@ -175,6 +176,7 @@ class ExecutiveController:
         weighting_policy: EvidenceWeightingPolicy | None = None,
         knowledge_source: KnowledgeSource | None = None,
         knowledge_graph: KnowledgeGraphRepository | None = None,
+        semantic_memory_store: SemanticMemoryRepository | None = None,
         knobs: CognitiveKnobs | None = None,
         on_knobs_adapted: Callable[[CognitiveKnobs, str], None] | None = None,
     ) -> None:
@@ -206,11 +208,15 @@ class ExecutiveController:
         # entity extraction is skipped; wiring one lets concluded beliefs
         # automatically populate the graph (Phase 9).
         self._knowledge_graph = knowledge_graph
-        # Optional: learning-continuity sink. When the run adapts the knobs
+# Optional: learning-continuity sink. When the run adapts the knobs
         # from evidence (never from operator tuning), the new knobs plus the
         # reason flow here so the composition root can persist them. Absent ->
         # adaptation stays in-memory, exactly as before.
         self._on_knobs_adapted = on_knobs_adapted
+        # Optional: semantic memory store for abstraction consolidation. Absent ->
+        # episodes are recorded but never generalised into semantic memories; wiring
+        # one lets each concluded episode consolidate shared conceptual clusters.
+        self._semantic_memory_store = semantic_memory_store
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
         """Swap the reasoner at runtime (matches the active provider, Vision §38)."""
@@ -941,6 +947,16 @@ class ExecutiveController:
                 self._knowledge_graph.save_node(node)
             for edge in extraction.new_edges:
                 self._knowledge_graph.save_edge(edge)
+
+        # Semantic abstraction consolidation: turn recurring conceptual clusters in
+        # the episode history into semantic memories (upsert by pattern). Only runs
+        # when a semantic memory repository is wired; absent → episodes are merely
+        # recorded, exactly as before. The pattern is derived from canonical concept
+        # tokens, so lexically different but conceptually similar experiences merge.
+        if self._semantic_memory_store is not None:
+            from jarvis.domain.services.abstraction import consolidate_semantic_memories
+
+            consolidate_semantic_memories(self._episodes.history(), self._semantic_memory_store)
 
     # -- event plumbing ------------------------------------------------------
 

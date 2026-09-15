@@ -202,3 +202,52 @@ class TestPersistentFactory:
         jarvis = create_jarvis(home=None)
         assert jarvis.documents_store is None
         assert not jarvis.can_do("work with files")
+
+
+class TestSemanticMemoryPersistence:
+    """Part 6: semantic memories survive restarts through both composition roots."""
+
+    def _seed_pattern(self, jarvis: Jarvis) -> None:
+        # Three conceptually-similar, lexically-different episodes abstract to one
+        # shared pattern, so the semantics, not the words, decide the memory.
+        for trigger in (
+            "the supplier was dismissed after failing to deliver",
+            "another vendor missed its due date and got fired",
+            "a contractor failed to honour promises under the deadline",
+        ):
+            jarvis.think(trigger)
+
+    def test_json_path_survives_restart(self, tmp_path: Path) -> None:
+        first = Jarvis.persistent(tmp_path)
+        self._seed_pattern(first)
+        assert first._semantic_memory_store is not None
+        assert first._semantic_memory_store.all_memories()
+        assert (tmp_path / "semantic_memories.json").exists()
+
+        second = Jarvis.persistent(tmp_path)
+        memories = second._semantic_memory_store.all_memories()
+        assert memories, "semantic memories must survive a JSON restart"
+        assert any("FAIL" in m.pattern for m in memories)
+
+    def test_sqlite_path_survives_restart(self, tmp_path: Path) -> None:
+        first = Jarvis.database(tmp_path)
+        self._seed_pattern(first)
+        assert first._semantic_memory_store is not None
+        assert first._semantic_memory_store.all_memories()
+
+        second = Jarvis.database(tmp_path)
+        memories = second._semantic_memory_store.all_memories()
+        assert memories, "semantic memories must survive an SQLite restart"
+        assert any("FAIL" in m.pattern for m in memories)
+
+    def test_command_center_keeps_semantic_memories(self, tmp_path: Path) -> None:
+        """Part 6: the command center's own composition root persists semantics too."""
+        from jarvis.interface.server import create_jarvis
+
+        first = create_jarvis(home=tmp_path)
+        self._seed_pattern(first)
+        assert first._semantic_memory_store.all_memories()
+
+        second = create_jarvis(home=tmp_path)
+        memories = second._semantic_memory_store.all_memories()
+        assert memories, "semantic memories must survive the command-center restart"

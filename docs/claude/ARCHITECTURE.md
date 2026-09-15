@@ -152,6 +152,34 @@ publish domain events
 Each seam (recall / consult / reason) is *candidate evidence or context only*; the executive stays the
 decider and confidence stays derived.
 
+### Semantic memory & the abstraction loop
+
+Since Increment 162 a deterministic, offline semantic layer sits behind the same evidence discipline:
+
+```text
+episode completes
+   ↓
+_remember → consolidate_semantic_memories (domain/services/abstraction.py)
+   ↓  conceptual vocabulary (stemmed) → entity-independent signatures → Jaccard clustering →
+        "recurrence: <shared concepts>" → contradiction-aware evidence
+   ↓
+SemanticMemoryRepository (InMemory / SqliteSemanticMemoryStore / JsonSemanticMemoryStore)
+   ↓
+lexical_memory_retriever: SEMANTIC candidates scored max(lexical, conceptual); strong recall
+      bypasses the live reasoner, weak recall reaches it — recall stays candidate context only (D35)
+```
+
+The vocabulary is a hand-maintained English concept map (~170 stems → FAIL/SUCCEED/DELIVER/PROMISE/…):
+no LLM and no embeddings in the runtime path (D6, D8). Abstracted patterns persist through every
+composition root (`Jarvis.persistent()`, `Jarvis.database()`, `create_jarvis()`), and consolidation
+is bounded to the most recent window so a long-lived session never rescans the whole history.
+
+**Attention development** shipped as a parallel, ranked surface: `Jarvis.attention_priorities()`
+derives a bounded, reversible per-topic saliency (recurrence / unresolved / revision / recency) from
+episode history on every read — never persisted as a score — and `Jarvis.wake()` proposes attending to
+the most salient topic. The static `feel_curious()` cascade is unchanged; priority learning is an
+honest, rank-based complement ("what to attend to next"), not a reskin of the cascade.
+
 The reflective flow is:
 
 ```text

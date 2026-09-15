@@ -45,6 +45,8 @@ _PUBLIC_METHODS = (
     "unanswered_subjects",
     "self_beliefs",
     "feel_curious",
+    "attention_priorities",
+    "wake",
     "pursue",
     "introspect",
     "state_summary",

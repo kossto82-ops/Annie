@@ -36,6 +36,7 @@ from jarvis.infrastructure.env_settings import (
 from jarvis.infrastructure.fallback_model import FallbackLanguageModel
 from jarvis.infrastructure.filesystem_tool import FileSystemTool
 from jarvis.infrastructure.google_calendar import build_google_calendar_store
+from jarvis.infrastructure.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from jarvis.infrastructure.instrumented_task_agent import InstrumentedTaskAgent
 from jarvis.infrastructure.language_model import LanguageModel
 from jarvis.infrastructure.language_model_registry import build_language_model
@@ -195,6 +196,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             notes_store=notes_store,
             documents_store=documents_store,
             instrumentation=instrumentation,
+            semantic_memory_store=InMemorySemanticMemoryStore(),
         )
     else:
         base = Path(home)
@@ -211,7 +213,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             refutations_store=repositories.refutations,
             capabilities_store=repositories.capabilities,
             needs_store=repositories.needs,
-            learned_state_store=repositories.learned_state,
+learned_state_store=repositories.learned_state,
             semantic_memory_store=repositories.semantic_memories,
             knowledge_graph_store=repositories.knowledge_graph,
             unresolved_store=repositories.unresolved,

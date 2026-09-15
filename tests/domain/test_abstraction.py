@@ -30,17 +30,20 @@ def _ep(trigger: str) -> EpisodeRecord:
 
 
 class TestClusterEpisodes:
-    def test_groups_by_shared_subject_words(self) -> None:
-        # All episodes must have the same set of subject words
+    def test_groups_by_shared_concepts(self) -> None:
+        # Lexically distinct but conceptually identical episodes cluster: all
+        # three carry the same conceptual signature {DELIVER, FAIL, TIME}.
         episodes = [
-            _ep("dark mode editor"),
-            _ep("editor dark mode"),
-            _ep("mode dark editor"),
+            _ep("the supplier failed to deliver on time"),
+            _ep("another vendor failed to deliver by the deadline"),
+            _ep("a contractor missed its delivery deadline"),
         ]
         results = abstract_patterns(episodes, min_sources=3)
         assert len(results) == 1
-        assert "editor" in results[0].pattern.lower()
-        assert "dark" in results[0].pattern.lower()
+        pattern = results[0].pattern
+        assert "FAIL" in pattern
+        assert "DELIVER" in pattern
+        assert "TIME" in pattern
 
     def test_requires_min_sources(self) -> None:
         episodes = [
@@ -54,34 +57,31 @@ class TestClusterEpisodes:
         results = abstract_patterns([], min_sources=3)
         assert len(results) == 0
 
-    def test_stops_words_filtered(self) -> None:
+    def test_stop_words_do_not_form_a_cluster(self) -> None:
+        # Filler words are no concepts: episodes sharing only them have empty
+        # signatures, so no pattern can be abstracted from them.
         episodes = [
             _ep("the editor is good"),
             _ep("the editor is great"),
             _ep("editor is the best"),
+            _ep("the best editor of them all"),
         ]
         results = abstract_patterns(episodes, min_sources=3)
-        # "the", "is" filtered; {editor, good, great, best} all different — won't cluster.
-        # But each unique word set has only 1 episode → no cluster. Let's use identical words.
-        episodes = [
-            _ep("the editor is good and fast"),
-            _ep("the editor is good and fast"),
-            _ep("editor is the good and fast"),
-        ]
-        results = abstract_patterns(episodes, min_sources=3)
-        assert len(results) == 1
+        assert len(results) == 0
 
     def test_multiple_clusters(self) -> None:
+        # Two conceptually disjoint groups abstract to two stable patterns.
+        # (A carries DELIVER+FAIL, B carries only PROMISE -- no shared concept.)
         episodes = [
-            _ep("dark mode editor"),
-            _ep("editor dark mode"),
-            _ep("mode editor dark"),
-            _ep("light theme config"),
-            _ep("theme light config"),
-            _ep("config theme light"),
+            _ep("the supplier failed to deliver"),
+            _ep("a vendor failed to deliver"),
+            _ep("another contractor failed to deliver"),
+            _ep("the crew promised the work"),
+            _ep("the vendor pledged the result"),
+            _ep("the team committed to the effort"),
         ]
         results = abstract_patterns(episodes, min_sources=3)
         patterns = [r.pattern for r in results]
         assert len(results) == 2
-        # Both clusters should have patterns
-        assert all("Los patrones" in p for p in patterns)
+        assert any("FAIL" in p and "DELIVER" in p for p in patterns)
+        assert any("PROMISE" in p for p in patterns)

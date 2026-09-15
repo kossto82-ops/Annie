@@ -77,7 +77,7 @@ def build_persistent_kwargs(
         needs_store=JsonBeliefStore(base / "needs.json"),
         refutations_store=JsonRefutationStore(base / "refutations.json"),
         trace=JsonEpisodeTrace(base / "trace.jsonl"),
-        learned_state_store=JsonLearnedStateStore(base / "learned.json"),
+learned_state_store=JsonLearnedStateStore(base / "learned.json"),
         semantic_memory_store=JsonSemanticMemoryStore(
             base / "semantic.json", weighting_policy
         ),
