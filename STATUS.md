@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-11 (Architectural Audit Phases 0-5)
+Last updated: 2026-09-15 (Increments 163-165, pyright strict 0 at HEAD)
 
 ---
 
@@ -2720,7 +2720,83 @@ env-dependent live-provider failure. Ruff clean. New decisions D15 + D16.
 
 ---
 
-## Open blockers
+### Increment 163 — Cognitive attention repair A–C (2026-09-14, commit `9003833`)
+
+Merges Increment 162 into the local remediation line (`fa995d1`) and implements Phases
+A–C of `COGNITIVE_REPAIR_PLAN.md`. Spec was carried in the conversation — the plan file is
+**not** on disk; this log is the record.
+
+- **A — Topic identity is the canonical signature, not the trigger**: new
+  `topic_resolution.py` (`ResolvedTopic`, `resolve_episodes`, `signature_of`, `topic_id_of`,
+  `_compatible`). Compatibility: exact identity, or ≥2 shared concepts with the candidate
+  fully contained; single-concept topics never absorb; **empty signatures never merge** (the
+  `∅==∅` fusion bug was caught and guarded). `topic_id` = `" > ".join(sorted(signature))`
+  (e.g. `DELIVER > FAIL`), fallback to the raw trigger for concept-free episodes.
+  `canonical_signature` = the bootstrap episode's signature (stable); `representative_trigger`
+  = the most recent episode's trigger (display only).
+- **B — Attention derives from canonical topics, external signals only**: `attention_priority`
+  regroups by canonical topic, filters `TriggerOrigin.COMPANION` before resolution, and the
+  `_recency` direction bug (most recent could score 0) was fixed to
+  `last_index/(window-1)`, window ≤ 1 → 1.0. `AttentionPriority.representative` added.
+- **C — Curiosity provenance survives persistence**: `target_topic_id` on
+  `EpisodeRecord`/`CognitiveEpisode`/`CuriosityImpulse` (+ `representative_trigger` on the
+  impulse), serialized in the JSON/SQLite episode stores; `_remember` also records
+  `belief_confidence_at_end`. `wake()` anchors the canonical topic and narrates the
+  representative; `pursue()` runs the topic's **real** representative trigger with
+  `origin=CURIOSITY`, so internal cognition can never re-rank attention by echoing itself.
+
+**Files changed**: `topic_resolution.py` (new), `attention_priority.py` (service + value
+object), `episode_record.py`, `cognitive_episode.py`, `curiosity_impulse.py`,
+`json_episode_store.py`, `executive_controller.py`, `curiosity.py`, `jarvis.py`,
+`tests/semantic_attention/test_cognitive_repair.py` (new, 19 tests) and the origin probes.
+
+**Verification**: full suite **1859 → 1878 passed** after A–C (one Increment-162 jar
+fixed: `semantic_memories.json` → unified `semantic.json`); ruff clean. Increment 163 also
+fixed a merge regression where `jarvis.py` lost its private `_contested_working_belief` /
+`_is_contested` imports (public aliases `is_contested` / `contested_working_belief` added).
+
+### Increment 164 — Cognitive attention repair D–E (2026-09-15, commit `67d3e7d`)
+
+- **D — External-only consolidation + neutral evidence**: `abstract_patterns` (and thus
+  `consolidate_semantic_memories`) feeds only `TriggerOrigin.COMPANION` episodes — internal
+  cognition cannot manufacture semantic memories out of its own echoes. Valence-less
+  episodes contribute *neutral* evidence: new `Evidence.is_neutral` (default `False`), and
+  `derive_confidence`/`derive_stability`/`Belief.explain` skip it, so it never counts as a
+  contradiction; `SemanticMemory.add_evidence` emits neither `Reinforced` nor `Contested`
+  for it.
+- **E — Negation, cache, vocabulary, types**: negation is now **parity counting** of markers
+  (`didn't ever not fail` inverts per parity, not by `any()`); trigger-signature memo is an
+  `lru_cache(maxsize=1024)` with public `clear_signature_cache()` + `signature_cache_info()`;
+  ~30 irregular verb forms added to the concept map (`broke→FAIL`, `bought→COST`,
+  `won→SUCCEED`, `vowed→PROMISE`, …); dead `_stem` / `_concept_tokens_for_clustering`
+  removed; `consolidate_semantic_memories` `store` parameter typed
+  `SemanticMemoryRepository` (also fixed the `executive_controller` call-site error).
+  Renamed to public: `episode_signature`, `valence`, `CONCEPT_MAP`, `cached_signature`.
+
+**Tests**: +7 phase D+E tests in `test_cognitive_repair.py` (26 in file). Full suite:
+**1885 passed, 3 skipped**; ruff clean; **pyright dropped to ~101 (all origin test dirt)**.
+
+### Increment 165 — Audit gates green: pyright strict 0 + ruff clean (2026-09-15, commit `0a6a73e`)
+
+Closes the audit-gate debt ("pyright strict 0 errors at HEAD" was false since Increment 162
+shipped dirty: origin/main alone had ~586 pyright errors diluting the merge). The local tree
+was at ~124 after the merge; this increment brings the **whole repo to pyright strict 0**.
+
+- New **public seams** so tests stop reaching into privates:
+  `ExecutiveController.memory_retriever` / `.semantic_memory_store` (nullable) and
+  `DocumentMemoryRetriever.base`.
+- Origin-test cleanup: `ProbeReasoner.infer/infer_stream` and test helpers annotated to the
+  real protocol types; `conclusion_stability=Confidence(...)` → `TemporalStability` (was a
+  genuine type bug); `_rec`/`_ep` dead helpers, unused `store`/`last_memory` variables
+  removed; `_CONCEPT_MAP` private import went away with the D–E public rename; typed the
+  `callers`/`records`/`wired` lists.
+- **Latent origin bug fixed honestly**: `test_feel_curious_returns_impulse_or_quiet_none`
+  asserted `result.impulse_kind` — an attribute that never existed on `CuriosityImpulse`;
+  the test only ever ran while `result is None`. The assertion now checks the real contract
+  (an impulse names *what* to investigate and *why*).
+
+**Verification**: full suite **1885 passed, 3 skipped**; ruff clean; **pyright strict 0
+errors** across `src/` + `tests/`. Pushed: `8d9190c → 0a6a73e main` (Increments 163–165).
 
 ---
 

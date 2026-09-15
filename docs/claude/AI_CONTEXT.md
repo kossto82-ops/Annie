@@ -271,6 +271,36 @@ The post-audit implementation wired existing systems into the cognitive loop:
 - **Phase 11** — Memory Decay and Consolidation: `forget()` on BeliefRepository, `identify_forgetting_candidates()` in memory_consolidation.py, 7 tests
 - **Phase 12** — Fallback Provider: `FallbackLanguageModel` with automatic failover, `backup_settings_from_env()`, factory `model_override` param, web search routing fix, dashboard capability count honesty
 
+### Cognitive attention repair (Increments 163-165, 2026-09-15)
+
+Increment 162 (semantic & attention development loop) shipped dirty to the type gate; the
+repair series merged it into the local line and closed the remediation plan A-E:
+
+- **Canonical topic identity**: `domain/services/topic_resolution.py` groups episodes by
+  concept signature (`signature_of`, `resolve_episodes`, `topic_id_of`) — never by raw
+  trigger; `topic_id` = `" > ".join(sorted(signature))` (e.g. `DELIVER > FAIL`), with the
+  most recent trigger kept as display-only `representative`. Empty signatures never fuse
+  (the `∅==∅` merge bug is guarded; single-concept topics never absorb).
+- **Attention on canonical topics, external-only**: `attention_priority` regroups by
+  canonical topic, filters `TriggerOrigin.COMPANION` before resolution, and fixes recency
+  direction (`last_index/(window-1)`, most recent = 1.0).
+- **Curiosity provenance survives persistence**: `target_topic_id` (and the impulse's
+  `representative_trigger`) ride `EpisodeRecord` → `CognitiveEpisode` → `CuriosityImpulse`
+  and the JSON/SQLite stores; `wake()` anchors the canonical topic and narrates its
+  representative; `pursue()` runs that real trigger with `origin=CURIOSITY`, so internal
+  cognition cannot re-rank attention by echoing itself.
+- **External-only consolidation + neutral evidence**: `abstract_patterns`/consolidation feed
+  on `COMPANION` episodes only. New `Evidence.is_neutral` — valence-less episodes
+  contribute undirected evidence that `derive_confidence`/`derive_stability` skip (never a
+  contradiction) and that emits neither `SemanticMemoryReinforced` nor `Contested`.
+- **Vocabulary/cache edges**: negation is parity-counted (odd # of markers inverts);
+  ~30 irregular verbs added to `CONCEPT_MAP`; the trigger-signature memo is a bounded
+  `lru_cache(maxsize=1024)` with public `clear_signature_cache()`/`signature_cache_info()`.
+- **Gates**: `consolidate_semantic_memories`'s `store` typed via `SemanticMemoryRepository`;
+  new public seams (`ExecutiveController.memory_retriever` / `.semantic_memory_store`,
+  `DocumentMemoryRetriever.base`) let tests stop touching privates. **pyright strict 0
+  errors across the whole repo, ruff clean, 1885 passed** at HEAD (`0a6a73e`).
+
 ### Audit remediation (2026-09-14, `docs/claude/REMEDIATION_PLAN.md` → `REMEDIATION_REPORT.md`)
 
 - **Types**: pyright strict 0 errors with no suppressions or scope cuts (was 461: facade/interface cross-module private use → public seams, COMMANDS-table router composition, consolidated duplicate helpers, deleted dead forwarders).

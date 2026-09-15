@@ -82,7 +82,7 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 
 ~1704 tests passing, ruff clean.
 
-The current project is around Increment 160 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is at Increment 165 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
@@ -131,6 +131,16 @@ functions accept `model_override` for injection; dashboard capability count show
 live LLM provider is
 opt-in and must remain provider-swappable and offline-testable. Audit gates are clean at HEAD
 (ruff · pyright strict 0 errors).
+
+The cognitive attention repair is complete (Increments 163-165, merged onto Increment 162's
+semantic & attention development loop): episodes group by canonical concept signature
+(`topic_resolution.py`, never by raw trigger, empty signatures never fuse), attention derives
+from canonical topics external-only, curiosity `wake()`/`pursue()` carry a persisted
+`target_topic_id` and run the topic's real representative trigger, consolidation/abstraction
+feed on `COMPANION` episodes only with *neutral* evidence (`Evidence.is_neutral`, skipped by
+confidence/stability) for valence-less episodes, negation is parity-counted, the signature
+memo is a bounded lru_cache, and the whole tree is pyright strict 0 (tests included) with
+public seams (`executive.memory_retriever` / `.semantic_memory_store`, `DocumentMemoryRetriever.base`).
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner
