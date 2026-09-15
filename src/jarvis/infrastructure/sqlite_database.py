@@ -22,6 +22,7 @@ from jarvis.infrastructure.sqlite_knowledge_graph_store import SqliteKnowledgeGr
 from jarvis.infrastructure.sqlite_learned_state_store import SqliteLearnedStateStore
 from jarvis.infrastructure.sqlite_refutation_store import SqliteRefutationStore
 from jarvis.infrastructure.sqlite_semantic_memory_store import SqliteSemanticMemoryStore
+from jarvis.infrastructure.sqlite_strategy_stats_store import SqliteStrategyStatsStore
 from jarvis.infrastructure.sqlite_unresolved_store import SqliteUnresolvedStore
 
 
@@ -41,6 +42,7 @@ class SqliteRepositories:
     capabilities: SqliteCapabilityStore
     refutations: SqliteRefutationStore
     learned_state: SqliteLearnedStateStore
+    strategy_stats: SqliteStrategyStatsStore
     semantic_memories: SqliteSemanticMemoryStore
     knowledge_graph: SqliteKnowledgeGraphStore
     unresolved: SqliteUnresolvedStore
@@ -84,6 +86,7 @@ def build_sqlite_repositories(
         capabilities=SqliteCapabilityStore(connection),
         refutations=SqliteRefutationStore(connection),
 learned_state=SqliteLearnedStateStore(connection),
+        strategy_stats=SqliteStrategyStatsStore(connection),
         semantic_memories=SqliteSemanticMemoryStore(
             connection, weighting_policy=weighting_policy
         ),

@@ -116,3 +116,17 @@ signals are re-derived from the bounded recent episode history on every call
 [0,1], so no second authoritative learning state and no unbounded score accumulation
 exist. The `feel_curious()` cascade keeps its static class order; ranked attention is
 a parallel honest surface, and nothing in it may mutate episode/belief state.
+
+## D20 — Relations are retrieval context, never authority
+
+A stored graph relation may route recall (relation-aware traversal) but may
+never ground, raise, or transfer belief confidence. Poisoned or mistaken edges
+surface as labelled context the same as any other memory.
+
+## D21 — Strategy preferences are revisable routing evidence
+
+Retrieval-strategy statistics decide which retriever surfaces candidates, not
+what Jarvis concludes. A preference forms only on well-sampled, meaningful
+gaps, defaults to lexical otherwise, and must always be reversible by later
+counter-evidence. Flooding the record is bounded by the cap and undone by
+honest use.

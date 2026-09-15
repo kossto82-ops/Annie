@@ -35,6 +35,7 @@ from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraphRepository
 from jarvis.domain.repositories.semantic_memory_repository import SemanticMemoryRepository
+from jarvis.domain.repositories.strategy_stats_repository import StrategyStatsRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
 from jarvis.domain.services.entity_extraction import extract_entities
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
@@ -43,6 +44,7 @@ from jarvis.domain.services.meta_observation import (
     observe_attention_allocation,
     observe_reasoning_effectiveness,
 )
+from jarvis.domain.services.retrieval_strategy import select_retrieval_strategy
 from jarvis.domain.services.self_observation import (
     adapt_knobs_from_self_observation,
     observe_evidence_habit,
@@ -56,6 +58,11 @@ from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
+from jarvis.domain.value_objects.retrieval_strategy import (
+    RetrievalStrategy,
+    RetrievalStrategyStats,
+    StrategyOutcome,
+)
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.nervous_system.nervous_system import NervousSystem
 
@@ -96,6 +103,48 @@ _QUESTION_CUES = frozenset(
 )
 # How many companion traits to surface for a self-question -- the most confident few.
 _MAX_SELF_QUESTION_TRAITS = 3
+
+
+def _stem_token(word: str) -> str:
+    """A deliberately light stem (P2-B): plural-looking tokens match their base.
+
+    ``works``/``knows`` in a stored relation meet ``work``/``know`` in a
+    question. Exact matching stays the rule; this only bridges the trailing-s
+    gap between a relation name and ordinary phrasing.
+    """
+    if len(word) > 4 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
+def relation_cues_for(trigger: str, relations: Iterable[str]) -> tuple[str, ...]:
+    """The stored relation types a trigger plausibly asks about (P2-B).
+
+    A relation matches when one of its word parts (length >= 3, stemmed, e.g.
+    ``works`` in ``works_on``) meets a trigger token. Returns the matched
+    relation names in first-seen order, or ``()`` when the trigger carries no
+    relation cue -- the caller then traverses unfiltered (status quo ante).
+    Pure string logic, no model involved; relations stay retrieval context,
+    never authority (Vision §22).
+    """
+    tokens = {
+        _stem_token(word)
+        for word in _WORD.findall(trigger.lower())
+        if len(word) >= 3
+    }
+    matched: list[str] = []
+    for relation in relations:
+        parts = [
+            part
+            for part in re.split(r"[^a-z0-9]+", relation.lower())
+            if len(part) >= 3
+        ]
+        if (
+            any(_stem_token(part) in tokens for part in parts)
+            and relation not in matched
+        ):
+            matched.append(relation)
+    return tuple(matched)
 
 
 def _looks_like_self_question(text: str) -> bool:
@@ -179,6 +228,8 @@ class ExecutiveController:
         semantic_memory_store: SemanticMemoryRepository | None = None,
         knobs: CognitiveKnobs | None = None,
         on_knobs_adapted: Callable[[CognitiveKnobs, str], None] | None = None,
+        embedding_retriever: MemoryRetriever | None = None,
+        strategy_stats_store: StrategyStatsRepository | None = None,
     ) -> None:
         self._nervous_system = nervous_system
         self._beliefs = beliefs
@@ -217,6 +268,20 @@ class ExecutiveController:
         # episodes are recorded but never generalised into semantic memories; wiring
         # one lets each concluded episode consolidate shared conceptual clusters.
         self._semantic_memory_store = semantic_memory_store
+        # P2-C: the meaning-based alternative to the (lexical) memory retriever
+        # above. Absent -> every recall is lexical, exactly as before (zero
+        # overhead, zero recording). Present -> each recall consults the
+        # accumulated strategy evidence to choose which retriever answers; the
+        # choice routes candidates only, never confidence (D20).
+        self._embedding_retriever = embedding_retriever
+        # P2-C: durable retrieval-strategy experience. Absent -> the evidence
+        # lives for the session only (still consumed, lost on restart); a wired
+        # store makes the learned routing preference survive restarts.
+        self._strategy_stats_store = strategy_stats_store
+        stored_stats = (
+            strategy_stats_store.load() if strategy_stats_store is not None else None
+        )
+        self._strategy_stats = stored_stats or RetrievalStrategyStats()
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
         """Swap the reasoner at runtime (matches the active provider, Vision §38)."""
@@ -230,6 +295,114 @@ class ExecutiveController:
     def set_memory_retriever(self, retriever: MemoryRetriever | None) -> None:
         """Swap the memory retriever at runtime -- e.g. lexical -> embedding (D11)."""
         self._memory_retriever = retriever
+
+    def set_embedding_retriever(self, retriever: MemoryRetriever | None) -> None:
+        """Wire (or clear) the meaning-based alternative to lexical recall (P2-C).
+
+        Both retrievers then stay available and each recall chooses between
+        them from accumulated strategy evidence; ``None`` returns to pure
+        lexical recall, exactly as before.
+        """
+        self._embedding_retriever = retriever
+
+    def strategy_stats(self) -> RetrievalStrategyStats:
+        """The accumulated retrieval-strategy evidence (read-only view)."""
+        return self._strategy_stats
+
+    def retrieval_strategy_for(self, query: str) -> RetrievalStrategy:
+        """Which recall strategy the current evidence selects for ``query``.
+
+        Pure inspection: it reports the preference without recording anything
+        (observing the choice must not perturb it). ``query`` is unused today --
+        selection is evidence-driven, not query-driven -- and kept so per-query
+        routing can arrive without changing the seam.
+        """
+        return select_retrieval_strategy(
+            self._strategy_stats,
+            embedding_available=self._embedding_retriever is not None,
+        )
+
+    def record_retrieval_outcome(
+        self, strategy: RetrievalStrategy, success: bool, query: str
+    ) -> None:
+        """Record how one retrieval went, as future selection evidence (P2-C).
+
+        The recall paths call this automatically with the real outcome; the
+        seam is also public so tests and operators can replay history. Like
+        every Jarvis input it is trusted-boundary data, and like every
+        preference it stays revisable: the record is bounded and a meaningful
+        run of contrary evidence reverses the preference (D20).
+        """
+        self._strategy_stats = self._strategy_stats.recorded(
+            StrategyOutcome(strategy=strategy, success=success, query=query)
+        )
+        if self._strategy_stats_store is not None:
+            self._strategy_stats_store.save(self._strategy_stats)
+
+    def _retrieve_with_strategy(
+        self, query: str, *, limit: int = 5
+    ) -> tuple[RetrievalStrategy, tuple[RecalledMemory, ...]]:
+        """Run one retrieval through the evidence-selected strategy (P2-C).
+
+        Returns the strategy whose results are handed back and what the recall
+        surfaced. The outcome of every strategy that runs (did it surface
+        anything relevant) is recorded automatically, closing the select ->
+        use -> observe -> record loop; future selections consume it.
+
+        When the preferred strategy surfaces nothing and the other side is
+        available, the other side gets its chance (miss-triggered fallback):
+        the unselected strategy earns fresh evidence exactly when the
+        preferred one fails, so a changed world reverses the preference. The
+        fallback runs at most once per recall and only on a miss, so a hit
+        never pays for duplicate retrieval. With no embedding retriever this
+        is pure lexical recall with no recording and no overhead, exactly as
+        before.
+        """
+        if self._embedding_retriever is None:
+            if self._memory_retriever is None:
+                return RetrievalStrategy.LEXICAL, ()
+            return (
+                RetrievalStrategy.LEXICAL,
+                self._memory_retriever.recall(query, limit=limit),
+            )
+        first = select_retrieval_strategy(
+            self._strategy_stats, embedding_available=True
+        )
+        retrievers = {
+            RetrievalStrategy.LEXICAL: self._memory_retriever,
+            RetrievalStrategy.EMBEDDING: self._embedding_retriever,
+        }
+        memories = self._run_retriever(retrievers[first], query, limit)
+        self._record_outcome(first, memories, query)
+        if not memories:
+            second = (
+                RetrievalStrategy.EMBEDDING
+                if first is RetrievalStrategy.LEXICAL
+                else RetrievalStrategy.LEXICAL
+            )
+            memories = self._run_retriever(retrievers[second], query, limit)
+            self._record_outcome(second, memories, query)
+            if memories:
+                return second, memories
+        return first, memories
+
+    @staticmethod
+    def _run_retriever(
+        retriever: MemoryRetriever | None,
+        query: str,
+        limit: int,
+    ) -> tuple[RecalledMemory, ...]:
+        """One bounded retriever run; an absent retriever recalls nothing."""
+        if retriever is None:
+            return ()
+        return retriever.recall(query, limit=limit)
+
+    def _record_outcome(
+        self, strategy: RetrievalStrategy, memories: tuple[RecalledMemory, ...], query: str
+    ) -> None:
+        """Record whether ``strategy`` surfaced anything relevant for ``query``."""
+        success = any(memory.relevance >= _MIN_RECALL_RELEVANCE for memory in memories)
+        self.record_retrieval_outcome(strategy, success, query)
 
     def set_knowledge_source(self, source: KnowledgeSource | None) -> None:
         """Swap the deliberate-consult seam at runtime (matches the provider).
@@ -347,11 +520,10 @@ class ExecutiveController:
 
     def recall(self, query: str) -> tuple[RecalledMemory, ...]:
         """Return relevant long-term context without opening a cognitive episode."""
-        if self._memory_retriever is None:
-            return ()
+        _, retrieved = self._retrieve_with_strategy(query)
         relevant: list[RecalledMemory] = []
         seen: set[str] = set()
-        for memory in self._memory_retriever.recall(query):
+        for memory in retrieved:
             if memory.relevance < _MIN_RECALL_RELEVANCE:
                 continue
             if self._is_about_current(memory, query):
@@ -613,17 +785,17 @@ class ExecutiveController:
         # Results come ranked most-relevant first, so the first time a given content
         # appears is its strongest match; later duplicates (e.g. the same text held
         # both as a world belief and an episode) are dropped.
-        if self._memory_retriever is not None:
-            for memory in self._memory_retriever.recall(episode.trigger):
-                if memory.relevance < _MIN_RECALL_RELEVANCE:
-                    continue
-                if self._is_about_current(memory, episode.trigger):
-                    continue
-                key = memory.content.strip().lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                relevant.append(memory)
+        _, retrieved = self._retrieve_with_strategy(episode.trigger)
+        for memory in retrieved:
+            if memory.relevance < _MIN_RECALL_RELEVANCE:
+                continue
+            if self._is_about_current(memory, episode.trigger):
+                continue
+            key = memory.content.strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            relevant.append(memory)
         # Relationship traversal is its own retrieval system (it shares no
         # surface tokens with the question by construction), so it runs even
         # when no lexical retriever is wired.
@@ -660,6 +832,12 @@ class ExecutiveController:
         relationship is the retrieval signal, which is exactly the case where
         a graph earns its keep over ordinary retrieval. Structural relevance
         decays with distance; duplicates against lexical hits are dropped.
+
+        Relation-aware (P2-B): when the trigger names a stored relation type
+        (``works_on``, ``knows``, ...), only that relation traverses, so a
+        question about what Alice works on is not contaminated by whom she
+        knows. With no cue the traversal stays unfiltered (status quo ante).
+        Traversed nodes are recalled *context*, never evidence (Vision §22).
         """
         graph = self._knowledge_graph
         if graph is None:
@@ -671,30 +849,37 @@ class ExecutiveController:
             if len(node.name) >= 3 and node.name.lower() in lowered
         ]
         for seed in seeds:
+            stored_relations = [edge.relation for edge in graph.edges_from(seed.id)]
+            cues = relation_cues_for(episode.trigger, stored_relations)
+            relations: tuple[str | None, ...] = cues if cues else (None,)
             collected: set[str] = set()
-            for depth, relevance in ((1, 0.5), (2, 0.3)):
-                for node in graph.neighbors(seed.id, depth=depth):
-                    if node.id in collected:
-                        continue
-                    collected.add(node.id)
-                    text = f"{node.name} ({node.kind.value})"
-                    if node.description:
-                        text += f": {node.description}"
-                    memory = RecalledMemory(
-                        content=text,
-                        kind=MemoryKind.GRAPH_NODE,
-                        provenance=f"graph {depth}-hop from {seed.name}",
-                        relevance=relevance,
-                        source_confidence=node.confidence.value,
-                        observed_at=node.created_at,
-                    )
-                    if self._is_about_current(memory, episode.trigger):
-                        continue
-                    key = text.strip().lower()
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    relevant.append(memory)
+            for relation in relations:
+                for depth, relevance in ((1, 0.5), (2, 0.3)):
+                    for node in graph.neighbors(seed.id, relation=relation, depth=depth):
+                        if node.id in collected:
+                            continue
+                        collected.add(node.id)
+                        text = f"{node.name} ({node.kind.value})"
+                        if node.description:
+                            text += f": {node.description}"
+                        provenance = f"graph {depth}-hop from {seed.name}"
+                        if relation is not None:
+                            provenance += f" via {relation}"
+                        memory = RecalledMemory(
+                            content=text,
+                            kind=MemoryKind.GRAPH_NODE,
+                            provenance=provenance,
+                            relevance=relevance,
+                            source_confidence=node.confidence.value,
+                            observed_at=node.created_at,
+                        )
+                        if self._is_about_current(memory, episode.trigger):
+                            continue
+                        key = text.strip().lower()
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        relevant.append(memory)
 
     def _reason_into(
         self,

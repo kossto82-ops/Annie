@@ -498,3 +498,20 @@ What the audit remediation changed structurally (see `REMEDIATION_REPORT.md`):
 - **New durable surfaces.** `learned.json`, `semantic.json`, `graph.json`,
   `conversation.json`, `unresolved.json` (JSON twin); matching tables in `jarvis.db`
   (SQLite twin, extended `SqliteRepositories`).
+
+## Relation-aware recall and strategy selection (2026-09-15)
+
+What the P2-B/C reintegration added structurally, all inside existing seams (D12):
+
+- **Relation-aware graph recall.** `relation_cues_for()` in the executive matches
+  trigger tokens against a seed's stored relation types and traverses each cue
+  separately (`via <relation>` provenance); no cue keeps the old unfiltered
+  traversal. Relations remain recall context, never evidence (D20).
+- **Strategy selection consumption.** The executive holds both the lexical
+  retriever and (when enabled) the embedding retriever and routes each recall
+  through `select_retrieval_strategy()` off a durable, bounded
+  `RetrievalStrategyStats` record (`retrieval_strategy.json` + `retrieval_strategy_outcomes`
+  table); outcomes record automatically, misses fall back once so both sides stay
+  revisable. With no embedding retriever wired the routing is byte-for-byte the
+  old lexical-only path and records nothing. Selection routes candidates only;
+  confidence is untouched (D21).

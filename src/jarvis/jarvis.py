@@ -141,6 +141,7 @@ from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraphRepository
 from jarvis.domain.repositories.learned_state_repository import LearnedStateRepository
 from jarvis.domain.repositories.refutation_repository import RefutationRepository
+from jarvis.domain.repositories.strategy_stats_repository import StrategyStatsRepository
 from jarvis.domain.repositories.unresolved_repository import UnresolvedRepository
 from jarvis.domain.retrieval.calendar_store import CalendarStore
 from jarvis.domain.retrieval.document_editor import DocumentEditor
@@ -207,6 +208,10 @@ from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
 from jarvis.domain.value_objects.research_report import ResearchReport
+from jarvis.domain.value_objects.retrieval_strategy import (
+    RetrievalStrategy,
+    RetrievalStrategyStats,
+)
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
 from jarvis.domain.value_objects.state_summary import StateSummary
@@ -355,6 +360,7 @@ class Jarvis:
         conversation_repository: ConversationRepository | None = None,
         knowledge_graph_store: KnowledgeGraphRepository | None = None,
         unresolved_store: UnresolvedRepository | None = None,
+        strategy_stats_store: StrategyStatsRepository | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         # Live-provider instrumentation (Phase 4): a shared collector that recorded
@@ -621,6 +627,7 @@ knowledge_graph=knowledge_graph_store,
             knobs=initial_knobs,
             on_knobs_adapted=self._save_learned_state,
             semantic_memory_store=self._semantic_memory_store,
+            strategy_stats_store=strategy_stats_store,
         )
         # Sub-facades: each wraps a coherent method group, keeping the public
         # API on Jarvis via thin delegators for backward compatibility.
@@ -733,12 +740,16 @@ knowledge_graph=knowledge_graph_store,
         return DocumentMemoryRetriever(base, lambda: self._documents_store)
 
     def enable_embedding_recall(self, embedder: TextEmbedder) -> None:
-        """Upgrade recall from surface tokens to *meaning* (Vision §3, D11).
+        """Add meaning-based recall as a *choice* beside lexical recall (P2-C).
 
-        Installs an embedding-backed retriever over Jarvis's own stores, with a lexical
-        retriever as its fallback so a local embedder outage degrades to token recall
-        rather than none (Vision §37). The retriever only surfaces candidates; the
-        executive still decides. Replaces whatever retriever was active.
+        Keeps the lexical retriever installed as the default side of the
+        choice and installs the embedding-backed retriever (with the lexical
+        one as its fallback, so an embedder outage degrades to token recall
+        rather than none, Vision §37) as the alternative. Each recall consults
+        the accumulated retrieval-strategy evidence to pick which retriever
+        answers, records the outcome automatically, and lets future recalls
+        learn from it. The retrievers only surface candidates; the executive
+        still decides.
         """
         lexical = LexicalMemoryRetriever(
             self.beliefs,
@@ -748,7 +759,8 @@ knowledge_graph=knowledge_graph_store,
             semantic_memories=self._semantic_memory_store,
             conversation=self._conversation_repository,
         )
-        self._executive.set_memory_retriever(
+        self._executive.set_memory_retriever(self._with_documents(lexical))
+        self._executive.set_embedding_retriever(
             self._with_documents(
                 EmbeddingMemoryRetriever(
                     self.beliefs,
@@ -766,6 +778,30 @@ knowledge_graph=knowledge_graph_store,
         # (Odysseus), so `can_do("recall by meaning")` reflects reality.
         if self._recall_capability is not None:
             self._recall_capability.set_live(True)
+
+    def retrieval_strategy_for(self, query: str) -> RetrievalStrategy:
+        """Which recall strategy the current evidence selects (P2-C, inspection only).
+
+        Reports the preference without perturbing it -- observing the choice
+        records nothing and consumes no exploration tick.
+        """
+        return self._executive.retrieval_strategy_for(query)
+
+    def strategy_stats(self) -> RetrievalStrategyStats:
+        """The accumulated retrieval-strategy evidence (read-only view)."""
+        return self._executive.strategy_stats()
+
+    def record_retrieval_outcome(
+        self, strategy: RetrievalStrategy, success: bool, query: str
+    ) -> None:
+        """Record how one retrieval went, as future selection evidence (P2-C).
+
+        The recall paths call this automatically; the seam stays public so
+        history can be replayed or corrected. Bounded and revisable: a
+        meaningful run of contrary evidence always reverses the preference
+        (D20).
+        """
+        self._executive.record_retrieval_outcome(strategy, success, query)
 
     @property
     def speech_perception(self) -> SpeechPerceptionSource | None:

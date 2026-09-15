@@ -27,6 +27,7 @@ from jarvis.infrastructure.json_knowledge_graph_store import JsonKnowledgeGraphS
 from jarvis.infrastructure.json_learned_state_store import JsonLearnedStateStore
 from jarvis.infrastructure.json_refutation_store import JsonRefutationStore
 from jarvis.infrastructure.json_semantic_memory_store import JsonSemanticMemoryStore
+from jarvis.infrastructure.json_strategy_stats_store import JsonStrategyStatsStore
 from jarvis.infrastructure.json_unresolved_store import JsonUnresolvedStore
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.odysseus_search_source import build_odysseus_search_source
@@ -83,6 +84,7 @@ learned_state_store=JsonLearnedStateStore(base / "learned.json"),
         ),
         knowledge_graph_store=JsonKnowledgeGraphStore(base / "graph.json"),
         unresolved_store=JsonUnresolvedStore(base / "unresolved.json"),
+        strategy_stats_store=JsonStrategyStatsStore(base / "retrieval_strategy.json"),
         # Lexical recall is deterministic and offline: factory builds answer
         # from what they persist (beliefs, episodes, abstractions, turns).
         enable_recall=True,
@@ -142,6 +144,7 @@ def build_database_kwargs(
         semantic_memory_store=repositories.semantic_memories,
         knowledge_graph_store=repositories.knowledge_graph,
         unresolved_store=repositories.unresolved,
+        strategy_stats_store=repositories.strategy_stats,
         # Lexical recall is deterministic and offline: factory builds answer
         # from what they persist (beliefs, episodes, abstractions, turns).
         enable_recall=True,
