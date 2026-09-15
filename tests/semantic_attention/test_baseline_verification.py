@@ -16,16 +16,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from datetime import UTC, datetime
-
 from jarvis.domain.entities.semantic_memory import SemanticMemory
 from jarvis.domain.enums.attention import Attention
-from jarvis.domain.enums.episode_kind import EpisodeKind
-from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
-from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from jarvis.jarvis import Jarvis
@@ -36,22 +30,11 @@ def _evidence() -> Evidence:
                     weight=Confidence(1.0), supports=True)
 
 
-def _rec(trigger: str) -> EpisodeRecord:
-    return EpisodeRecord(
-        episode_id=f"ep-{hash(trigger) & 0xFFFFFFFF:08x}",
-        trigger=trigger, decision="concluded",
-        working_belief_id="b1", outcome=EpisodeState.COMPLETED,
-        conclusion_confidence=Confidence(0.7), conclusion_stability=Confidence(0.7),
-        origin=TriggerOrigin.COMPANION, kind=EpisodeKind.CONCLUSION,
-        recorded_at=datetime.now(UTC),
-    )
-
-
 def test_A_abstract_patterns_exists_but_is_dead_code():
     """A: abstract_patterns() has zero callers in src/."""
     import pathlib
     src = pathlib.Path(__file__).resolve().parent.parent.parent / "src"
-    callers = []
+    callers: list[str] = []
     for p in src.rglob("*.py"):
         if "abstraction.py" in str(p):
             continue
@@ -91,7 +74,7 @@ def test_D_embedding_retrieval_only_via_opt_in_seam():
     assert embedder is None, "No embedder when JARVIS_EMBED_MODEL is absent"
     from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
     j = Jarvis(enable_recall=True)
-    assert not isinstance(j._executive._memory_retriever, EmbeddingMemoryRetriever)
+    assert not isinstance(j.executive.memory_retriever, EmbeddingMemoryRetriever)
 
 
 def test_E_attention_derived_from_belief_confidence_not_learned():

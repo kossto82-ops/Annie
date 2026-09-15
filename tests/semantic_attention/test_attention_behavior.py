@@ -114,7 +114,7 @@ class TestAttentionWithSemanticMemory:
     def test_default_jarvis_has_no_semantic_store(self):
         """Default Jarvo has no semantic memory store wired."""
         j = Jarvis()
-        assert j._semantic_memory_store is None
+        assert j.executive.semantic_memory_store is None
 
     def test_semantic_store_not_updated_by_think(self):
         """CRITICAL: think() NEVER writes semantic memories — the store is read-only in
@@ -134,18 +134,37 @@ class TestRecallChainToDecision:
         """A strong concept-level recall (relevance >= 0.6) already answers the
         trigger, so the live reasoner is NOT re-asked — semantic recall now
         genuinely bridges meaning (the point of the rework)."""
+        from collections.abc import Iterator
+
+        from jarvis.domain.conversation.conversation_context import Turn
+        from jarvis.domain.reasoning.reasoning_span import SpanThread
         from jarvis.domain.value_objects.inference import Inference
+        from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 
         class ProbeReasoner:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.calls = 0
-            def infer(self, query, memory=(), conversation=(), span=()):
+            def infer(
+                self,
+                query: str,
+                memory: tuple[RecalledMemory, ...] = (),
+                conversation: tuple[Turn, ...] = (),
+                span: tuple[SpanThread, ...] = (),
+            ) -> Inference | None:
                 self.calls += 1
                 if memory:
                     return Inference(answer="reasoned from recall")
                 return None
-            def infer_stream(self, query, memory=(), conversation=(), span=()):
-                yield ""
+            def infer_stream(
+                self,
+                query: str,
+                memory: tuple[RecalledMemory, ...] = (),
+                conversation: tuple[Turn, ...] = (),
+                span: tuple[SpanThread, ...] = (),
+            ) -> Iterator[str]:
+                _ = (query, memory, conversation, span)
+                return
+                yield  # pragma: no cover - keeps this a generator
 
         store = InMemorySemanticMemoryStore()
         _save_semantic(store, "promises without verification tend to fail")
@@ -162,18 +181,37 @@ class TestRecallChainToDecision:
     def test_weak_semantic_recall_reaches_live_reasoner(self):
         """A present-but-weak semantic memory (relevance < 0.6) is passed to a live
         reasoner, which can ground the belief from it."""
+        from collections.abc import Iterator
+
+        from jarvis.domain.conversation.conversation_context import Turn
+        from jarvis.domain.reasoning.reasoning_span import SpanThread
         from jarvis.domain.value_objects.inference import Inference
+        from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 
         class ProbeReasoner:
-            def __init__(self):
-                self.last_memory = []
-            def infer(self, query, memory=(), conversation=(), span=()):
+            def __init__(self) -> None:
+                self.last_memory: list[RecalledMemory] = []
+            def infer(
+                self,
+                query: str,
+                memory: tuple[RecalledMemory, ...] = (),
+                conversation: tuple[Turn, ...] = (),
+                span: tuple[SpanThread, ...] = (),
+            ) -> Inference | None:
                 self.last_memory = list(memory)
                 if memory:
                     return Inference(answer="reasoned from recall")
                 return None
-            def infer_stream(self, query, memory=(), conversation=(), span=()):
-                yield ""
+            def infer_stream(
+                self,
+                query: str,
+                memory: tuple[RecalledMemory, ...] = (),
+                conversation: tuple[Turn, ...] = (),
+                span: tuple[SpanThread, ...] = (),
+            ) -> Iterator[str]:
+                _ = (query, memory, conversation, span)
+                return
+                yield  # pragma: no cover - keeps this a generator
 
         store = InMemorySemanticMemoryStore()
         _save_semantic(store, "promises without verification tend to fail")

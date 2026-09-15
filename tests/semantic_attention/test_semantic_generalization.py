@@ -12,9 +12,12 @@ Everything runs against the live lifecycle (think -> abstract -> consolidate
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.services.abstraction import consolidate_semantic_memories
 from jarvis.domain.value_objects.confidence import Confidence
+from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from jarvis.jarvis import Jarvis
@@ -36,7 +39,7 @@ def _jarvis(
     return Jarvis(enable_recall=True, semantic_memory_store=store), store
 
 
-def _feed_episodes(j, triggers):
+def _feed_episodes(j: Jarvis, triggers: Sequence[str]) -> None:
     for t in triggers:
         j.think(t, evidence=[_evidence()])
 
@@ -89,7 +92,7 @@ class TestTier2Paraphrase:
 
     def test_semantic_recall_across_phrasing(self):
         """A lexically-different but conceptually-similar query surfaces the memory."""
-        j, store = _jarvis()
+        j, _ = _jarvis()
         _feed_episodes(j, [
             "supplier misses promised delivery dates",
             "vendor keeps missing delivery commitments",
@@ -216,17 +219,17 @@ class TestAdversarial:
 
     def test_abstraction_uses_vocabulary_not_hardcoded_pairs(self):
         """Concepts come from a general vocabulary, not memorised trigger pairs."""
-        from jarvis.domain.services.abstraction import _CONCEPT_MAP
+        from jarvis.domain.services.abstraction import CONCEPT_MAP
         # The map is used for new, unseen text too — not keyed to specific phrases.
-        assert _CONCEPT_MAP.get("promise") == "PROMISE"
-        assert _CONCEPT_MAP.get("missing") == "FAIL"
+        assert CONCEPT_MAP.get("promise") == "PROMISE"
+        assert CONCEPT_MAP.get("missing") == "FAIL"
         # And a completely unrelated sentence produces no concepts at all.
         from jarvis.domain.services.abstraction import conceptual_tokens
         assert conceptual_tokens("the zebra wrote a poem about quantum spin") == frozenset()
 
     def test_recall_is_retrieval_not_evidence(self):
         """Recalled semantic memory is context, never automatic belief grounding."""
-        j, store = _jarvis()
+        j, _ = _jarvis()
         _feed_episodes(j, [
             "supplier misses promised delivery dates",
             "vendor keeps missing delivery commitments",
@@ -235,15 +238,16 @@ class TestAdversarial:
         # Evidence count stays 0 for a query with no user evidence: recall alone
         # doesn't fabricate grounds.
         ep = j.think("some unrelated trigger with fresh evidence", evidence=[_evidence()])
+        assert ep.working_belief is not None
         belief = ep.working_belief
         assert all(e.source == EvidenceSource.USER_STATEMENT for e in belief.evidence)
 
     def test_no_embedding_decides_alone(self):
         """Without an embedder there is no embedding path; retrieval stays lexical."""
-        j, store = _jarvis()
+        j, _ = _jarvis()
         from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
         assert not isinstance(
-            j._executive._memory_retriever, EmbeddingMemoryRetriever
+            j.executive.memory_retriever, EmbeddingMemoryRetriever
         ), "Embedding retriever not installed by default"
 
     def test_lexically_similar_but_conceptually_different_no_conflate(self):
@@ -265,14 +269,13 @@ class TestAdversarial:
 class TestBoundedConsolidation:
     """Part 22: consolidation never rescales with the whole history."""
 
-    def _episodes(self, triggers):
+    def _episodes(self, triggers: Sequence[str]) -> list[EpisodeRecord]:
         from jarvis.domain.enums.episode_kind import EpisodeKind
         from jarvis.domain.enums.episode_state import EpisodeState
         from jarvis.domain.enums.trigger_origin import TriggerOrigin
-        from jarvis.domain.value_objects.episode_record import EpisodeRecord
         from jarvis.domain.value_objects.temporal_stability import TemporalStability
 
-        records = []
+        records: list[EpisodeRecord] = []
         for i, trigger in enumerate(triggers):
             records.append(
                 EpisodeRecord(

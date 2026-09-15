@@ -1,35 +1,13 @@
-"""Part 5–9: Semantic generalization depth (recurrence, analogies, transfer, lateral, categorical).
+﻿"""Part 5–9: Semantic generalization depth (recurrence, analogies, transfer, lateral, categorical).
 
 These tests probe whether Jarvo generalizes MEANING or only matches WORDS.
 """
-from datetime import UTC, datetime
-
-from jarvis.domain.enums.episode_kind import EpisodeKind
-from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.abstraction import abstract_patterns
 from jarvis.domain.value_objects.confidence import Confidence
-from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from jarvis.jarvis import Jarvis
-
-
-def _ep(trigger: str) -> EpisodeRecord:
-    now = datetime.now(UTC)
-    return EpisodeRecord(
-        episode_id=f"ep-{hash(trigger) & 0xFFFFFFFF:08x}",
-        trigger=trigger,
-        decision="concluded",
-        working_belief_id="b1",
-        outcome=EpisodeState.COMPLETED,
-        conclusion_confidence=Confidence(0.7),
-        conclusion_stability=Confidence(0.7),
-        origin=TriggerOrigin.COMPANION,
-        kind=EpisodeKind.CONCLUSION,
-        recorded_at=now,
-    )
 
 
 def _jarvo_with_store() -> tuple[Jarvis, InMemorySemanticMemoryStore]:
@@ -42,7 +20,7 @@ class TestRecurrenceAcrossSessions:
 
     def test_different_phrasing_reuses_conclusion(self):
         """Same topic, different words — does recall surface the prior belief?"""
-        j, store = _jarvo_with_store()
+        j, _ = _jarvo_with_store()
         # Day 1: establish belief with exact evidence
         j.think(
             "supplier broke its delivery promise",
@@ -66,7 +44,7 @@ class TestRecurrenceAcrossSessions:
 
     def test_same_trigger_reuses_conclusion(self):
         """Identical trigger → BRIEF attention reuses prior belief (TRUE positive)."""
-        j, store = _jarvo_with_store()
+        j, _ = _jarvo_with_store()
         j.think(
             "supplier broke its delivery promise",
             evidence=[
@@ -87,7 +65,7 @@ class TestCrossDomainAnalogies:
 
     def test_exact_same_words(self):
         """Control case: identical words → cluster."""
-        j, store = _jarvo_with_store()
+        j, _ = _jarvo_with_store()
         j.think(
             "overpromising without evidence leads to disappointment",
             evidence=[
@@ -105,7 +83,7 @@ class TestCrossDomainAnalogies:
     def test_structurally_analogous_episodes_with_shared_concepts_abstract(self):
         """Tier 3 analogies: 'overpromised' maps to PROMISE in all three triggers,
         so they correctly cluster under conceptual vocabulary."""
-        j, store = _jarvo_with_store()
+        j, _ = _jarvo_with_store()
         for trigger in [
             "the startup overpromised its launch timeline",
             "the contractor overpromised its build schedule",
@@ -135,7 +113,7 @@ class TestLateralConnections:
 
     def test_no_associative_link_across_domains(self):
         """No lateral connection forms across unrelated domains."""
-        j, store = _jarvo_with_store()
+        j, _ = _jarvo_with_store()
         j.think(
             "rain season affects harvest yield",
             evidence=[
@@ -187,20 +165,24 @@ class TestNoGroundingBeyondWords:
     def test_default_retriever_is_lexical_wrapped(self):
         """enable_recall=True wires DocumentMemoryRetriever over LexicalMemoryRetriever
         (documents layered onto the same lexical base) — still token overlap."""
+        from typing import cast
+
         from jarvis.infrastructure.document_memory_retriever import DocumentMemoryRetriever
         from jarvis.infrastructure.lexical_memory_retriever import LexicalMemoryRetriever
         j = Jarvis(enable_recall=True)
-        retriever = j._executive._memory_retriever
+        retriever = cast(DocumentMemoryRetriever, j.executive.memory_retriever)
         assert type(retriever) is DocumentMemoryRetriever
-        assert type(retriever._base) is LexicalMemoryRetriever
+        assert type(retriever.base) is LexicalMemoryRetriever
 
     def test_semantic_embedding_retriever_not_wired_by_default(self):
         """EmbeddingMemoryRetriever requires explicit wiring — not in composition root."""
         from jarvis.jarvis import Jarvis
         j = Jarvis()
-        assert j._semantic_memory_store is None, "No semantic store in bare default composition"
+        assert j.executive.semantic_memory_store is None, (
+            "No semantic store in bare default composition"
+        )
         from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
-        r = j._executive._memory_retriever
+        r = j.executive.memory_retriever
         assert not isinstance(r, EmbeddingMemoryRetriever), "Embedding retriever not default"
 
     def test_abstract_patterns_called_from_lifecycle_when_store_wired(self):
@@ -216,13 +198,13 @@ class TestNoGroundingBeyondWords:
         # But a bare Jarvis (no store) never touches the abstraction layer.
         j = Jarvis()
         j.think("supplier dismissed")
-        assert j._semantic_memory_store is None
+        assert j.executive.semantic_memory_store is None
 
     def test_semantic_store_wired_by_composition_roots(self):
         """Server and database composition roots now wire the semantic store."""
         base = __import__("pathlib").Path(__file__).resolve().parents[2] / "src" / "jarvis"
         import re
-        wired = []
+        wired: list[str] = []
         for rel in ("persistence.py", "interface/server.py", "infrastructure/sqlite_database.py"):
             text = (base / rel).read_text(encoding="utf-8")
             if re.search(r"semantic_memory_store", text) or re.search(r"SemanticMemoryStore", text):

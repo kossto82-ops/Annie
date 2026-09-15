@@ -220,23 +220,29 @@ class TestSemanticMemoryPersistence:
     def test_json_path_survives_restart(self, tmp_path: Path) -> None:
         first = Jarvis.persistent(tmp_path)
         self._seed_pattern(first)
-        assert first._semantic_memory_store is not None
-        assert first._semantic_memory_store.all_memories()
+        store = first.executive.semantic_memory_store
+        assert store is not None
+        assert store.all_memories()
         assert (tmp_path / "semantic.json").exists()
 
         second = Jarvis.persistent(tmp_path)
-        memories = second._semantic_memory_store.all_memories()
+        store = second.executive.semantic_memory_store
+        assert store is not None
+        memories = store.all_memories()
         assert memories, "semantic memories must survive a JSON restart"
         assert any("FAIL" in m.pattern for m in memories)
 
     def test_sqlite_path_survives_restart(self, tmp_path: Path) -> None:
         first = Jarvis.database(tmp_path)
         self._seed_pattern(first)
-        assert first._semantic_memory_store is not None
-        assert first._semantic_memory_store.all_memories()
+        store = first.executive.semantic_memory_store
+        assert store is not None
+        assert store.all_memories()
 
         second = Jarvis.database(tmp_path)
-        memories = second._semantic_memory_store.all_memories()
+        store = second.executive.semantic_memory_store
+        assert store is not None
+        memories = store.all_memories()
         assert memories, "semantic memories must survive an SQLite restart"
         assert any("FAIL" in m.pattern for m in memories)
 
@@ -246,8 +252,12 @@ class TestSemanticMemoryPersistence:
 
         first = create_jarvis(home=tmp_path)
         self._seed_pattern(first)
-        assert first._semantic_memory_store.all_memories()
+        store = first.executive.semantic_memory_store
+        assert store is not None
+        assert store.all_memories()
 
         second = create_jarvis(home=tmp_path)
-        memories = second._semantic_memory_store.all_memories()
+        store = second.executive.semantic_memory_store
+        assert store is not None
+        memories = store.all_memories()
         assert memories, "semantic memories must survive the command-center restart"

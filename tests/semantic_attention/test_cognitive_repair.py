@@ -411,24 +411,21 @@ class TestPhaseENegationAndVocabularyEdges:
 
     def test_signature_cache_is_bounded_and_clearable(self):
         from jarvis.domain.services.abstraction import (
-            _cached_signature,
+            cached_signature,
             clear_signature_cache,
             conceptual_tokens,
+            signature_cache_info,
         )
 
         clear_signature_cache()
         first = conceptual_tokens("he promised delivery")
-        assert _cached_signature(
-            _external("c1", "he promised delivery")
-        ) == first
+        assert cached_signature(_external("c1", "he promised delivery")) == first
         # Clearing never breaks subsequent calls
         clear_signature_cache()
-        assert _cached_signature(_external("c2", "he promised delivery")) == first
+        assert cached_signature(_external("c2", "he promised delivery")) == first
         # The lru is bounded at 1024 entries: 1025 distinct triggers cannot bloom.
-        from jarvis.domain.services.abstraction import _signature_for_trigger
-
         for i in range(1025):
-            _cached_signature(_external(f"bulk-{i}", f"token {i} failed"))
-        info = _signature_for_trigger.cache_info()
-        assert info.maxsize == 1024
-        assert info.currsize == 1024
+            cached_signature(_external(f"bulk-{i}", f"token {i} failed"))
+        _, _, maxsize, currsize = signature_cache_info()
+        assert maxsize == 1024
+        assert currsize == 1024

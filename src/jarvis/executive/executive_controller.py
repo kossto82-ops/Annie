@@ -262,6 +262,16 @@ class ExecutiveController:
         """The episode history store (read handle for observation and tests)."""
         return self._episodes
 
+    @property
+    def memory_retriever(self) -> MemoryRetriever | None:
+        """The active retrieval backer, or None when recall is disabled."""
+        return self._memory_retriever
+
+    @property
+    def semantic_memory_store(self) -> SemanticMemoryRepository | None:
+        """The semantic memory persistence handle, or None when not wired."""
+        return self._semantic_memory_store
+
     def _apply_adapted_knobs(self, knobs: CognitiveKnobs, reason: str) -> None:
         """Apply an evidence-justified adaptation and notify persistence.
 

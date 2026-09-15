@@ -256,9 +256,9 @@ class TestCuriosityCascadeInitiative:
             evidence=[_evidence("numbers show a clear trend")],
         )
         result = j.feel_curious()
-        assert result is None or result.impulse_kind.value in {
-            "evidence", "contested", "goal", "capability", "meta", "temporal",
-        }
+        assert result is None or (result.trigger.strip() and result.rationale.strip()), (
+            "An impulse must name what to investigate and why"
+        )
 
     def test_curiosity_impulse_can_be_pursued(self):
         """pursue() runs a reasoning episode from an impulse (or None when quiet)."""
@@ -296,7 +296,7 @@ class TestAttentionDevelopment:
         is judged insufficient (the second-order adaptation seam)."""
         j = Jarvis()
         before = j.knobs().grounded_confidence
-        feedback = j._executive.adapt_from_meta_observation()
+        feedback = j.executive.adapt_from_meta_observation()
         after = j.knobs().grounded_confidence
         assert feedback is None or isinstance(feedback, str)
         assert after >= before, "grounded_confidence can only rise or stay"

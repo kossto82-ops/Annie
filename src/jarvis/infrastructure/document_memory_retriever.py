@@ -39,6 +39,11 @@ class DocumentMemoryRetriever:
         self._base = base
         self._source = source
 
+    @property
+    def base(self) -> MemoryRetriever:
+        """The wrapped base retriever (read handle for inspection)."""
+        return self._base
+
     def recall(
         self,
         query: str,

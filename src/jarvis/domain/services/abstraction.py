@@ -49,7 +49,7 @@ _STEM_SUFFIXES: tuple[str, ...] = (
 )
 
 # Canonical concept tokens derived from common English verbs/adjectives
-_CONCEPT_MAP: dict[str, str] = {
+CONCEPT_MAP: dict[str, str] = {
     # Failure / breach
     "miss": "FAIL", "breach": "FAIL", "fail": "FAIL", "break": "FAIL",
     "negate": "FAIL", "violate": "FAIL", "missed": "FAIL", "failed": "FAIL",
@@ -177,15 +177,15 @@ def _normalise_token(word: str) -> str | None:
     if low in _ROLE_WORDS:
         return "ROLE"
     # Concept mapping (exact form first)
-    if low in _CONCEPT_MAP:
-        return _CONCEPT_MAP[low]
+    if low in CONCEPT_MAP:
+        return CONCEPT_MAP[low]
     # Stemmed candidates: try each suffix strip; the first stem that resolves wins
     # (e.g. "promises" -> "promise", "misses" -> "miss", not "promis"/"misse").
     for suffix in _STEM_SUFFIXES:
         if low.endswith(suffix) and len(low) - len(suffix) >= _MIN_CONCEPT_LEN:
             stemmed = low[: -len(suffix)]
-            if stemmed in _CONCEPT_MAP:
-                return _CONCEPT_MAP[stemmed]
+            if stemmed in CONCEPT_MAP:
+                return CONCEPT_MAP[stemmed]
     return None
 
 
@@ -260,7 +260,7 @@ def _signature_for_trigger(trigger: str) -> frozenset[str]:
     return conceptual_tokens(trigger)
 
 
-def _cached_signature(episode: EpisodeRecord) -> frozenset[str]:
+def cached_signature(episode: EpisodeRecord) -> frozenset[str]:
     """Return the signature for an episode's trigger (memoized per trigger)."""
     return episode_signature(episode.trigger)
 
@@ -268,6 +268,12 @@ def _cached_signature(episode: EpisodeRecord) -> frozenset[str]:
 def clear_signature_cache() -> None:
     """Clear the memoization cache (for tests or memory pressure)."""
     _signature_for_trigger.cache_clear()
+
+
+def signature_cache_info() -> tuple[int, int, int | None, int]:
+    """(hit, miss, maxsize, currsize) of the trigger-signature memo cache."""
+    info = _signature_for_trigger.cache_info()
+    return (info.hits, info.misses, info.maxsize, info.currsize)
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +304,7 @@ def _cluster_episodes(
         return []
 
     # Compute signatures
-    sigs = [_cached_signature(ep) for ep in episodes]
+    sigs = [cached_signature(ep) for ep in episodes]
 
     # Union-find for clustering
     parent = list(range(len(episodes)))
@@ -372,7 +378,7 @@ def abstract_patterns(
 
     for cluster_eps in clusters:
         # Compute shared concept set (entity-independent)
-        cluster_sigs = [_cached_signature(ep) for ep in cluster_eps]
+        cluster_sigs = [cached_signature(ep) for ep in cluster_eps]
         shared_concepts: frozenset[str] = cluster_sigs[0]
         for sig in cluster_sigs[1:]:
             shared_concepts = shared_concepts & sig
