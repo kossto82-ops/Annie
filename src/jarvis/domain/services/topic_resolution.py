@@ -9,14 +9,24 @@ and they remain visually distinct because each episode keeps its own trigger.
 Everything here is derived per read from a set of episodes: reversible,
 deterministic, and never a second authoritative learning state.
 
+Topic identity is *historical*: ``resolve_episodes`` groups every episode it is
+given, in first-seen order, and a topic's canonical signature is fixed by its
+chronological founder.  Identity never depends on the attention window (bounded
+attention is the attention service's concern, not this module's): whether older
+episodes are still inside the 50-episode attention horizon cannot change what a
+topic is.
+
 Compatibility rule: a new signature ``S`` joins an existing topic ``T`` when
     - ``S == T.canonical_signature`` (exact identity), or
-    - ``S`` contains ``T``'s canonical signature, sharing at least two concepts
-      (``|S ∩ T| >= 2 and T ⊆ S`` -- ``S`` states the topic plus one detail).
-A single-concept ``S`` can never absorb another topic (the intersection cannot
-reach two).  A signature compatible with more than one existing topic starts a
-new topic: ambiguity is safer than erroneous merging (uncertainty stays
-representable, hypotheses are not collapsed prematurely).
+    - ``S`` and ``T`` share at least two concepts and are nested
+      (``|S ∩ T| >= 2 and (S ⊆ T or T ⊆ S)``).
+
+The containment is symmetric: a narrower follow-up ("supplier failed to deliver"
+after "the vendor missed the delivery deadline") joins the same topic family as
+a broader follow-up.  A single-concept ``S`` can never absorb another topic (the
+intersection cannot reach two).  A signature compatible with more than one
+existing topic starts a new topic: ambiguity is safer than erroneous merging
+(uncertainty stays representable, hypotheses are not collapsed prematurely).
 """
 
 from __future__ import annotations
@@ -30,11 +40,6 @@ from jarvis.domain.value_objects.episode_record import EpisodeRecord
 
 # Ordering separator for a canonical-signature topic id, e.g. "DELIVER > FAIL".
 _SIGNATURE_JOIN = " > "
-
-# Resolution is only meaningful over a bounded, recent slice (bounded attention):
-# the caller feeds the window it cares about.  This default bounds a miss -- a
-# caller that passes the whole history still gets a bounded, cheap computation.
-_DEFAULT_WINDOW = 50
 
 
 def signature_of(trigger: str) -> frozenset[str]:
@@ -54,12 +59,12 @@ def topic_id_of(trigger: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class ResolvedTopic:
-    """One topic discovered in an episode window.
+    """One topic discovered in a set of episodes.
 
     ``topic_id`` is the stable identity (the topic's canonical signature, or the
     bootstrap trigger for concept-free topics).  ``canonical_signature`` is the
     concept set that bootstrapped the topic; it never changes as later episodes
-    join, keeping the identity stable across windows and restarts.
+    join, keeping the identity stable across the episode history and restarts.
     ``representative_trigger`` is *display* metadata only -- the most recent
     episode's trigger, meant to be shown, never used as identity.
     """
@@ -73,26 +78,35 @@ class ResolvedTopic:
 
 
 def _compatible(signature: frozenset[str], topic: ResolvedTopic) -> bool:
-    """Compatibility rule: exact identity, or substantive containment.
+    """Compatibility rule: exact identity, or symmetric nested containment.
 
-    Concept-free "signatures" never match anything: an episode that resolves to
-    no concepts has no topic identity beyond its own trigger, so concept-free
-    episodes never collapse into one topic.
+    ``S`` joins ``T`` when it shares at least two concepts and one signature is
+    contained in the other -- narrower and broader follow-ups both join the
+    topic family.  Concept-free "signatures" never match anything: an episode
+    that resolves to no concepts has no topic identity beyond its own trigger,
+    so concept-free episodes never collapse into one topic.
     """
     canonical = topic.canonical_signature
     if not signature or not canonical:
         return False
     if signature == canonical:
         return True
-    return len(signature & canonical) >= 2 and canonical <= signature
+    return len(signature & canonical) >= 2 and (
+        signature <= canonical or canonical <= signature
+    )
 
 
 def resolve_episodes(
     episodes: Sequence[EpisodeRecord],
-    *,
-    window: int = _DEFAULT_WINDOW,
 ) -> tuple[ResolvedTopic, ...]:
-    """Group a bounded window of episodes into topics, in first-seen order.
+    """Group episodes into topics, in first-seen order.
+
+    Resolution covers *everything* passed in -- the caller decides the scope.
+    The attention service passes the complete external history, so identity is
+    historical and stable under eviction: an episode leaving the attention
+    window cannot change a topic's canonical signature, membership, or
+    provenance (it is never deleted from the episode store).  A caller that
+    wants a smaller scope slices before calling.
 
     Pure and reversible: the same episodes always resolve to the same topics,
     and nothing is mutated.  ``external_count`` counts the episodes that came
@@ -103,7 +117,7 @@ def resolve_episodes(
         return ()
 
     topics: list[ResolvedTopic] = []
-    for record in episodes[-window:]:
+    for record in episodes:
         signature = signature_of(record.trigger)
         candidates = [t for t in topics if _compatible(signature, t)]
         if len(candidates) == 1:

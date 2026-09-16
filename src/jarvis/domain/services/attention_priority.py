@@ -4,10 +4,15 @@ Attention development means priorities that come from accumulated experience:
 topics Jarvis keeps returning to, keeps failing to settle, or keeps revising
 deserve more of its attention than a topic touched once and closed.
 
-Everything here is *derived* per read from a bounded window of the episode
-history -- no second authoritative learning state, no persisted scores, no
-unbounded accumulation.  Recomputing over the same history always yields the
-same ranking (reversible); calling it never mutates anything.
+Everything here is *derived* per read -- no second authoritative learning state,
+no persisted scores, no unbounded accumulation.  Recomputing over the same
+history always yields the same ranking (reversible); calling it never mutates
+anything.
+
+Topic Identity v3 (the architecture gate) separates identity from saliency:
+topic identity is resolved over the *complete* external episode history and
+never changes with the window; the ``window`` bounds the attention *signals*
+(count, unresolved, revised, recency) and the ranking only.
 """
 
 from __future__ import annotations
@@ -68,20 +73,26 @@ def derive_attention_priorities(
 
     Topics are grouped by *canonical identity* (conceptual signature), so
     lexically different mentions of the same underlying topic count as one
-    topic.  Only episodes triggered by the companion count toward the signals:
-    Jarvis's own narration must never feed its own attention, or attention
-    becomes a self-reinforcing loop.
+    topic.  Identity is resolved over the complete external history (Topic
+    Identity v3), so a topic seen long ago keeps the same canonical signature
+    when it resurfaces; the ``window`` only selects which episodes' signals
+    shape attention today.  Only episodes triggered by the companion count
+    toward the signals: Jarvis's own narration must never feed its own
+    attention, or attention becomes a self-reinforcing loop.
 
     A topic's priority grows with how often the companion revisits it, how often
     Jarvis failed to settle it on the last attempt, whether its belief kept
     changing, and how recently Jarvis last touched it.  Returns an empty tuple
     for a Jarvis with nothing external on record.
     """
-    records = [r for r in tuple(episodes)[-window:] if r.origin is TriggerOrigin.COMPANION]
-    if not records:
+    all_external = [
+        r for r in tuple(episodes) if r.origin is TriggerOrigin.COMPANION
+    ]
+    if not all_external:
         return ()
 
-    topics = resolve_episodes(records, window=window)
+    topics = resolve_episodes(all_external)
+    records = all_external[-window:]
     window_len = len(records)
     topics_by_id = {
         episode_id: topic.topic_id
@@ -108,10 +119,6 @@ def derive_attention_priorities(
         if concluded.value < _UNGROUNDED_CONFIDENCE:
             unresolved[topic] = unresolved.get(topic, 0) + 1
         last_index[topic] = index
-
-    representatives = {
-        topic.topic_id: topic.representative_trigger for topic in topics
-    }
 
     priorities: list[AttentionPriority] = []
     for topic, count in counts.items():
