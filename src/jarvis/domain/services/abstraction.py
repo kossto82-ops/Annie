@@ -153,6 +153,21 @@ _ROLE_WORDS: frozenset[str] = frozenset({
     "department", "manager", "lead", "director", "developer", "engineer",
 })
 
+# Explicit lemma restorations for e-drop / y→ies roots that suffix stripping
+# over-consumes ("causing" -> "caus", "deliveries" -> "deliveri"). Each entry
+# restores a stripped stem to a lemma that ALREADY exists in CONCEPT_MAP; the
+# concept assignment still comes from CONCEPT_MAP, so this layer is ontology-
+# neutral (estimate, create, receive, cancel, stop and give are deliberately
+# absent and therefore resolve to None).
+_E_DROP_LEMMAS: dict[str, str] = {
+    "caus": "cause",  # causing -> CAUSE
+    "secur": "secure",  # securing -> SAFE
+    "schedul": "schedule",  # scheduling -> TIME
+    "requir": "require",  # requiring -> REQUEST
+    "pric": "price",  # pricing -> COST
+    "deliveri": "delivery",  # deliveries -> DELIVER
+}
+
 # Negation markers
 _NEGATION: frozenset[str] = frozenset({"not", "never", "no", "nt"})
 
@@ -186,6 +201,9 @@ def _normalise_token(word: str) -> str | None:
             stemmed = low[: -len(suffix)]
             if stemmed in CONCEPT_MAP:
                 return CONCEPT_MAP[stemmed]
+            lemma = _E_DROP_LEMMAS.get(stemmed)
+            if lemma is not None and lemma in CONCEPT_MAP:
+                return CONCEPT_MAP[lemma]
     return None
 
 

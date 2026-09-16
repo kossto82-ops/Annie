@@ -216,7 +216,7 @@ class TestPhaseCCuriosityProvenance:
         impulse = j.wake()
         assert impulse is not None
         assert isinstance(impulse, CuriosityImpulse)
-        assert impulse.target_topic_id == "FAIL"
+        assert impulse.target_topic_id == "DELIVER > FAIL"
         assert impulse.representative_trigger == "the contractor keeps failing deliveries"
 
     def test_pursue_runs_the_real_representative_trigger(self):
@@ -229,7 +229,7 @@ class TestPhaseCCuriosityProvenance:
         assert ep is not None
         assert ep.trigger == "the contractor keeps failing deliveries"
         assert ep.origin.value == "curiosity"
-        assert ep.target_topic_id == "FAIL"
+        assert ep.target_topic_id == "DELIVER > FAIL"
 
     def test_target_topic_id_persists_across_json_restart(self, tmp_path: Path) -> None:
         first = Jarvis.database(tmp_path)
@@ -243,7 +243,7 @@ class TestPhaseCCuriosityProvenance:
         records = second.episodes.history()
         pursued = [r for r in records if r.origin is TriggerOrigin.CURIOSITY]
         assert pursued, "pursued episode must survive the restart"
-        assert pursued[-1].target_topic_id == "FAIL"
+        assert pursued[-1].target_topic_id == "DELIVER > FAIL"
         assert pursued[-1].trigger == "the contractor keeps failing deliveries"
 
     def test_target_topic_id_persists_in_sqlite(self, tmp_path: Path) -> None:
@@ -260,7 +260,7 @@ class TestPhaseCCuriosityProvenance:
             for r in second.episodes.history()
             if r.origin is TriggerOrigin.CURIOSITY
         ]
-        assert pursued and pursued[-1].target_topic_id == "FAIL"
+        assert pursued and pursued[-1].target_topic_id == "DELIVER > FAIL"
 
     def test_wake_still_threshold_bound(self):
         assert ATTEND_THRESHOLD > 0.0
