@@ -171,6 +171,30 @@ _E_DROP_LEMMAS: dict[str, str] = {
 # Negation markers
 _NEGATION: frozenset[str] = frozenset({"not", "never", "no", "nt"})
 
+# Contracted negation forms expanded before tokenization so the 'nt' family is
+# visible to the parity counter ("didn't" -> "did not"). The expansions insert
+# only words that carry no concept, so matter identity is unchanged. This also
+# prevents tokenization corruption: without expansion "won't" splits into
+# "won" -> SUCCEED, injecting false positive matter.
+_CONTRACTIONS: dict[str, str] = {
+    "didn't": "did not",
+    "doesn't": "does not",
+    "don't": "do not",
+    "isn't": "is not",
+    "wasn't": "was not",
+    "weren't": "were not",
+    "can't": "cannot",
+    "won't": "will not",
+}
+
+
+def _expand_contractions(text: str) -> str:
+    """Lowercase and expand known contracted negation forms."""
+    lowered = text.lower()
+    for contraction, full in _CONTRACTIONS.items():
+        lowered = lowered.replace(contraction, full)
+    return lowered
+
 # Sentence-start position threshold
 _MIN_CONCEPT_LEN = 2
 
@@ -232,7 +256,7 @@ def conceptual_tokens(text: str) -> frozenset[str]:
     Used both for episode clustering (pattern abstraction) and by the memory
     retriever to match a query against concept-token patterns.
     """
-    tokens = re.findall(r"\w+", text)
+    tokens = re.findall(r"\w+", _expand_contractions(text))
     concepts: set[str] = set()
     for tok in tokens:
         concept = _normalise_token(tok)
@@ -243,7 +267,7 @@ def conceptual_tokens(text: str) -> frozenset[str]:
 
 def valence(trigger: str) -> str:
     """Valence of a trigger: negative for fail-like, positive for succeed-like."""
-    tokens = re.findall(r"\w+", trigger)
+    tokens = re.findall(r"\w+", _expand_contractions(trigger))
     negated = _count_negation_markers(tokens) % 2 == 1
     has_fail = any(
         _normalise_token(t) == "FAIL" for t in tokens
