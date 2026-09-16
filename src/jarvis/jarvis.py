@@ -8,7 +8,7 @@ subscribe to cognitive events *before* thinking begins.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -170,6 +170,13 @@ from jarvis.domain.services.evidence_weighting import (
 )
 from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.model_compare import ModelComparator, ModelRun
+from jarvis.domain.services.temporal_applicability import (
+    QueryTemporalContext,
+    TemporalApplicability,
+)
+from jarvis.domain.services.temporal_applicability import (
+    temporal_applicability as _temporal_applicability_fn,
+)
 from jarvis.domain.services.temporal_reasoning import (
     BeliefChange,
     BeliefSnapshot,
@@ -1126,6 +1133,31 @@ knowledge_graph=knowledge_graph_store,
         if not claims:
             return None
         return self.think(subject, evidence=claims)
+
+    def temporal_applicability(
+        self,
+        evidence: Evidence,
+        query_context: QueryTemporalContext,
+        *,
+        reference_time: datetime | None = None,
+        recency_window: timedelta | None = None,
+    ) -> TemporalApplicability:
+        """Ask how temporally applicable ``evidence`` is to a question.
+
+        A pure, read-only query over the evidence's own timestamps and any
+        explicit temporal anchor in its content, evaluated at ``reference_time``
+        (default: now). The verdict is a label -- APPLICABLE / POSSIBLY_APPLICABLE
+        / STALE_FOR_QUERY / HISTORICAL / FUTURE / UNKNOWN -- never a truth or
+        falsity claim, and the evidence is never mutated, re-weighted, or
+        deleted here. ``recency_window`` is an explicit caller choice: without
+        it, age alone never degrades a CURRENT answer (no automatic expiration).
+        """
+        return _temporal_applicability_fn(
+            evidence,
+            reference_time=reference_time or datetime.now(UTC),
+            query_context=query_context,
+            recency_window=recency_window,
+        )
 
     @property
     def research_source(self) -> ResearchSource | None:
