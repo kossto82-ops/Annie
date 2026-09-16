@@ -6,6 +6,10 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
 from jarvis.domain.services.model_compare import ModelRun
+from jarvis.domain.value_objects.capability_outcome import (
+    CapabilityOutcome,
+    CapabilityOutcomeStatus,
+)
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.interface._shared import capability_not_ready
@@ -56,17 +60,25 @@ def _external_not_ready(jarvis: Jarvis, capability: str) -> Reply:
 
 
 def _external(jarvis: Jarvis, payload: Reply) -> Reply:
-    """Use the Internet capability: read, search, or report channels (Vision §38).
+    """Use the Internet capability: read, search, investigate, or report channels.
 
-    Jarvis never reaches the Internet on its own for every message -- this command is
-    the *deliberate* gate a surface (or an explicit outer decision layer) uses when
-    updated/outside information is actually needed. Results carry provenance back to
-    Jarvis; it does not write them to memory here. Offline/absent capability or a
-    fetch failure is a clear message, never a crash.
+    ``read``/``search`` are the *deliberate* gates a surface (or an explicit outer
+    decision layer) uses when updated/outside information is actually needed.
+    ``investigate`` is the orchestrated path: Jarvis *decides* which capability
+    (read vs search, source-preferred) fits the subject, executes it once, and
+    reports the honest outcome. Results carry provenance back to Jarvis; Jarvis
+    does not write them to memory here. Offline/absent capability or a fetch
+    failure is a clear message, never a crash and never negative evidence.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
-        return {"reply": "Use external with action 'read', 'search' or 'channels'.", "speak": False}
+        return {
+            "reply": (
+                "Use external with action 'read', 'search', 'investigate' "
+                "or 'channels'."
+            ),
+            "speak": False,
+        }
     if action in ("read", "search") and not jarvis.can_do(_EXTERNAL_CAPABILITIES[action]):
         return _external_not_ready(jarvis, _EXTERNAL_CAPABILITIES[action])
     try:
@@ -83,6 +95,8 @@ def _external(jarvis: Jarvis, payload: Reply) -> Reply:
                 for c in channels
             ]
             return {"reply": "External channels:\n" + "\n".join(lines), "speak": False}
+        if action == "investigate":
+            return _investigate(jarvis, payload)
         if action == "read":
             url = str(payload.get("url", "")).strip()
             if not url:
@@ -112,6 +126,120 @@ def _external(jarvis: Jarvis, payload: Reply) -> Reply:
     except Exception as error:  # noqa: BLE001 - the external-provider boundary
         return {"reply": _external_error(error), "speak": False}
     return {"reply": "Unknown external action.", "speak": False}
+
+
+def _investigate(jarvis: Jarvis, payload: Reply) -> Reply:
+    """The orchestrated external path: decide, execute once, report honestly.
+
+    ``investigate`` is where the capability decision lives behind a deliberate
+    surface gate: Jarvis (not the caller) decides whether outside information is
+    needed and which read/research capability fits, honors an explicit source
+    preference, and executes exactly one bounded request. The reply narrates the
+    honest outcome -- retrieved documents with provenance, an explicit
+    unavailable state, an honest empty, or a failure -- and never a belief.
+
+    With ``ingest=true`` the retrieved documents are *also* perceived into
+    provenance-bearing claims (through the ordinary perceiver) and fed through
+    one sanctioned cognitive episode: the working belief evolves only through
+    the existing evidence machinery, never by direct assignment. Off by default:
+    plain ``investigate`` stays read-only, as the capability gate defined it.
+    """
+    subject = str(payload.get("subject", "") or payload.get("query", "")).strip()
+    if not subject:
+        return {"reply": "Provide a subject to investigate.", "speak": False}
+    reason = str(payload.get("reason", "")).strip()
+    raw_hint = str(payload.get("source", "")).strip()
+    source_hint = raw_hint or None
+    decision = jarvis.decide_capability(
+        subject, reason=reason, source_hint=source_hint
+    )
+    if decision.needed and decision.capability is not None:
+        gate = (
+            _EXTERNAL_CAPABILITIES["read"]
+            if decision.capability.is_read
+            else _EXTERNAL_CAPABILITIES["search"]
+        )
+        if not jarvis.can_do(gate):
+            return _external_not_ready(jarvis, gate)
+    outcome = jarvis.execute_capability_decision(decision)
+    reply = _capability_outcome_reply(outcome)
+    if _is_ingest(payload) and outcome.status is CapabilityOutcomeStatus.SUCCESS:
+        episode = jarvis.learn_from_external(subject, outcome.documents)
+        if episode is not None:
+            reply["reply"] = (
+                f"{reply['reply']}\n\n"
+                "I also perceived these documents as claims and weighed them "
+                "through a cognitive episode — where the evidence pointed, I "
+                "updated accordingly. Nothing is believed more strongly than the "
+                "evidence allows."
+            )
+        else:
+            reply["reply"] = (
+                f"{reply['reply']}\n\n"
+                "I read them for claims, but the perceiver extracted no evidence "
+                "to weigh."
+            )
+    return reply
+
+
+def _is_ingest(payload: Reply) -> bool:
+    return str(payload.get("ingest", "")).strip().lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+
+
+def _capability_outcome_reply(outcome: CapabilityOutcome) -> Reply:
+    """Render an honest capability outcome, provenance kept and verdicts avoided."""
+    if outcome.status is CapabilityOutcomeStatus.NO_NEED:
+        return {
+            "reply": (
+                "I don't need outside information for that — it comes from what "
+                "I already know, so no external capability was called."
+            ),
+            "speak": False,
+        }
+    if outcome.status is CapabilityOutcomeStatus.UNAVAILABLE:
+        return {
+            "reply": (
+                f"I couldn't use that external capability right now: {outcome.message}. "
+                "That says the capability is unavailable, not that the information "
+                "doesn't exist."
+            ),
+            "speak": False,
+        }
+    if outcome.status is CapabilityOutcomeStatus.FAILED:
+        return {
+            "reply": (
+                f"I tried, but that external request failed ({outcome.message}). "
+                "My reasoning and memory are unaffected."
+            ),
+            "speak": False,
+        }
+    if outcome.status is CapabilityOutcomeStatus.EMPTY:
+        return {
+            "reply": (
+                "Nothing external came back for that — an honest 'nothing found', "
+                "not a claim either way."
+            ),
+            "speak": False,
+        }
+    docs = outcome.documents
+    parts: list[str] = []
+    for i, doc in enumerate(docs, 1):
+        head = doc.content.strip().replace("\n", " ")
+        if len(head) > 200:
+            head = head[:200].rstrip() + "…"
+        title = f" — {doc.title}" if doc.title else ""
+        parts.append(f"{i}. [{doc.source}]{title}\n   {doc.url or '(no url)'}\n   {head}")
+    return {
+        "reply": "I looked outside and found:\n" + "\n".join(parts),
+        "speak": False,
+        "count": len(docs),
+        "research_reason": outcome.request.reason,
+    }
 
 
 def _research(jarvis: Jarvis, payload: Reply) -> Reply:

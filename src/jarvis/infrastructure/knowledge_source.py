@@ -13,7 +13,12 @@ Jarvis wires neither, so the offline core is unchanged.
 from __future__ import annotations
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.retrieval.external_source import ExternalSource
 from jarvis.domain.retrieval.research_source import ResearchSource
+from jarvis.domain.services.capability_orchestration import (
+    decide_capability,
+    execute_capability,
+)
 from jarvis.domain.services.model_compare import ModelComparator
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -24,6 +29,56 @@ def _snip(text: str, limit: int = 220) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "…"
+
+
+class ExternalCapabilityKnowledgeSource:
+    """Turns one deliberate capability retrieval into candidate evidence.
+
+    This is the sanctioned bridge between the capability layer and an episode:
+    it rides the same deliberate-consult ``KnowledgeSource`` seam as deep
+    research, so Jarvis's cognition can *choose* to look outside when an episode
+    cannot conclude -- while the capability decision itself stays in the core
+    (:func:`decide_capability`) and the provider is only fetched, never trusted.
+
+    The retrieve-to-evidence step is the epistemic pipeline's, not the
+    orchestrator's: a successful retrieval becomes ONE piece of candidate
+    ``EXTERNAL_SOURCE`` evidence (weight, by default, below a companion's word),
+    and a no-need / unavailable / empty / failed retrieval returns ``None`` --
+    honest "nothing gathered", never negative evidence (D6, D8).
+    """
+
+    def __init__(self, source: ExternalSource, *, search_limit: int = 5) -> None:
+        self._source = source
+        self._search_limit = search_limit
+
+    @property
+    def kind(self) -> str:
+        return "capability research"
+
+    def gather(self, question: str) -> Evidence | None:
+        decision = decide_capability(question)
+        outcome = execute_capability(
+            decision, self._source, search_limit=self._search_limit
+        )
+        if not outcome.obtained:
+            return None  # no need / unavailable / empty / failed -- nothing is not a claim
+        docs = outcome.documents
+        sources = "; ".join(
+            doc.title or doc.source
+            for doc in docs[:3]
+            if (doc.title or doc.source or "").strip()
+        )
+        content = (
+            f"Found {len(docs)} external source(s)"
+            f"{(f' (incl. {_snip(sources, 140)})' if sources else '')}"
+        )
+        return Evidence(
+            content=content,
+            # Web-derived by an edge provider, unverified by Jarvis's own senses.
+            source=EvidenceSource.EXTERNAL_SOURCE,
+            weight=Confidence(0.4),
+            context=f"gathered deliberately (capability research) about: {question}",
+        )
 
 
 class ResearchKnowledgeSource:

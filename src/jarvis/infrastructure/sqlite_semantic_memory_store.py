@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from jarvis.domain.entities.semantic_memory import SemanticMemory
 from jarvis.domain.services.evidence_weighting import (
@@ -19,6 +19,63 @@ from jarvis.domain.services.evidence_weighting import (
 )
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.evidence_provenance import EvidenceProvenance
+
+
+def _provenance_dict(
+    provenance: EvidenceProvenance | None,
+) -> dict[str, object] | None:
+    if provenance is None:
+        return None
+    return {
+        "provider": provenance.provider,
+        "backend": provenance.backend,
+        "channel": provenance.channel,
+        "url": provenance.url,
+        "retrieved_at": (
+            provenance.retrieved_at.isoformat()
+            if provenance.retrieved_at is not None
+            else None
+        ),
+        "published_at": (
+            provenance.published_at.isoformat()
+            if provenance.published_at is not None
+            else None
+        ),
+        "updated_at": (
+            provenance.updated_at.isoformat()
+            if provenance.updated_at is not None
+            else None
+        ),
+    }
+
+
+def _provenance_from(data: object) -> EvidenceProvenance | None:
+    if not isinstance(data, dict):
+        return None
+    raw = cast(dict[str, object], data)
+
+    def _s(key: str) -> str | None:
+        value = raw.get(key)
+        return value if isinstance(value, str) else None
+
+    def _dt(value: object) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+
+    return EvidenceProvenance(
+        provider=_s("provider"),
+        backend=_s("backend"),
+        channel=_s("channel"),
+        url=_s("url"),
+        retrieved_at=_dt(raw.get("retrieved_at")),
+        published_at=_dt(raw.get("published_at")),
+        updated_at=_dt(raw.get("updated_at")),
+    )
 
 
 def serialise_memory(memory: SemanticMemory) -> dict[str, Any]:
@@ -41,6 +98,7 @@ def serialise_memory(memory: SemanticMemory) -> dict[str, Any]:
                 "weight": e.weight.value,
                 "supports": e.supports,
                 "context": e.context,
+                "provenance": _provenance_dict(e.provenance),
                 "observed_at": e.observed_at.isoformat(),
                 "id": e.id,
             }
@@ -77,6 +135,7 @@ def deserialise_memory(
             weight=Confidence(e_data["weight"]),
             supports=e_data["supports"],
             context=e_data.get("context"),
+            provenance=_provenance_from(e_data.get("provenance")),
             observed_at=datetime.fromisoformat(e_data["observed_at"]),
             id=e_data.get("id", ""),
         )

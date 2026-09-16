@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -25,7 +25,65 @@ from jarvis.domain.services.evidence_weighting import (
 )
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.evidence_provenance import EvidenceProvenance
 from jarvis.infrastructure.atomic_write import atomic_write_text
+
+
+def _serialise_provenance(
+    provenance: EvidenceProvenance | None,
+) -> dict[str, Any] | None:
+    if provenance is None:
+        return None
+    return {
+        "provider": provenance.provider,
+        "backend": provenance.backend,
+        "channel": provenance.channel,
+        "url": provenance.url,
+        "retrieved_at": (
+            provenance.retrieved_at.isoformat()
+            if provenance.retrieved_at is not None
+            else None
+        ),
+        "published_at": (
+            provenance.published_at.isoformat()
+            if provenance.published_at is not None
+            else None
+        ),
+        "updated_at": (
+            provenance.updated_at.isoformat()
+            if provenance.updated_at is not None
+            else None
+        ),
+    }
+
+
+def _deserialise_provenance(data: object) -> EvidenceProvenance | None:
+    if not isinstance(data, dict):
+        return None
+    raw = cast(dict[str, object], data)
+
+    def _s(key: str) -> str | None:
+        value = raw.get(key)
+        return value if isinstance(value, str) else None
+
+    return EvidenceProvenance(
+        provider=_s("provider"),
+        backend=_s("backend"),
+        channel=_s("channel"),
+        url=_s("url"),
+        retrieved_at=_maybe_dt(raw.get("retrieved_at")),
+        published_at=_maybe_dt(raw.get("published_at")),
+        updated_at=_maybe_dt(raw.get("updated_at")),
+    )
+
+
+def _maybe_dt(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def _serialise_evidence(evidence: Evidence) -> dict[str, Any]:
@@ -35,6 +93,7 @@ def _serialise_evidence(evidence: Evidence) -> dict[str, Any]:
         "weight": evidence.weight.value,
         "supports": evidence.supports,
         "context": evidence.context,
+        "provenance": _serialise_provenance(evidence.provenance),
         "observed_at": evidence.observed_at.isoformat(),
         "id": evidence.id,
     }
@@ -47,6 +106,7 @@ def _deserialise_evidence(data: dict[str, Any]) -> Evidence:
         weight=Confidence(data["weight"]),
         supports=data["supports"],
         context=data["context"],
+        provenance=_deserialise_provenance(data.get("provenance")),
         observed_at=datetime.fromisoformat(data["observed_at"]),
         id=data["id"],
     )

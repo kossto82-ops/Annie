@@ -17,6 +17,12 @@ Identity dimensions (all already on :class:`Evidence`, no parallel system):
   with which provenance. A different source (independent channel) or
   different provenance (independent origin story) is a different
   observation, even for identical content.
+* ``provenance`` -- structured external origin (URL/provider/retrieved_at).
+  Two identical claims perceived from *different* documents (different URLs
+  or providers) are independent confirmations and both count; the same
+  document re-perceived (same URL and retrieved_at) is a re-recording and
+  collapses. Provenance-less evidence (``None``) compares equal, preserving
+  the historical behaviour for internal/companion observations.
 * ``observed_at`` at **day granularity (UTC)** -- the source-event time.
   The same fingerprint re-recorded on the same day is a re-recording
   (double perception, retries, floods); the same fingerprint on different
@@ -58,5 +64,6 @@ def same_observation(first: Evidence, second: Evidence) -> bool:
         and first.source == second.source
         and first.supports == second.supports
         and (first.context or None) == (second.context or None)
+        and first.provenance == second.provenance
         and first.observed_at.date() == second.observed_at.date()
     )

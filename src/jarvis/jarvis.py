@@ -159,6 +159,11 @@ from jarvis.domain.services.attention_priority import (
 from jarvis.domain.services.capability_gap_observation import (
     CapabilityGap,
 )
+from jarvis.domain.services.capability_orchestration import (
+    CapabilityDecision,
+    decide_capability,
+    execute_capability,
+)
 from jarvis.domain.services.evidence_weighting import (
     DEFAULT_WEIGHTING,
     EvidenceWeightingPolicy,
@@ -186,6 +191,7 @@ from jarvis.domain.value_objects.action_recommendation import ActionRecommendati
 from jarvis.domain.value_objects.attention_priority import AttentionPriority
 from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.capability import Capability
+from jarvis.domain.value_objects.capability_outcome import CapabilityOutcome
 from jarvis.domain.value_objects.capability_recommendation import CapabilityRecommendation
 from jarvis.domain.value_objects.challenge import Challenge
 from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
@@ -236,6 +242,7 @@ from jarvis.infrastructure.capability_registry import (
 )
 from jarvis.infrastructure.document_memory_retriever import DocumentMemoryRetriever
 from jarvis.infrastructure.embedding_memory_retriever import EmbeddingMemoryRetriever
+from jarvis.infrastructure.external_evidence import claims_from_documents
 from jarvis.infrastructure.in_memory_belief_store import InMemoryBeliefStore
 from jarvis.infrastructure.in_memory_capability_store import InMemoryCapabilityStore
 from jarvis.infrastructure.in_memory_episode_store import InMemoryEpisodeStore
@@ -1034,6 +1041,91 @@ knowledge_graph=knowledge_graph_store,
         tells Jarvis what it *can* reach, not what to use.
         """
         return self._edges_surface.internet_channels()
+
+    def decide_capability(
+        self,
+        subject: str,
+        *,
+        reason: str = "",
+        source_hint: str | None = None,
+        known_internally: bool = False,
+    ) -> CapabilityDecision:
+        """Decide whether ``subject`` needs external information, and how.
+
+        This is the capability-decision step of the orchestration boundary: it
+        answers "do I need external information?", "which capability?", and
+        records *why* (an inspectable trace -- ``reason`` is not a belief and is
+        never written to semantic memory). Deterministic and offline. Cognition
+        decides; the capability layer only obtains (Vision §38).
+        """
+        return decide_capability(
+            subject,
+            reason=reason,
+            source_hint=source_hint,
+            known_internally=known_internally,
+        )
+
+    def execute_capability_decision(
+        self, decision: CapabilityDecision
+    ) -> CapabilityOutcome:
+        """Execute a decided capability through the wired provider, exactly once.
+
+        Returns an inspectable :class:`CapabilityOutcome` for every input --
+        including "no need", "no provider wired", an empty result or a failure --
+        and never raises, mutates cognition, or retries. Docs keep provenance.
+        """
+        return execute_capability(decision, self._external_source)
+
+    def capability_research(
+        self,
+        subject: str,
+        *,
+        reason: str = "",
+        source_hint: str | None = None,
+    ) -> CapabilityOutcome:
+        """Decide and execute one bounded external research request.
+
+        The one-call convenience for cognition/surfaces that deliberately want
+        outside information: decide -> execute -> honest :class:`CapabilityOutcome`
+        (documents only on success, provenance intact), with uncertainty and
+        failures returned to the caller -- never converted into beliefs.
+        """
+        decision = self.decide_capability(
+            subject, reason=reason, source_hint=source_hint
+        )
+        return self.execute_capability_decision(decision)
+
+    def external_claims(self, documents: Iterable[RetrievedDocument]) -> tuple[Evidence, ...]:
+        """Perceive retrieved documents into provenance-bearing claim evidence.
+
+        Retrieval stays retrieval: each document's content is run through the
+        existing perceiver (the same ``PerceptionSource`` that reads any other
+        raw text), and each claim that comes out is stamped with the document's
+        structured origin (URL / provider / backend / retrieved_at) so
+        "Source A claims X" stays distinct from "Jarvis believes X". This only
+        *produces* candidate evidence -- nothing is written to a belief or
+        memory until a caller deliberately runs it through the sanctioned
+        episode (:meth:`think`) or :meth:`learn_from_external`. Nothing the
+        perceiver makes of a hostile document ever becomes an instruction.
+        """
+        return claims_from_documents(documents, self.perception)
+
+    def learn_from_external(
+        self, subject: str, documents: Iterable[RetrievedDocument]
+    ) -> CognitiveEpisode | None:
+        """Feed fetched documents through the sanctioned epistemic pipeline.
+
+        The closed loop for external material: perceive each document into
+        provenance-bearing claims, then run one ordinary cognitive episode on
+        them -- claim evidence lands on the working belief exactly like any
+        other evidence, and confidence is derived by the existing machinery
+        (never set by this path). Returns ``None`` when the perceiver found no
+        claims -- an honest "nothing to learn", never a claim either way.
+        """
+        claims = self.external_claims(documents)
+        if not claims:
+            return None
+        return self.think(subject, evidence=claims)
 
     @property
     def research_source(self) -> ResearchSource | None:
