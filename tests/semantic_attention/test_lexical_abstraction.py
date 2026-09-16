@@ -163,7 +163,9 @@ class TestConceptualNormalization:
     def test_valence_detection(self):
         """Negation flips valence: 'not fail' = positive, 'fail' = negative."""
         assert valence("missed deadline") == "negative"
-        assert valence("delivered successfully") == "positive"
+        # 'delivered' is the matter (DELIVER); without an outcome marker and with
+        # 'successfully' unmapped, the reading is neutral (Decision B).
+        assert valence("delivered successfully") == "neutral"
         assert valence("not fail") == "positive"
         assert valence("not succeed") == "negative"
         assert valence("checked weather") == "neutral"

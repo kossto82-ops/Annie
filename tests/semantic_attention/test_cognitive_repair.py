@@ -393,9 +393,10 @@ class TestPhaseENegationAndVocabularyEdges:
         assert valence("he has not succeeded") == "negative"
         # Double marker self-cancels
         assert valence("he never not failed") == "negative"
-        # Zero markers leave the outcome column as-is
+        # Zero markers leave the outcome column as-is: fail stays negative, and a
+        # pure-matter verb (delivered) has no outcome marker to read (Decision B).
         assert valence("the supplier failed") == "negative"
-        assert valence("the supplier delivered") == "positive"
+        assert valence("the supplier delivered") == "neutral"
         # Placeholders unchanged
         assert valence("checked the weather") == "neutral"
 
