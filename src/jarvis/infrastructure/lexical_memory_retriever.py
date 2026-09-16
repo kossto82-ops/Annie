@@ -63,7 +63,7 @@ def _relevance(query_tokens: set[str], text: str) -> float:
     return len(shared) / len(query_tokens)
 
 
-def _concept_relevance(query: str, pattern: str) -> float:
+def concept_relevance(query: str, pattern: str) -> float:
     """Fraction of the query's concepts a semantic pattern shares -- 0.0 when disjoint.
 
     Semantic patterns are expressed as canonical concept tokens, not surface words;
@@ -128,7 +128,7 @@ class LexicalMemoryRetriever:
                 # concepts so lexically different phrasing surfaces the same memory.
                 relevance = max(
                     _relevance(query_tokens, match_text),
-                    _concept_relevance(query, match_text),
+                    concept_relevance(query, match_text),
                 )
             else:
                 relevance = _relevance(query_tokens, match_text)

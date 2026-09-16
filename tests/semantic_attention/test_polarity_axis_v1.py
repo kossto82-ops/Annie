@@ -30,7 +30,7 @@ from jarvis.domain.services.topic_resolution import resolve_episodes, signature_
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
-from jarvis.infrastructure.lexical_memory_retriever import _concept_relevance
+from jarvis.infrastructure.lexical_memory_retriever import concept_relevance
 
 
 def _external(episode_id: str, trigger: str) -> EpisodeRecord:
@@ -118,7 +118,7 @@ class TestTopicSeparation:
 class TestSemanticRecall:
     def test_positive_query_recalls_negative_pattern(self):
         # {DELIVER, SUCCEED} ∩ {DELIVER, FAIL} = {DELIVER} -> relevance > 0.
-        assert _concept_relevance("succeeded in delivering", "recurrence: DELIVER, FAIL") > 0
+        assert concept_relevance("succeeded in delivering", "recurrence: DELIVER, FAIL") > 0
 
 
 class TestRegressionCorpus:

@@ -6,6 +6,13 @@ search, yt-dlp, gh, ...). Jarvis treats it as an :class:`ExternalSource` -- fetc
 documents come back with provenance, and Jarvis (not Agent-Reach) decides and
 reasons over them (Vision §38).
 
+Retrieved content is *untrusted data*: a page or search summary may say anything,
+including instructions aimed at an agent. Nothing a document says ever elevates
+itself into an instruction, a belief, or a write -- Jarvis's epistemic pipeline
+perception/evidence weighting decides what, if anything, to make of it, and the
+provenance (provider/backend/url/retrieved_at) is kept so the source identity
+survives that weighing.
+
 Network stays at the edge (Vision §38, D8): the actual HTTP fetch is a `transport`
 callable, injectable so offline tests never touch the network and run
 deterministically.
@@ -123,21 +130,34 @@ class AgentReachSource:
         source: str,
         url: str | None,
         title: str | None = None,
+        backend: str,
         metadata: dict[str, str] | None = None,
     ) -> RetrievedDocument:
+        """Build a provenance-bearing document for one retrieval (never evidence).
+
+        ``source`` is the channel/type (``"web"``, ``"web_search"``); the
+        ``provider`` metadata names the Jarvis-side integrating provider
+        (``"agent_reach"``) and ``backend`` the concrete route actually used
+        (``"jina-reader"``, ``"llm-search"``, ``"jina-search"``) so "where did
+        this come from" is answerable without ever making the backend part of
+        identity (D8, Vision §8).
+        """
+        provenance = dict(metadata or {})
+        provenance.setdefault("provider", "agent_reach")
+        provenance.setdefault("backend", backend)
         return RetrievedDocument(
             content=content,
             source=source,
             url=url,
             title=title,
             retrieved_at=datetime.now(UTC),
-            metadata=metadata or {},
+            metadata=provenance,
         )
 
     def read(self, url: str) -> RetrievedDocument:
         """Fetch ``url`` to Markdown via Agent-Reach's web (Jina Reader) channel."""
         text = self._get(_JINA_READ + url).decode("utf-8")
-        return self._document(text, source="web", url=url)
+        return self._document(text, source="web", url=url, backend="jina-reader")
 
     def search(
         self, query: str, *, limit: int = 5
@@ -159,7 +179,10 @@ class AgentReachSource:
             if not text.strip():
                 return ()
             return (
-                self._document(text, source="web_search", url=None, title=query[:80]),
+                self._document(
+                    text, source="web_search", url=None, title=query[:80],
+                    backend="llm-search",
+                ),
             )
         if self._jina_search_key is None:
             raise RuntimeError(
@@ -177,7 +200,10 @@ class AgentReachSource:
         if not text.strip():
             return ()
         return (
-            self._document(text, source="web_search", url=None, title=query[:80]),
+            self._document(
+                text, source="web_search", url=None, title=query[:80],
+                backend="jina-search",
+            ),
         )
 
     def available_channels(self) -> tuple[ChannelStatus, ...]:

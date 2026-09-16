@@ -15,6 +15,14 @@ beliefs, memory, or knowledge stores directly. Its results carry provenance
 (source, url, title, metadata) so the core can later tell external information
 apart from internal knowledge (Vision §8).
 
+Retrieved content is **untrusted data**: a fetched page is a statement about the
+world, never a verdict about it and never an instruction to Jarvis. It enters the
+ordinary epistemic pipeline -- perception qualifies it as a candidate, the source
+weights it (external evidence counts for less than a companion's word), and the
+candidate becomes evidence only through that pipeline. Not even the *absence* of a
+result becomes evidence (failed or empty retrieval is honest "nothing", never
+"negative evidence").
+
 Separating the seam from any concrete provider keeps Jarvis working offline --
 an implementation may fail off when no provider is configured or reachable, and a
 regular conversation never needs it.
