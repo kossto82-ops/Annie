@@ -61,8 +61,9 @@ class TestPhaseATopicResolution:
         topics = resolve_episodes(episodes)
         assert len(topics) == 1
         topic = topics[0]
-        assert topic.canonical_signature == frozenset({"FAIL", "DELIVER"})
-        assert topic.topic_id == "DELIVER > FAIL"
+        # Identity is aboutness-only: FAIL is projected out of the signature.
+        assert topic.canonical_signature == frozenset({"DELIVER"})
+        assert topic.topic_id == "DELIVER"
         assert len(topic.source_episode_ids) == 3
 
     def test_representative_is_display_metadata(self):
@@ -73,37 +74,38 @@ class TestPhaseATopicResolution:
         topic = resolve_episodes(episodes)[0]
         # Latest episode's trigger is representative; identity stays canonical.
         assert topic.representative_trigger == "the vendor missed the delivery"
-        assert topic.topic_id == "DELIVER > FAIL"
-        assert topic.canonical_signature == frozenset({"FAIL", "DELIVER"})
+        assert topic.topic_id == "DELIVER"
+        assert topic.canonical_signature == frozenset({"DELIVER"})
 
     def test_detail_episode_joins_the_resolved_topic(self):
-        # S = {FAIL, DELIVER, TIME} ⊇ canonical T = {FAIL, DELIVER}, share >= 2.
+        # S = {DELIVER, TIME, COST} ⊇ canonical T = {DELIVER, TIME}, share >= 2.
         episodes = [
-            _external("1", "supplier failed to deliver"),
-            _external("2", "vendor missed the delivery deadline"),
+            _external("1", "supplier delivered on time"),
+            _external("2", "the delayed delivery cost us"),
         ]
         topics = resolve_episodes(episodes)
         assert len(topics) == 1
-        assert topics[0].canonical_signature == frozenset({"FAIL", "DELIVER"})
+        assert topics[0].canonical_signature == frozenset({"DELIVER", "TIME"})
 
     def test_single_concept_topics_never_merge(self):
-        # S = {FAIL} against canonical T = {FAIL, DELIVER}: the containment rule
-        # needs >= 2 shared concepts, so a lone concept can never pull topics
-        # together (and never absorbs another topic).
+        # S = {DELIVER} against canonical T = {DELIVER, TIME}: the containment
+        # rule needs >= 2 shared concepts, so a lone concept can never pull
+        # topics together (nor absorb another topic).  The {DELIVER} /
+        # {DELIVER, TIME} split is intended (Topic Identity v3, Model B).
         episodes = [
-            _external("1", "supplier failed to deliver"),
-            _external("2", "the vendor missed"),
+            _external("1", "supplier delivered"),
+            _external("2", "supplier delivered on time"),
         ]
         topics = resolve_episodes(episodes)
         assert len(topics) == 2
 
     def test_ambigous_signature_starts_a_new_topic(self):
-        # S = {FAIL, DELIVER, TIME, COST} ⊇ both T1={FAIL,DELIVER} and
+        # S = {DELIVER, TIME, COST} ⊇ both T1={DELIVER,TIME} and
         # T2={TIME,COST}: compatible with two topics -> S is its own topic.
         episodes = [
-            _external("1", "supplier failed to deliver"),
+            _external("1", "supplier delivered on time"),
             _external("2", "the schedule had a cost overrun"),
-            _external("3", "failed delivery cost the deadline"),
+            _external("3", "the delayed delivery cost us"),
         ]
         topics = resolve_episodes(episodes)
         assert len(topics) == 3
@@ -139,7 +141,7 @@ class TestPhaseBAttentionOnCanonicalTopics:
         priorities = derive_attention_priorities(history)
         assert len(priorities) == 1
         top = priorities[0]
-        assert top.topic == "DELIVER > FAIL"
+        assert top.topic == "DELIVER"
         assert top.episodes_on_topic == 3
         assert top.representative == "provider delivery failure"
 
@@ -216,7 +218,7 @@ class TestPhaseCCuriosityProvenance:
         impulse = j.wake()
         assert impulse is not None
         assert isinstance(impulse, CuriosityImpulse)
-        assert impulse.target_topic_id == "DELIVER > FAIL"
+        assert impulse.target_topic_id == "DELIVER"
         assert impulse.representative_trigger == "the contractor keeps failing deliveries"
 
     def test_pursue_runs_the_real_representative_trigger(self):
@@ -229,7 +231,7 @@ class TestPhaseCCuriosityProvenance:
         assert ep is not None
         assert ep.trigger == "the contractor keeps failing deliveries"
         assert ep.origin.value == "curiosity"
-        assert ep.target_topic_id == "DELIVER > FAIL"
+        assert ep.target_topic_id == "DELIVER"
 
     def test_target_topic_id_persists_across_json_restart(self, tmp_path: Path) -> None:
         first = Jarvis.database(tmp_path)
@@ -243,7 +245,7 @@ class TestPhaseCCuriosityProvenance:
         records = second.episodes.history()
         pursued = [r for r in records if r.origin is TriggerOrigin.CURIOSITY]
         assert pursued, "pursued episode must survive the restart"
-        assert pursued[-1].target_topic_id == "DELIVER > FAIL"
+        assert pursued[-1].target_topic_id == "DELIVER"
         assert pursued[-1].trigger == "the contractor keeps failing deliveries"
 
     def test_target_topic_id_persists_in_sqlite(self, tmp_path: Path) -> None:
@@ -260,7 +262,7 @@ class TestPhaseCCuriosityProvenance:
             for r in second.episodes.history()
             if r.origin is TriggerOrigin.CURIOSITY
         ]
-        assert pursued and pursued[-1].target_topic_id == "DELIVER > FAIL"
+        assert pursued and pursued[-1].target_topic_id == "DELIVER"
 
     def test_wake_still_threshold_bound(self):
         assert ATTEND_THRESHOLD > 0.0
@@ -280,7 +282,7 @@ class TestPhaseCCuriosityProvenance:
 
 
 def test_signature_of_is_public_and_pure():
-    assert signature_of("supplier failed to deliver") == frozenset({"FAIL", "DELIVER"})
+    assert signature_of("supplier failed to deliver") == frozenset({"DELIVER"})
     assert signature_of("nonsense quux") == frozenset()
 
 

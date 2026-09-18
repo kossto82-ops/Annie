@@ -117,13 +117,15 @@ class TestMatterOrthogonality:
 
 class TestTopicIdentity:
     def test_negation_does_not_create_a_topic(self) -> None:
-        assert topic_id_of("supplier failed to deliver") == "DELIVER > FAIL"
-        assert topic_id_of("supplier did not fail to deliver") == "DELIVER > FAIL"
-        assert topic_id_of("supplier didn't fail to deliver") == "DELIVER > FAIL"
+        # Identity is aboutness-only: FAIL is projected out, so the negated
+        # forms share the plain DELIVER topic with the bare matter mention.
+        assert topic_id_of("supplier failed to deliver") == "DELIVER"
+        assert topic_id_of("supplier did not fail to deliver") == "DELIVER"
+        assert topic_id_of("supplier didn't fail to deliver") == "DELIVER"
 
-    def test_outcome_topics_stay_separate(self) -> None:
-        assert topic_id_of("supplier succeeded in delivering") == "DELIVER > SUCCEED"
-        assert topic_id_of("supplier failed to deliver") != topic_id_of(
+    def test_outcome_forms_share_one_aboutness_topic(self) -> None:
+        assert topic_id_of("supplier succeeded in delivering") == "DELIVER"
+        assert topic_id_of("supplier failed to deliver") == topic_id_of(
             "supplier succeeded in delivering"
         )
 

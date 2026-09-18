@@ -6,6 +6,13 @@ trigger is only ever *display* metadata: "the kitchen lights" and "the overhead
 light in the kitchen" are the same topic if they resolve to the same concepts,
 and they remain visually distinct because each episode keeps its own trigger.
 
+Identity is *aboutness-only* (Polarity Axis v1, Decision B): the outcome tokens
+FAIL/SUCCEED describe *how* the matter went, not *what* it was about, so they
+are projected out of the identity signature.  "supplier failed to deliver" and
+"supplier succeeded in delivering" are the same topic (DELIVER).  The full
+``conceptual_tokens`` set keeps polarity for semantic-memory clustering and
+pattern keys; only the topic-identity projection strips it.
+
 Everything here is derived per read from a set of episodes: reversible,
 deterministic, and never a second authoritative learning state.
 
@@ -21,9 +28,9 @@ Compatibility rule: a new signature ``S`` joins an existing topic ``T`` when
     - ``S`` and ``T`` share at least two concepts and are nested
       (``|S ∩ T| >= 2 and (S ⊆ T or T ⊆ S)``).
 
-The containment is symmetric: a narrower follow-up ("supplier failed to deliver"
-after "the vendor missed the delivery deadline") joins the same topic family as
-a broader follow-up.  A single-concept ``S`` can never absorb another topic (the
+The containment is symmetric: a narrower follow-up ("supplier delivered on time"
+after "the delayed delivery cost us") joins the same topic family as a broader
+follow-up.  A single-concept ``S`` can never absorb another topic (the
 intersection cannot reach two).  A signature compatible with more than one
 existing topic starts a new topic: ambiguity is safer than erroneous merging
 (uncertainty stays representable, hypotheses are not collapsed prematurely).
@@ -38,13 +45,24 @@ from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.services.abstraction import conceptual_tokens
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 
-# Ordering separator for a canonical-signature topic id, e.g. "DELIVER > FAIL".
+# Ordering separator for a canonical-signature topic id, e.g. "DELIVER > TIME".
 _SIGNATURE_JOIN = " > "
+
+# Outcome tokens describe *how* the matter went, never *what* it was about.
+# Identity is aboutness-only, so these are excluded from the identity signature
+# while remaining in ``conceptual_tokens`` (semantic memory, pattern keys).
+_OUTCOME_TOKENS: frozenset[str] = frozenset({"FAIL", "SUCCEED"})
 
 
 def signature_of(trigger: str) -> frozenset[str]:
-    """The canonical concept set of a trigger (entity-independent)."""
-    return conceptual_tokens(trigger)
+    """The canonical aboutness set of a trigger (entity-independent).
+
+    Polarity tokens (FAIL/SUCCEED) are projected out: identity must not fork on
+    whether the delivery failed or succeeded.  Concept-free and polarity-only
+    triggers both resolve to the empty aboutness set and fall back to the raw
+    trigger as their topic id.
+    """
+    return conceptual_tokens(trigger) - _OUTCOME_TOKENS
 
 
 def topic_id_of(trigger: str) -> str:

@@ -158,7 +158,7 @@ class TestAttentionPriorityDevelopment:
         top = priorities[0]
         # Topic identity is the canonical concept signature, never the raw
         # trigger; the representative is the real trigger shown to the companion.
-        assert top.topic == "DELIVER > FAIL"
+        assert top.topic == "DELIVER"
         assert top.representative == "the contractor keeps failing deliveries"
         assert top.episodes_on_topic == 4
         assert top.priority >= ATTEND_THRESHOLD
