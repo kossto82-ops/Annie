@@ -135,7 +135,10 @@ from jarvis.domain.perception.perception_source import PerceptionSource
 from jarvis.domain.perception.speech_perception import SpeechPerceptionSource
 from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.reasoning.reasoning_span import ReasoningSpan, SpanThread
-from jarvis.domain.repositories.belief_repository import BeliefRepository
+from jarvis.domain.repositories.belief_repository import (
+    BeliefRepository,
+    resolve_belief_for,
+)
 from jarvis.domain.repositories.capability_repository import CapabilityRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraphRepository
@@ -236,7 +239,6 @@ from jarvis.domain.value_objects.unresolved_item import UnresolvedItem, Unresolv
 from jarvis.edges import EdgesSurface
 from jarvis.executive.executive_controller import (
     ExecutiveController,
-    working_statement,
 )
 from jarvis.goal_surface import GoalSurface
 from jarvis.infrastructure.capability_registry import (
@@ -2466,7 +2468,7 @@ knowledge_graph=knowledge_graph_store,
         derived, never set. Returns the updated belief, or None if Jarvis holds no view on
         ``trigger`` to confirm.
         """
-        if self.beliefs.get_by_statement(working_statement(trigger)) is None:
+        if resolve_belief_for(self.beliefs, trigger) is None:
             return None
         # The verdict also updates the reasoning span: affirming seals the thread (the
         # belief loop now owns it), correcting flags it as disputed so the reasoner
@@ -2609,7 +2611,7 @@ knowledge_graph=knowledge_graph_store,
         if not records:
             return None
         record = records[0]
-        live = self.beliefs.get_by_statement(working_statement(record.trigger))
+        live = resolve_belief_for(self.beliefs, record.trigger)
         if live is None:
             candidates = self.beliefs.beliefs_about(subject)
             live = candidates[0] if candidates else None

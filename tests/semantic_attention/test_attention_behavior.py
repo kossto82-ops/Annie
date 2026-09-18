@@ -61,11 +61,20 @@ class TestAttentionRoutingNovelty:
         assert ep2.attention == Attention.FULL, "Different trigger should be FULL"
 
     def test_partial_lexical_overlap_is_full(self):
-        """New trigger sharing some words but avoiding the exact statement -> FULL."""
+        """A genuinely different trigger (empty concept signature) is FULL."""
+        j = Jarvis(enable_recall=True)
+        j.think(_TRIGGER, evidence=[_evidence()])
+        ep2 = j.think("billing reconciliation drifted after the quarter end")
+        assert ep2.attention == Attention.FULL
+
+    def test_topic_convergent_paraphrase_is_brief(self):
+        """A different surface form of the SAME matter converges on the topic-anchored
+        belief (concepts {PROMISE,TIME} nest inside {PROMISE,DELIVER,TIME}), so it is
+        already held confidently and gets BRIEF attention (Model B addressing v1)."""
         j = Jarvis(enable_recall=True)
         j.think(_TRIGGER, evidence=[_evidence()])
         ep2 = j.think("supplier promised delivery dates but failed them")
-        assert ep2.attention == Attention.FULL
+        assert ep2.attention == Attention.BRIEF
 
     def test_identical_lexical_overlap_is_brief(self):
         """Identical trigger text -> same working statement -> BRIEF."""

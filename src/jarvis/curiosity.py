@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from jarvis.cognitive import run_episode
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.repositories.belief_repository import resolve_belief_for
 from jarvis.domain.services.attention_priority import (
     ATTEND_THRESHOLD,
     derive_attention_priorities,
@@ -23,7 +24,6 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
-from jarvis.executive.executive_controller import working_statement
 from jarvis.goals import (
     first_unreached_part,
     is_exhausted_stuck_goal,
@@ -266,7 +266,7 @@ def ask_about(jarvis: Jarvis, topic: str) -> str | None:
     """Voice an unresolved tension so the companion can settle it (Vision §18,
     §37), or None when Jarvis holds no contested belief about ``topic``.
     """
-    belief = jarvis.beliefs.get_by_statement(working_statement(topic))
+    belief = resolve_belief_for(jarvis.beliefs, topic)
     if belief is None or not _is_contested(belief):
         return None
     explanation = belief.explain()

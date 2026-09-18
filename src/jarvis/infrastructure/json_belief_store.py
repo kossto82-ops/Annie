@@ -19,6 +19,7 @@ from typing import Any, cast
 
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.repositories.belief_repository import belief_registry
 from jarvis.domain.services.evidence_weighting import (
     DEFAULT_WEIGHTING,
     EvidenceWeightingPolicy,
@@ -145,6 +146,9 @@ class JsonBeliefStore:
         self._weighting_policy = weighting_policy or DEFAULT_WEIGHTING
         self._by_statement: dict[str, Belief] = {}
         self._load()
+
+    def get_by_topic(self, topic: str) -> Belief | None:
+        return belief_registry(self._by_statement.values()).get(topic)
 
     def get_by_statement(self, statement: str) -> Belief | None:
         return self._by_statement.get(statement)

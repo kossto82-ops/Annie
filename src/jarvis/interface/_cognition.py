@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING
 
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.deliberation_value import DeliberationValue
-from jarvis.executive.executive_controller import subject_of, working_statement
+from jarvis.domain.repositories.belief_repository import resolve_belief_for
+from jarvis.executive.executive_controller import subject_of
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.language_model_registry import build_language_model
 from jarvis.infrastructure.perceiver_factory import describe
@@ -37,7 +38,7 @@ def _explain(jarvis: Jarvis, payload: Reply) -> Reply:
     topic = str(payload.get("topic", "")).strip()
     if not topic:
         return {"reply": "Name a topic and I'll explain what I believe about it.", "speak": False}
-    belief = jarvis.beliefs.get_by_statement(working_statement(topic))
+    belief = resolve_belief_for(jarvis.beliefs, topic)
     if belief is None:
         return {
             "reply": jarvis.voice.phrase(f'I don\'t hold a view on "{topic}" yet.', like=topic),

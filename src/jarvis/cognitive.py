@@ -14,6 +14,7 @@ from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.repositories.belief_repository import resolve_belief_for
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.hypothesis_generation import generate_hypotheses
 from jarvis.domain.services.reflection import find_reflections
@@ -298,8 +299,9 @@ def act_on_insight(jarvis: Jarvis) -> ActionRecommendation | None:
     from jarvis.actions import recommend_action as _recommend_action
     from jarvis.domain.value_objects.action import Action as ActionVO
     for finding in reflect(jarvis):
-        statement = working_statement(_insight_trigger(finding.observation))
-        belief = jarvis.beliefs.get_by_statement(statement)
+        belief = resolve_belief_for(
+            jarvis.beliefs, _insight_trigger(finding.observation)
+        )
         if belief is not None and belief.confidence.value >= jarvis.knobs().insight_confidence:
             action = ActionVO(
                 description=f'verify that "{finding.observation}" still holds',

@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.repositories.belief_repository import belief_registry
 
 
 class InMemoryBeliefStore:
@@ -21,6 +22,9 @@ class InMemoryBeliefStore:
 
     def __init__(self) -> None:
         self._by_statement: dict[str, Belief] = {}
+
+    def get_by_topic(self, topic: str) -> Belief | None:
+        return belief_registry(self._by_statement.values()).get(topic)
 
     def get_by_statement(self, statement: str) -> Belief | None:
         return self._by_statement.get(statement)

@@ -31,7 +31,11 @@ from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.reasoning.reasoning_span import SpanThread
-from jarvis.domain.repositories.belief_repository import BeliefRepository
+from jarvis.domain.repositories.belief_repository import (
+    WORKING_PREFIX,
+    BeliefRepository,
+    resolve_belief_for,
+)
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
 from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraphRepository
 from jarvis.domain.repositories.semantic_memory_repository import SemanticMemoryRepository
@@ -173,28 +177,23 @@ def remembered_inference(belief: Belief) -> Evidence | None:
 LEARNED_HABIT_THRESHOLD = 0.5
 
 
-# The internal identity prefix for a working conclusion. It disambiguates working
-# beliefs from other belief kinds and keeps retrieval deterministic (D17) — but it is
-# machine bookkeeping, never shown to the companion (use `subject_of` at the surface).
-_WORKING_PREFIX = "Working conclusion about: "
-
-
 def working_statement(trigger: str) -> str:
     """The statement of the belief an episode reasons toward for ``trigger``.
 
     Deterministic, so the same trigger retrieves the same belief across episodes.
     """
-    return f"{_WORKING_PREFIX}{trigger}"
+    return f"{WORKING_PREFIX}{trigger}"
 
 
 def subject_of(statement: str) -> str:
     """The natural subject behind a working-conclusion statement, for display.
 
-    Strips the internal `_WORKING_PREFIX` so the surface can name what a belief is
-    *about* in the companion's own words, never the machine label. A statement without
-    the prefix (a self-tendency, a companion trait) is returned unchanged.
+    Strips the internal prefix (see ``belief_repository.WORKING_PREFIX``) so the
+    surface can name what a belief is *about* in the companion's own words, never
+    the machine label. A statement without the prefix (a self-tendency, a
+    companion trait) is returned unchanged.
     """
-    return statement.removeprefix(_WORKING_PREFIX)
+    return statement.removeprefix(WORKING_PREFIX)
 
 
 def _assess_attention(
@@ -746,7 +745,7 @@ class ExecutiveController:
 
     def _resolve_working_belief(self, episode: CognitiveEpisode) -> Belief:
         statement = working_statement(episode.trigger)
-        remembered = self._beliefs.get_by_statement(statement)
+        remembered = resolve_belief_for(self._beliefs, episode.trigger)
         if remembered is not None:
             episode.adopt_working_belief(remembered)
             return remembered
