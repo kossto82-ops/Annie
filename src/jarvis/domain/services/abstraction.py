@@ -59,7 +59,7 @@ CONCEPT_MAP: dict[str, str] = {
     "succeed": "SUCCEED", "meet": "SUCCEED", "achieve": "SUCCEED",
     "accomplish": "SUCCEED", "achieved": "SUCCEED",
     "succeeded": "SUCCEED", "met": "SUCCEED", "accomplished": "SUCCEED",
-    "achieving": "SUCCEED",
+    "achieving": "SUCCEED", "successfully": "SUCCEED",
     # Delivery / provision
     "deliver": "DELIVER", "delivered": "DELIVER", "delivering": "DELIVER",
     "supply": "DELIVER", "provide": "DELIVER",
@@ -122,7 +122,7 @@ CONCEPT_MAP: dict[str, str] = {
     "overpromised": "PROMISE", "overpromise": "PROMISE",
     "underpromised": "PROMISE", "underdelivered": "DELIVER",
     "overdelivered": "DELIVER", "misdelivered": "DELIVER",
-    "restarted": "SUCCEED", "redelivered": "DELIVER",
+    "redelivered": "DELIVER",
     "preempted": "PREVENT",
     "delivery": "DELIVER", "failure": "FAIL",
     "commitment": "PROMISE", "deadlines": "TIME",
@@ -168,10 +168,12 @@ _E_DROP_LEMMAS: dict[str, str] = {
     "deliveri": "delivery",  # deliveries -> DELIVER
 }
 
-# Negation markers
-_NEGATION: frozenset[str] = frozenset({"not", "never", "no", "nt"})
+# Negation markers: the single authoritative contract shared with the keyword
+# perception seam. "can't" expands to "cannot", so the canonical marker set is
+# the full-form words only. Parity of these markers decides clause polarity.
+NEGATION_MARKERS: frozenset[str] = frozenset({"not", "never", "no", "cannot"})
 
-# Contracted negation forms expanded before tokenization so the 'nt' family is
+# Contracted negation forms expanded before tokenization so their negation is
 # visible to the parity counter ("didn't" -> "did not"). The expansions insert
 # only words that carry no concept, so matter identity is unchanged. This also
 # prevents tokenization corruption: without expansion "won't" splits into
@@ -185,10 +187,14 @@ _CONTRACTIONS: dict[str, str] = {
     "weren't": "were not",
     "can't": "cannot",
     "won't": "will not",
+    "couldn't": "could not",
+    "shouldn't": "should not",
+    "wouldn't": "would not",
+    "mustn't": "must not",
 }
 
 
-def _expand_contractions(text: str) -> str:
+def expand_contractions(text: str) -> str:
     """Lowercase and expand known contracted negation forms."""
     lowered = text.lower()
     for contraction, full in _CONTRACTIONS.items():
@@ -209,9 +215,9 @@ def _normalise_token(word: str) -> str | None:
     Returns the canonical concept token for words that map, else None.
     """
     low = word.lower()
-    # Negation detection
-    if low in _NEGATION:
-        return None  # caller handles negation separately
+    # Negation detection (callers handle the marker parity separately)
+    if low in NEGATION_MARKERS:
+        return None
     # Role detection
     if low in _ROLE_WORDS:
         return "ROLE"
@@ -238,7 +244,7 @@ def _count_negation_markers(words: list[str]) -> int:
     three negations, so per parity (odd -> negated) it reads positively, and
     the alternating count is a first-class signal rather than a single flag.
     """
-    return sum(1 for w in words if w.lower() in _NEGATION)
+    return sum(1 for w in words if w.lower() in NEGATION_MARKERS)
 
 
 def episode_signature(trigger: str) -> frozenset[str]:
@@ -256,7 +262,7 @@ def conceptual_tokens(text: str) -> frozenset[str]:
     Used both for episode clustering (pattern abstraction) and by the memory
     retriever to match a query against concept-token patterns.
     """
-    tokens = re.findall(r"\w+", _expand_contractions(text))
+    tokens = re.findall(r"\w+", expand_contractions(text))
     concepts: set[str] = set()
     for tok in tokens:
         concept = _normalise_token(tok)
@@ -267,7 +273,7 @@ def conceptual_tokens(text: str) -> frozenset[str]:
 
 def valence(trigger: str) -> str:
     """Valence of a trigger: negative for fail-like, positive for succeed-like."""
-    tokens = re.findall(r"\w+", _expand_contractions(trigger))
+    tokens = re.findall(r"\w+", expand_contractions(trigger))
     negated = _count_negation_markers(tokens) % 2 == 1
     has_fail = any(
         _normalise_token(t) == "FAIL" for t in tokens
