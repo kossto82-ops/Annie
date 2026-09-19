@@ -5,17 +5,23 @@ span, not a fresh stateless model call: the span carries threads across turns so
 follow-ups continue the discussion, and it is revised by deterministic domain signals
 only -- a new answered query opens/moves a thread, ``confirm`` seals or disputes it.
 The language model proposes content; it never decides thread state (Vision §38, D6).
+
+Increment 166 continues the same seam through the episode path: a full cognitive
+episode threads its inference back into the span, so the next episode's reasoning
+carries the previous proposal.
 """
 
 from __future__ import annotations
 
 from typing import cast
 
+from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.reasoning.reasoning_span import (
     ReasoningSpan,
     SpanThread,
     ThreadPosture,
 )
+from jarvis.infrastructure.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from jarvis.infrastructure.llm_reasoner import LlmReasoner
 from jarvis.infrastructure.scripted_language_model import ScriptedLanguageModel
 from jarvis.interface.command_center import handle, snapshot
@@ -217,16 +223,6 @@ class _FailingModel:
         raise RuntimeError("provider down")
 
 
-class _RecordingModel:
-    def __init__(self, answers: list[str]) -> None:
-        self._answers = list(answers)
-        self.prompts: list[str] = []
-
-    def complete(self, prompt: str) -> str:
-        self.prompts.append(prompt)
-        return self._answers.pop(0)
-
-
 class TestEpisodePathReasoningSpan:
     def test_two_episode_continuity(self) -> None:
         model = _RecordingModel(["answer A", "answer B"])
@@ -251,34 +247,51 @@ class TestEpisodePathReasoningSpan:
         model = _RecordingModel(["answer A", "answer B"])
         jarvis = Jarvis(reasoner=LlmReasoner(model))
         episode_a = jarvis.think("trigger A")
-        from jarvis.domain.enums.evidence_source import EvidenceSource
-
+        belief_a = episode_a.working_belief
+        assert belief_a is not None
         evidence_contents = [
             (e.content, e.source)
-            for e in episode_a.working_belief.evidence
+            for e in belief_a.evidence
             if e.supports
         ]
         assert len(evidence_contents) == 1
         assert evidence_contents[0][1] is EvidenceSource.INFERENCE
         episode_b = jarvis.think("trigger B")
+        belief_b = episode_b.working_belief
+        assert belief_b is not None
         evidence_contents_b = [
             (e.content, e.source)
-            for e in episode_b.working_belief.evidence
+            for e in belief_b.evidence
             if e.supports
         ]
         assert len(evidence_contents_b) == 1
         assert evidence_contents_b[0][1] is EvidenceSource.INFERENCE
 
     def test_no_semantic_memory_leakage(self) -> None:
-        model = _RecordingModel(["answer A"])
-        jarvis = Jarvis(reasoner=LlmReasoner(model))
-        jarvis.think("trigger A")
-        span = jarvis.reasoning_span()
-        store = jarvis.semantic_memories
-        if store is not None:
-            for mem in store.all_memories():
-                for thread in span:
-                    assert thread.statement not in mem.content
+        marker = "UNIQUE_SPAN_THREAD_MARKER"
+        store = InMemorySemanticMemoryStore()
+        # Call #1: the topic episodes' answer. Call #2: a distinctive statement that
+        # rides the reasoning span. Call #3: the follow-up answer.
+        model = _RecordingModel(["it usually fails", marker, "a calm reply"])
+        jarvis = Jarvis(reasoner=LlmReasoner(model), semantic_memory_store=store)
+        # Three episodes on one topic: consolidation (min_sources=3) must form a
+        # semantic memory, so the store below is genuinely populated and active.
+        for _ in range(3):
+            jarvis.think("delivery keeps failing")
+        # A new topic threads a distinctive statement into the span, and the next
+        # episode's inference actually receives it inside <reasoning_span>.
+        jarvis.think("garden carmine hues")
+        jarvis.think("marble undercarriage hum")
+        assert len(model.prompts) == 3
+        assert "<reasoning_span>" in model.prompts[2]
+        assert marker in model.prompts[2]
+        # E7: the span thread content must never reach the semantic-memory store,
+        # even though the store is actively written by legitimate consolidation.
+        stored = store.all_memories()
+        assert stored, "consolidation should have created a memory from the topic episodes"
+        for memory in stored:
+            assert marker not in memory.pattern
+            assert all(marker not in item.content for item in memory.evidence)
 
     def test_instance_isolation(self) -> None:
         model_a = _RecordingModel(["answer A"])
