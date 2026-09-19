@@ -29,6 +29,37 @@ if TYPE_CHECKING:
 
 _WORD = re.compile(r"\w+")
 
+# How many words a turn needs before Jarvis keeps it as a statement. A bare "no",
+# "sí", "vale" that fell through the confirmation read is a fragment, not knowledge.
+_MIN_STATEMENT_WORDS = 3
+
+# A turn that ends with "?" or opens with an interrogative is a question: Jarvis
+# answers it (from memory and reasoning), it is never itself stored. "cuando/when"
+# openers are deliberately excluded -- "cuando yo digo X quiero decir Y" is a
+# definitional statement, not a question.
+_QUESTION_OPENERS = frozenset(
+    {
+        "qué", "cual", "cuál", "quien", "quién", "quiénes", "quienes",
+        "como", "cómo", "donde", "dónde", "cuanto", "cuánto", "cuanta", "cuánta",
+        "what", "which", "who", "whom", "whose", "where", "why", "how",
+        "is", "are", "was", "were", "do", "does", "did", "can", "could",
+        "would", "should", "will", "may", "might", "am",
+    }
+)
+
+# First-person markers (bilingual): when the companion speaks about themselves, the
+# fact lands on the relational channel too, so a later self-question ("what am I
+# building?") finds it regardless of wording -- surface-token recall cannot bridge it.
+_FIRST_PERSON = frozenset(
+    {
+        "i", "my", "me", "mine", "myself", "we", "our", "ours", "us",
+        "yo", "mi", "mis", "mí", "mío", "mía", "míos", "mías",
+        "nuestro", "nuestra", "nuestros", "nuestras",
+        "soy", "estoy", "quiero", "prefiero", "necesito", "me gusto", "me gusta",
+        "voy", "tengo", "llamo", "puedo", "creo", "considero", "deseo",
+    }
+)
+
 # A short reply that just affirms or denies is read as confirming (or correcting) the
 # last thing Jarvis said, so a provisional reasoned answer can mature (Vision §18, §20).
 _AFFIRM = frozenset(
@@ -93,6 +124,42 @@ def _confirmation_reply(affirm: bool, belief: object) -> Reply:
     }
 
 
+def _is_question(text: str) -> bool:
+    """A turn is a question -- answered, never stored -- when it ends with ``?``
+    or opens with an interrogative word."""
+    stripped = text.strip()
+    if stripped.endswith("?"):
+        return True
+    first = _WORD.findall(stripped.lower().lstrip("¿¡"))
+    return bool(first and first[0] in _QUESTION_OPENERS)
+
+
+def _has_first_person(text: str) -> bool:
+    """True when the companion is speaking about themselves (relational channel)."""
+    tokens = set(_WORD.findall(text.lower()))
+    return bool(tokens & _FIRST_PERSON)
+
+
+def _remember_statement(jarvis: Jarvis, text: str) -> None:
+    """Keep a real statement so it is still there tomorrow (Vision §5, §8).
+
+    The everyday thing Jarvis was told -- "my boat is called Seabird", a decision,
+    a preference -- is stored the same way an explicit "remember" is. First-person
+    statements also land on the relational channel, so a later self-question
+    ("what am I building?") bridges to what was said regardless of wording.
+    Questions never reach this path.
+    """
+    evidence = Evidence(
+        content=text,
+        source=EvidenceSource.USER_STATEMENT,
+        weight=Confidence(1.0),
+        context="stated in conversation",
+    )
+    if _has_first_person(text):
+        jarvis.observe_companion(text, evidence)
+    jarvis.think(text, (evidence,), conversation=jarvis.conversation.before_current())
+
+
 def _say(jarvis: Jarvis, payload: Reply) -> Reply:
     """Hear what the companion said over both channels (Vision §5, §8): learn about the
     person AND reason about the world, then reply as a companion — not a verdict engine.
@@ -123,9 +190,10 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
     decides. Greetings, small talk, feedback about Jarvis and instructions are answered
     as conversation and never become beliefs; a material directive (an act) is executed
     through the earned-agency executor when one is wired and declined honestly
-    otherwise; only an explicit "remember this" or a real
-    statement/question reaches perception, memory and reasoning. May raise on a provider
-    failure (the caller decides how to surface it).
+    otherwise. A real statement is the everyday way to teach Jarvis -- it is stored
+    so it is still there tomorrow; a question is answered from memory and reasoning
+    and is itself never stored. May raise on a provider failure (the caller decides
+    how to surface it).
     """
     jarvis.conversation.record("companion", text)
     # A short "yes"/"no" confirms or corrects the last thing Jarvis reasoned, maturing a
@@ -151,6 +219,11 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
         return _turn(jarvis, _act_reply(jarvis, text))
     if intent is ConversationIntent.REMEMBER:
         return _turn(jarvis, _remember_reply(jarvis, text))
+    # A real statement is the everyday way to teach Jarvis: it is stored (the
+    # "no se acuerda de mí" failure was that nothing was ever written here). A
+    # question is answered from memory and reasoning and is itself not stored.
+    if len(_WORD.findall(text)) >= _MIN_STATEMENT_WORDS and not _is_question(text):
+        _remember_statement(jarvis, text)
     return _turn(jarvis, _knowledge_reply(jarvis, text))
 
 
@@ -335,17 +408,20 @@ def _remember_reply(jarvis: Jarvis, text: str) -> Reply:
 
 
 def _knowledge_reply(jarvis: Jarvis, text: str) -> Reply:
-    """Answer ordinary conversation without silently converting it into memory.
+    """Answer from memory and reasoning, keeping the reply plain and conversational.
 
-    Recent dialogue is the primary context. Existing long-term memory may still help,
-    but this path writes neither companion traits nor world beliefs; persistence is
-    reserved for explicit remember/learn/confirmation actions. Stored documents that
-    bear on the turn ride along as honest chips -- the companion sees which of its
-    own files Jarvis is drawing from, never a verdict about them.
+    Statements were stored before this was called and are acknowledged
+    conversationally -- reciting them back as "memory" would replay the
+    conversation into itself. A question may be answered from memory: after the
+    recent dialogue (the primary context) and reasoning, long-term memory may
+    still settle it -- this is why a fact told yesterday surfaces today -- while
+    the conversation's own recent echoes are never recited as the answer. This
+    path never leaks internal metadata into the reply. Stored documents that
+    bear on the turn ride along as honest chips -- the companion sees which of
+    its own files Jarvis is drawing from, never a verdict about them.
     """
     recalled = jarvis.recall(text)
     documents = _document_recall(recalled)
-    memories = tuple(r for r in recalled if r.kind is not MemoryKind.DOCUMENT)
     inference = jarvis.reason(
         text,
         memory=recalled,
@@ -353,8 +429,14 @@ def _knowledge_reply(jarvis: Jarvis, text: str) -> Reply:
     )
     if inference is not None:
         reply = _plain(inference.answer, "conversation")
-    elif memories:
-        reply = _natural_memory_reply(memories)
+    elif _is_question(text):
+        answer = _answer_candidates(recalled)
+        if answer:
+            reply = _natural_memory_reply(answer)
+        elif documents:
+            reply = _document_note(documents)
+        else:
+            reply = _engage_reply(text, None, [])
     elif documents:
         reply = _document_note(documents)
     else:
@@ -369,6 +451,21 @@ def _knowledge_reply(jarvis: Jarvis, text: str) -> Reply:
 def _document_recall(recalled: tuple[RecalledMemory, ...]) -> tuple[RecalledMemory, ...]:
     """The recalled items that are stored documents, in recall order."""
     return tuple(r for r in recalled if r.kind is MemoryKind.DOCUMENT)
+
+
+def _answer_candidates(recalled: tuple[RecalledMemory, ...]) -> tuple[RecalledMemory, ...]:
+    """Recalled items Jarvis can honestly *answer from*.
+
+    Long-term knowledge (beliefs, episodes, goals, companion traits) may settle
+    a question. The conversation's own recent turns and stored documents are
+    excluded: echoing a recent turn back as "I remember that..." would replay
+    the conversation into itself, and documents ride along as chips instead.
+    """
+    return tuple(
+        r
+        for r in recalled
+        if r.kind not in (MemoryKind.DOCUMENT, MemoryKind.CONVERSATION)
+    )
 
 
 def _document_name_from(memory: RecalledMemory) -> str:

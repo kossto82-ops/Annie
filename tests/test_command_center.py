@@ -134,17 +134,19 @@ class TestSnapshot:
 
 
 class TestSay:
-    def test_it_replies_without_grounding_ordinary_conversation(self) -> None:
+    def test_a_statement_is_grounded_without_leaking_into_the_reply(self) -> None:
         jarvis = Jarvis(perception=_YesPerception())
         result = handle(jarvis, "say", {"text": "the sky is clear today"})
         assert isinstance(result["reply"], str)
         assert result["reply"].strip() != ""
         assert result["speak"] is True
         assert "confidence" not in result
-        assert jarvis.beliefs.all_beliefs() == ()
+        # The statement was a real thing Jarvis was told: it was stored (so it is
+        # there tomorrow) even though the reply itself stays plain and conversational.
+        assert jarvis.beliefs.all_beliefs()
         state = result["state"]
         assert isinstance(state, dict)
-        assert state["episodes"] == 0
+        assert state["episodes"] == 1
 
     def test_empty_text_is_handled_without_thinking(self) -> None:
         jarvis = Jarvis(perception=_YesPerception())
@@ -181,13 +183,17 @@ class _CompanionReader:
 
 
 class TestCompanionChannel:
-    def test_talking_does_not_teach_without_an_explicit_memory_request(self) -> None:
+    def test_a_first_person_statement_teaches_without_the_perception_channel(self) -> None:
         jarvis = Jarvis()
         jarvis.set_companion_perception(_CompanionReader())
         result = handle(jarvis, "say", {"text": "I went hiking this weekend"})
+        # The statement is the everyday "remember me": a first-person fact lands on the
+        # relational channel directly (never via the perception reader), while the reply
+        # stays a plain, unmeta'd acknowledgment.
         assert "learned" not in result
         state = cast("dict[str, object]", result["state"])
-        assert cast("list[dict[str, object]]", state["companion"]) == []
+        traits = [t["statement"] for t in cast("list[dict[str, object]]", state["companion"])]
+        assert traits == ["I went hiking this weekend"]
 
     def test_default_jarvis_learns_nothing_and_reply_is_unchanged(self) -> None:
         result = handle(Jarvis(), "say", {"text": "hola jarvis"})
@@ -313,8 +319,9 @@ class TestReasoning:
         result = handle(jarvis, "say", {"text": "the deploy succeeded"})
         assert result["provenance"] is None
         assert result["trace"] == []
-        assert jarvis.beliefs.all_beliefs() == ()
-        assert jarvis.episodes.history() == ()
+        # The statement is stored quietly; the reply never carries internal provenance.
+        assert jarvis.beliefs.all_beliefs()
+        assert jarvis.episodes.history()
 
     def test_the_internal_working_label_never_leaks_to_the_user(self) -> None:
         reply = handle(Jarvis(), "say", {"text": "hola jarvis"})

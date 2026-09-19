@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-15 (Increments 163-166, pyright strict 0 at HEAD)
+Last updated: 2026-09-19 (Increment 167, pyright strict 0 at HEAD)
 
 ---
 
@@ -2828,6 +2828,45 @@ taken by abstraction/attention at HEAD).
 
 **Tests**: +21 (7 `test_relation_aware_recall.py`, 14 `test_strategy_selection.py`). Full
 suite: **1906 passed, 3 skipped**; ruff clean; **pyright strict 0**.
+
+---
+
+### Increment 167 — Statements are real memory: everyday sentences store, recall, and survive a restart (2026-09-19, working tree, not yet committed)
+
+The "no se acuerda de mí" root cause: a statement told in conversation was never written
+to long-term memory — only "remember this" turns were — so after a restart nothing came
+back. A real statement (≥3 words, not a question) is now stored at the statement branch
+of `_say_core`, and a follow-up question after a restart answers from memory instead of
+from nothing.
+
+- **Statement storage (`_conversation.py`)**: `_remember_statement` writes the speaker's
+  sentence as `Evidence(source=USER_STATEMENT, weight 1.0, context "stated in
+  conversation")` — through the companion channel when the sentence is first-person (not
+  only via the perception reader) and always as a full `think(..., conversation=
+  before_current())` episode. `_is_question` (bilingual opener set + trailing marker,
+  "cuando/when"-safe) and `_MIN_STATEMENT_WORDS` keep greetings, small talk, feedback and
+  bare fragments out of memory.
+- **Self-questions reach the stored traits (`executive_controller.py`)**: `_SELF_REFERENCE`
+  now also holds first-person verb forms (estoy, tengo, quiero, puedo, prefiero,
+  necesito, llamo, voy, creo) so an indirect follow-up with no pronoun — "¿Cómo quieres
+  que te responda cuando … estoy equivocado?" — lands on the three most-confident
+  companion traits (relevance 1.0) instead of dying at the lexical floor (0.167 < 0.2).
+- **Conversation is context, never a recited memory (`_knowledge_reply`)**: answering
+  "I remember that …" from a conversation-turn candidate replayed the dialogue into
+  itself (the ring-boundedness test showed the baseline store fronted growing nested
+  self-echo replies). The memory-answer branch now fires only for questions and only on
+  long-term candidates (beliefs/episodes/goals/traits); the conversation ring rides along
+  as reasoner context, documents remain chips, and statements are acknowledged
+  conversationally while still being stored.
+- `_is_about_current` now also filters companion traits and conversation turns whose
+  content repeats the current trigger verbatim (no self-echo recall).
+
+**Tests**: +3 — `tests/test_end_to_end_memory.py` rebuilds sessions on the same SQLite
+directory: a fact, a decision and an identity each surfacing in an indirect
+restart-question. Existing tests updated for the now-stored statements
+(`test_conversation.py` Test F, `test_command_center.py`, `test_memory_recall.py`). Full
+suite: **2179 passed, 3 skipped**; ruff clean; **pyright strict 0** across `src/` +
+`tests/`.
 
 ---
 

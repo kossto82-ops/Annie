@@ -2,8 +2,10 @@
 
 These are the minimal end-to-end cases proving the reported failure is fixed: greetings,
 small talk, feedback and instructions are answered as conversation and never turned into
-beliefs or metadata dumps; only an explicit "remember this" becomes memory; and recent
-turns are kept as short-term context, separate from long-term memory.
+beliefs or metadata dumps; an explicit "remember this" becomes memory; a real *statement*
+is the everyday way to teach Jarvis and is stored (so it is there tomorrow); a *question*
+is answered from memory and reasoning but is itself never stored; and recent turns are kept
+as short-term context, separate from long-term memory.
 """
 
 from __future__ import annotations
@@ -193,7 +195,7 @@ class TestMaterialInstructions:
         assert len(matured.evidence) > before  # the confirmation added supporting evidence
         assert len(jarvis.episodes.history()) == 2
 
-    def test_a_statement_and_follow_ups_stay_conversational(self) -> None:  # Test F
+    def test_a_statement_is_remembered_and_follow_ups_stay_conversational(self) -> None:  # Test F
         reasoner = ContextReasoner(
             [
                 "Depende del problema que quieras resolver.",
@@ -225,9 +227,12 @@ class TestMaterialInstructions:
             turns[1],
             "Sí, si la estructura actual ya limita el cambio.",
         ]
-        assert jarvis.episodes.history() == ()
-        assert jarvis.beliefs.all_beliefs() == ()
-        assert jarvis.companion.beliefs() == ()
+        # The opening statement was a real thing Jarvis was told, so it is kept --
+        # as a stored belief, an episode, and (it is first-person) a companion trait --
+        # while the follow-up questions stayed conversation.
+        assert len(jarvis.episodes.history()) == 1
+        assert len(jarvis.beliefs.all_beliefs()) == 1
+        assert [trait.statement for trait in jarvis.companion.beliefs()] == [turns[0]]
 
     def test_a_cognitive_episode_reasons_with_the_conversation(self) -> None:  # Test G
         # A full episode (not the conversational `reason` path) that needs a

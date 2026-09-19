@@ -96,7 +96,15 @@ STRONG_RECALL_RELEVANCE = 0.6
 # there*, not a judgement of truth; a semantic retriever supersedes it (D11).
 _WORD = re.compile(r"\w+")
 _SELF_REFERENCE = frozenset(
-    {"me", "mi", "mí", "yo", "soy", "mío", "mía", "conmigo", "my", "i", "myself", "mine"}
+    {
+        "me", "mi", "mí", "yo", "soy", "mío", "mía", "conmigo",
+        "my", "i", "myself", "mine",
+        # First-person verb forms: "¿estoy equivocado?" asks about the companion
+        # even without an explicit pronoun, just like the indirect follow-ups that
+        # must land on the stored companion traits.
+        "estoy", "tengo", "quiero", "puedo", "prefiero", "necesito",
+        "llamo", "voy", "creo",
+    }
 )
 _QUESTION_CUES = frozenset(
     {
@@ -977,12 +985,21 @@ class ExecutiveController:
     def _is_about_current(memory: RecalledMemory, trigger: str) -> bool:
         """True when a recalled item just restates the episode's own trigger.
 
-        Covers the just-formed belief AND a prior identical-question episode -- echoing
-        either back as "memory" would be circular (e.g. re-asking the same question would
-        recall itself instead of the answer Jarvis reasoned for it).
+        Covers the just-formed belief AND a prior identical-question episode AND the
+        companion trait / conversation turn carrying the exact same words -- echoing
+        any of them back as "memory" would be circular (e.g. repeating a statement
+        would recall the trait that quotes it verbatim, and the just-spoken turn the
+        conversation record kept would answer itself).
         """
         return (
-            memory.kind in (MemoryKind.WORLD_BELIEF, MemoryKind.GOAL, MemoryKind.EPISODE)
+            memory.kind
+            in (
+                MemoryKind.WORLD_BELIEF,
+                MemoryKind.GOAL,
+                MemoryKind.EPISODE,
+                MemoryKind.COMPANION_TRAIT,
+                MemoryKind.CONVERSATION,
+            )
             and memory.content.strip().lower() == trigger.strip().lower()
         )
 

@@ -4,11 +4,12 @@ The core conversational fix (Vision §5, §37): not every message is knowledge.
 Conversation drives memory, not memory drives conversation. Before perceiving a
 message into evidence or traits, Jarvis first understands its *intent* and only the
 intents that genuinely carry knowledge (an explicit "remember this", or a real
-statement/question to reason about) are allowed to touch memory or beliefs. A
-greeting, small talk, feedback about Jarvis, or an instruction are conversation —
-they are answered as conversation and never silently turned into beliefs. A
-material directive (an act) is first classified as conversation too; *executing*
-it is a separate, gated decision (Vision §27, §28), never an implicit belief.
+statement) are allowed to touch memory or beliefs; a question is answered from memory
+and reasoning but is itself never stored. A greeting, small talk, feedback about
+Jarvis, or an instruction are conversation — they are answered as conversation and
+never silently turned into beliefs. A material directive (an act) is first classified
+as conversation too; *executing* it is a separate, gated decision (Vision §27, §28),
+never an implicit belief.
 
 Classification is deterministic and offline (no model), bilingual (Spanish/English),
 and intentionally conservative: when nothing marks a message as conversational, it
@@ -32,7 +33,7 @@ class ConversationIntent(Enum):
     INSTRUCTION = "instruction"  # "busca X", "habla con la IA" -- an action to interpret
     ACT = "act"  # "crea un archivo", "envía un correo" -- a material act to execute
     REMEMBER = "remember"  # "recuerda que ..." -- the one intent that IS memory
-    STATEMENT = "statement"  # default: a claim/question to reason about (the knowledge path)
+    STATEMENT = "statement"  # default: a claim (stored) or a question (answered)
 
 
 # Multi-word cues are matched as substrings of the lowered text; single words as tokens.

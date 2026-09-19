@@ -148,15 +148,18 @@ class TestSayAnswersFromMemory:
         assert _PRIOR in str(result["reply"])
         assert "recalled" not in result
 
-    def test_ordinary_conversation_does_not_create_recallable_memory(self) -> None:
+    def test_a_statement_becomes_recallable_memory_for_a_related_question(self) -> None:
+        # A real statement is stored (so it is there tomorrow); a related question
+        # then answers *from memory* rather than from nothing (Vision §3).
         jarvis = Jarvis(enable_recall=True)
         handle(jarvis, "say", {"text": _PRIOR})
         result = handle(jarvis, "say", {"text": _QUESTION})
-        assert result.get("stance") != "memory"
+        assert result["stance"] == "memory"
+        assert _PRIOR in str(result["reply"])
         assert "recalled" not in result
-        assert jarvis.episodes.history() == ()
-        assert jarvis.beliefs.all_beliefs() == ()
-        assert jarvis.companion.beliefs() == ()
+        # The statement itself was persisted, not merely answered.
+        assert jarvis.episodes.history()
+        assert jarvis.beliefs.all_beliefs()
 
     def test_without_recall_the_same_question_stays_at_the_honest_no_view(self) -> None:
         jarvis = Jarvis()
