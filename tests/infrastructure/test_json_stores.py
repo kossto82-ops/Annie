@@ -10,12 +10,13 @@ from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.enums.episode_state import EpisodeState
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
+from jarvis.domain.services.evidence_weighting import DEFAULT_WEIGHTING
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
-from jarvis.infrastructure.json_belief_store import JsonBeliefStore
+from jarvis.infrastructure.json_belief_store import JsonBeliefStore, deserialise_belief
 from jarvis.infrastructure.json_capability_store import JsonCapabilityStore
 from jarvis.infrastructure.json_episode_store import JsonEpisodeStore
 
@@ -26,6 +27,15 @@ def _ev(weight: float, *, supports: bool = True) -> Evidence:
         source=EvidenceSource.USER_STATEMENT,
         weight=Confidence(weight),
         supports=supports,
+    )
+
+
+def _ev_neutral(weight: float) -> Evidence:
+    return Evidence(
+        content="a neutral observation",
+        source=EvidenceSource.USER_STATEMENT,
+        weight=Confidence(weight),
+        is_neutral=True,
     )
 
 
@@ -58,6 +68,96 @@ class TestBeliefStore:
         reloaded = JsonBeliefStore(path).get_by_statement("x")
         assert reloaded is not None
         assert len(reloaded.explain().contradicting) == 1
+
+    def test_neutral_evidence_round_trip_and_ordinary_stays_ordinary(
+        self, tmp_path: Path
+    ) -> None:
+        # Neutral evidence must survive persistence as neutral, and ordinary
+        # evidence must never become neutral (inversion of the default).
+        path = tmp_path / "beliefs.json"
+        neutral = _ev_neutral(0.8)
+        ordinary = _ev(0.9)
+        belief = Belief(statement="y")
+        belief.add_evidence(neutral)
+        belief.add_evidence(ordinary)
+        JsonBeliefStore(path).save(belief)
+
+        reloaded = JsonBeliefStore(path).get_by_statement("y")
+        assert reloaded is not None
+        persisted = sorted(reloaded.evidence, key=lambda e: e.content)
+        reloaded_neutral = persisted[0]
+        reloaded_ordinary = persisted[1]
+        assert reloaded_neutral.is_neutral is True
+        assert reloaded_ordinary.is_neutral is False
+        # Every other reportable evidence field survives unchanged.
+        assert reloaded_neutral.content == neutral.content
+        assert reloaded_neutral.source is neutral.source
+        assert reloaded_neutral.weight == neutral.weight
+        assert reloaded_neutral.supports == neutral.supports
+        assert reloaded_neutral.context == neutral.context
+        assert reloaded_neutral.observed_at == neutral.observed_at
+        assert reloaded_neutral.id == neutral.id
+
+    def test_legacy_payload_without_is_neutral_loads_as_ordinary(self) -> None:
+        # A serialized belief predating the is_neutral field must load with
+        # is_neutral=False (missing key never fabricates neutrality).
+        legacy = {
+            "statement": "x",
+            "id": "bid",
+            "formed_at": "2024-01-01T00:00:00+00:00",
+            "evidence": [
+                {
+                    "content": "old observation",
+                    "source": EvidenceSource.USER_STATEMENT.value,
+                    "weight": 0.7,
+                    "supports": True,
+                    "context": None,
+                    "provenance": None,
+                    "observed_at": "2024-01-01T00:00:00+00:00",
+                    "id": "eid",
+                }
+            ],
+        }
+        reloaded = deserialise_belief(legacy, DEFAULT_WEIGHTING)
+        assert reloaded.evidence[0].is_neutral is False
+
+    def test_neutral_evidence_does_not_change_confidence(self, tmp_path: Path) -> None:
+        # The forensic failure: a neutral piece reloading as supporting moved
+        # confidence from 0.0 to a positive value. Here it must stay 0.0.
+        path = tmp_path / "beliefs.json"
+        belief = Belief(statement="zc")
+        belief.add_evidence(_ev_neutral(0.8))
+        assert belief.confidence == Confidence(0.0)
+
+        before = belief.confidence
+        JsonBeliefStore(path).save(belief)
+        reloaded = JsonBeliefStore(path).get_by_statement("zc")
+        assert reloaded is not None
+        assert reloaded.confidence == before
+        assert reloaded.evidence[0].is_neutral is True
+
+    def test_mixed_evidence_contradiction_survives_persistence(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "beliefs.json"
+        belief = Belief(statement="zc")
+        belief.add_evidence(_ev(0.9))
+        belief.add_evidence(_ev(0.7, supports=False))
+        belief.add_evidence(_ev_neutral(0.8))
+        before = belief.confidence
+
+        JsonBeliefStore(path).save(belief)
+        reloaded = JsonBeliefStore(path).get_by_statement("zc")
+        assert reloaded is not None
+        assert reloaded.confidence == before
+        neutral = [e for e in reloaded.evidence if e.is_neutral]
+        assert len(neutral) == 1
+        assert neutral[0].is_neutral is True
+        # Exactly one supporting and one contradicting piece survive as such.
+        assert sum(1 for e in reloaded.evidence if not e.is_neutral and e.supports) == 1
+        assert (
+            sum(1 for e in reloaded.evidence if not e.is_neutral and not e.supports) == 1
+        )
 
 
 class TestCapabilityStore:

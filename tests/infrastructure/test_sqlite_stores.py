@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -29,6 +30,15 @@ def _ev(weight: float, *, supports: bool = True) -> Evidence:
         source=EvidenceSource.USER_STATEMENT,
         weight=Confidence(weight),
         supports=supports,
+    )
+
+
+def _ev_neutral(weight: float) -> Evidence:
+    return Evidence(
+        content="a neutral observation",
+        source=EvidenceSource.USER_STATEMENT,
+        weight=Confidence(weight),
+        is_neutral=True,
     )
 
 
@@ -70,6 +80,107 @@ class TestBeliefStore:
         reloaded = SqliteBeliefStore(sqlite3.connect(path)).get_by_statement("x")
         assert reloaded is not None
         assert len(reloaded.explain().contradicting) == 1
+
+    def test_neutral_evidence_round_trip(self, tmp_path: Path) -> None:
+        path = tmp_path / "jarvis.db"
+        neutral = _ev_neutral(0.8)
+        belief = Belief(statement="y")
+        belief.add_evidence(neutral)
+
+        connection = sqlite3.connect(path)
+        SqliteBeliefStore(connection).save(belief)
+        connection.close()
+
+        reloaded = SqliteBeliefStore(sqlite3.connect(path)).get_by_statement("y")
+        assert reloaded is not None
+        assert reloaded.evidence[0].is_neutral is True
+        assert reloaded.evidence[0].content == neutral.content
+        assert reloaded.evidence[0].weight == neutral.weight
+        assert reloaded.evidence[0].supports == neutral.supports
+        assert reloaded.evidence[0].observed_at == neutral.observed_at
+        assert reloaded.evidence[0].id == neutral.id
+
+    def test_neutral_evidence_does_not_change_confidence(self, tmp_path: Path) -> None:
+        # A neutral piece reloading as supporting would raise confidence from
+        # 0.0 to a positive value (the forensic failure). It must stay 0.0.
+        path = tmp_path / "jarvis.db"
+        belief = Belief(statement="zc")
+        belief.add_evidence(_ev_neutral(0.8))
+        assert belief.confidence == Confidence(0.0)
+
+        before = belief.confidence
+        connection = sqlite3.connect(path)
+        SqliteBeliefStore(connection).save(belief)
+        connection.close()
+
+        reloaded = SqliteBeliefStore(sqlite3.connect(path)).get_by_statement("zc")
+        assert reloaded is not None
+        assert reloaded.confidence == before
+        assert reloaded.evidence[0].is_neutral is True
+
+    def test_mixed_evidence_contradiction_survives_persistence(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "jarvis.db"
+        belief = Belief(statement="zc")
+        belief.add_evidence(_ev(0.9))
+        belief.add_evidence(_ev(0.7, supports=False))
+        belief.add_evidence(_ev_neutral(0.8))
+        before = belief.confidence
+
+        connection = sqlite3.connect(path)
+        SqliteBeliefStore(connection).save(belief)
+        connection.close()
+
+        reloaded = SqliteBeliefStore(sqlite3.connect(path)).get_by_statement("zc")
+        assert reloaded is not None
+        assert reloaded.confidence == before
+        neutral = [e for e in reloaded.evidence if e.is_neutral]
+        assert len(neutral) == 1
+        assert neutral[0].is_neutral is True
+        # Exactly one supporting and one contradicting piece survive as such.
+        assert sum(1 for e in reloaded.evidence if not e.is_neutral and e.supports) == 1
+        assert (
+            sum(1 for e in reloaded.evidence if not e.is_neutral and not e.supports) == 1
+        )
+
+    def test_legacy_row_without_is_neutral_loads_as_ordinary(self, tmp_path: Path) -> None:
+        # A row written before the is_neutral field existed must load with
+        # is_neutral=False; missing key never fabricates neutrality (no
+        # migration, existing databases stay readable).
+        path = tmp_path / "jarvis.db"
+        legacy = {
+            "statement": "x",
+            "id": "bid",
+            "formed_at": "2024-01-01T00:00:00+00:00",
+            "evidence": [
+                {
+                    "content": "old observation",
+                    "source": EvidenceSource.USER_STATEMENT.value,
+                    "weight": 0.7,
+                    "supports": True,
+                    "context": None,
+                    "provenance": None,
+                    "observed_at": "2024-01-01T00:00:00+00:00",
+                    "id": "eid",
+                }
+            ],
+        }
+        connection = sqlite3.connect(path)
+        connection.execute(
+            "CREATE TABLE beliefs (statement TEXT PRIMARY KEY, payload TEXT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO beliefs (statement, payload) VALUES (?, ?)",
+            ("x", json.dumps(legacy)),
+        )
+        connection.commit()
+        connection.close()
+
+        reloaded = SqliteBeliefStore(sqlite3.connect(path)).get_by_statement("x")
+        assert reloaded is not None
+        assert reloaded.id == "bid"
+        assert reloaded.evidence[0].is_neutral is False
 
     def test_each_belief_table_is_isolated(self) -> None:
         connection = sqlite3.connect(":memory:")

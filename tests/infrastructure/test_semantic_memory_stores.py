@@ -1,8 +1,10 @@
-"""Tests for InMemorySemanticMemoryStore and SqliteSemanticMemoryStore."""
+"""Tests for InMemorySemanticMemoryStore, SqliteSemanticMemoryStore and
+JsonSemanticMemoryStore."""
 
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from jarvis.domain.entities.semantic_memory import SemanticMemory
@@ -10,6 +12,7 @@ from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.infrastructure.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
+from jarvis.infrastructure.json_semantic_memory_store import JsonSemanticMemoryStore
 from jarvis.infrastructure.sqlite_semantic_memory_store import SqliteSemanticMemoryStore
 
 
@@ -23,6 +26,15 @@ def _ev(content: str, supports: bool = True) -> Evidence:
         source=EvidenceSource.DIRECT_OBSERVATION,
         weight=Confidence(0.6),
         supports=supports,
+    )
+
+
+def _ev_neutral(content: str) -> Evidence:
+    return Evidence(
+        content=content,
+        source=EvidenceSource.DIRECT_OBSERVATION,
+        weight=Confidence(0.6),
+        is_neutral=True,
     )
 
 
@@ -134,3 +146,60 @@ class TestSqliteStore:
         assert loaded is not None
         assert len(loaded.evidence) == 2
         assert loaded.reinforcement_count == 2
+
+    def test_neutral_evidence_round_trip_preserves_neutrality_and_state(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        store1 = SqliteSemanticMemoryStore(conn)
+        sm = _mem("pattern with a neutral observation")
+        sm.add_evidence(_ev_neutral("undirected observation"))
+        sm.pull_events()
+        before_confidence = sm.confidence
+        before_count = sm.reinforcement_count
+        store1.save(sm)
+
+        store2 = SqliteSemanticMemoryStore(conn)
+        loaded = store2.get_by_pattern("pattern with a neutral observation")
+        assert loaded is not None
+        assert loaded.evidence[0].is_neutral is True
+        assert len(loaded.evidence) == 1
+        assert loaded.reinforcement_count == before_count
+        assert loaded.confidence == before_confidence
+
+
+class TestJsonSemanticMemoryStore:
+    def test_save_and_get_by_pattern(self, tmp_path: Path) -> None:
+        store = JsonSemanticMemoryStore(tmp_path / "semantic.json")
+        sm = _mem("users prefer X")
+        store.save(sm)
+        assert store.get_by_pattern("users prefer X") is sm
+
+    def test_persistence_across_instances(self, tmp_path: Path) -> None:
+        store1 = JsonSemanticMemoryStore(tmp_path / "semantic.json")
+        sm = _mem("persistent pattern")
+        sm.add_evidence(_ev("evidence one"))
+        sm.pull_events()
+        store1.save(sm)
+
+        store2 = JsonSemanticMemoryStore(tmp_path / "semantic.json")
+        loaded = store2.get_by_pattern("persistent pattern")
+        assert loaded is not None
+        assert len(loaded.evidence) == 1
+
+    def test_neutral_evidence_round_trip_preserves_neutrality_and_state(
+        self, tmp_path: Path
+    ) -> None:
+        store1 = JsonSemanticMemoryStore(tmp_path / "semantic.json")
+        sm = _mem("pattern with a neutral observation")
+        sm.add_evidence(_ev_neutral("undirected observation"))
+        sm.pull_events()
+        before_confidence = sm.confidence
+        before_count = sm.reinforcement_count
+        store1.save(sm)
+
+        store2 = JsonSemanticMemoryStore(tmp_path / "semantic.json")
+        loaded = store2.get_by_pattern("pattern with a neutral observation")
+        assert loaded is not None
+        assert loaded.evidence[0].is_neutral is True
+        assert len(loaded.evidence) == 1
+        assert loaded.reinforcement_count == before_count
+        assert loaded.confidence == before_confidence
