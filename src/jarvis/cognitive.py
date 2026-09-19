@@ -14,6 +14,7 @@ from jarvis.domain.conversation.conversation_context import Turn
 from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.reasoning.reasoning_span import SpanThread
 from jarvis.domain.repositories.belief_repository import resolve_belief_for
 from jarvis.domain.services.association import find_connections
 from jarvis.domain.services.hypothesis_generation import generate_hypotheses
@@ -135,10 +136,12 @@ def think(
     goal: Goal | None = None,
     conversation: tuple[Turn, ...] = (),
     value: DeliberationValue | None = None,
+    *,
+    span: tuple[SpanThread, ...] = (),
 ) -> CognitiveEpisode:
     """Run a cognitive episode for ``trigger``, grounded in ``evidence``."""
     episode = CognitiveEpisode(trigger=trigger, goal=goal)
-    return run_episode(jarvis, episode, evidence, conversation=conversation, value=value)
+    return run_episode(jarvis, episode, evidence, conversation=conversation, value=value, span=span)
 
 
 def run_episode(
@@ -147,6 +150,8 @@ def run_episode(
     evidence: Iterable[Evidence] = (),
     conversation: tuple[Turn, ...] = (),
     value: DeliberationValue | None = None,
+    *,
+    span: tuple[SpanThread, ...] = (),
 ) -> CognitiveEpisode:
     """Run an episode through the executive and charge its cognitive cost."""
     depth = jarvis.deliberation_value() if value is None else value
@@ -156,6 +161,7 @@ def run_episode(
         conserve=should_conserve(jarvis),
         conversation=conversation,
         value=depth,
+        span=span,
     )
     charge(jarvis, episode.attention)
     return result

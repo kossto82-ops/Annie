@@ -2047,6 +2047,8 @@ knowledge_graph=knowledge_graph_store,
         goal: Goal | None = None,
         conversation: tuple[Turn, ...] = (),
         value: DeliberationValue | None = None,
+        *,
+        span: tuple[SpanThread, ...] | None = None,
     ) -> CognitiveEpisode:
         """Run a cognitive episode for ``trigger``, grounded in ``evidence``.
 
@@ -2063,7 +2065,12 @@ knowledge_graph=knowledge_graph_store,
         routes depth -- it never changes what Jarvis concludes. When ``None``, the
         stance set last via :meth:`set_deliberation_value` applies (``NORMAL``).
         """
-        return _think_fn(self, trigger, evidence, goal, conversation, value)
+        threads = span if span is not None else self._reasoning_span.threads()
+        episode = _think_fn(self, trigger, evidence, goal, conversation, value, span=threads)
+        inference = episode.inference
+        if inference is not None:
+            self._reasoning_span.record(trigger, inference.answer)
+        return episode
 
     def energy_spent(self) -> int:
         """Total cognitive energy spent so far (Vision §15)."""

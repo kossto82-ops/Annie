@@ -555,6 +555,7 @@ class ExecutiveController:
         conserve: bool = False,
         conversation: tuple[Turn, ...] = (),
         value: DeliberationValue = DeliberationValue.NORMAL,
+        span: tuple[SpanThread, ...] = (),
     ) -> CognitiveEpisode:
         """Drive ``episode`` to COMPLETED, grounding its decision in evidence.
 
@@ -606,7 +607,7 @@ class ExecutiveController:
                 episode.observe(piece)
             self._recall_into(episode)
             self._consult_into(episode, belief)
-            self._reason_into(episode, belief, conversation)
+            self._reason_into(episode, belief, conversation, span=span)
         self._beliefs.save(belief)
         self._flush(episode)  # dispatch evidence/belief events
 
@@ -885,6 +886,8 @@ class ExecutiveController:
         episode: CognitiveEpisode,
         belief: Belief,
         conversation: tuple[Turn, ...] = (),
+        *,
+        span: tuple[SpanThread, ...] = (),
     ) -> None:
         """Reason a provisional answer when belief and memory can't give one (§37).
 
@@ -905,7 +908,7 @@ class ExecutiveController:
             return
         if remembered_inference(belief) is not None:
             return  # already reasoned this — the answer is remembered, don't re-ask
-        inference = self._reasoner.infer(episode.trigger, recalled, conversation)
+        inference = self._reasoner.infer(episode.trigger, recalled, conversation, span)
         if inference is None:
             return
         episode.infer(inference)

@@ -210,3 +210,106 @@ class TestDeepMultiTurnWiring:
         threads = cast(list[dict[str, object]], snapshot(jarvis)["reasoning"])
         assert threads[0]["trigger"] == "¿migro?"
         assert threads[0]["posture"] == "ACTIVE"
+
+
+class _FailingModel:
+    def complete(self, prompt: str) -> str:
+        raise RuntimeError("provider down")
+
+
+class _RecordingModel:
+    def __init__(self, answers: list[str]) -> None:
+        self._answers = list(answers)
+        self.prompts: list[str] = []
+
+    def complete(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return self._answers.pop(0)
+
+
+class TestEpisodePathReasoningSpan:
+    def test_two_episode_continuity(self) -> None:
+        model = _RecordingModel(["answer A", "answer B"])
+        jarvis = Jarvis(reasoner=LlmReasoner(model))
+        jarvis.think("trigger A")
+        assert len(jarvis.reasoning_span()) == 1
+        assert jarvis.reasoning_span()[0].trigger == "trigger A"
+        assert jarvis.reasoning_span()[0].statement == "answer A"
+        jarvis.think("trigger B")
+        assert len(jarvis.reasoning_span()) == 2
+        assert jarvis.reasoning_span()[0].trigger == "trigger B"
+        b_prompt = model.prompts[1]
+        assert "<reasoning_span>" in b_prompt
+        assert "answer A" in b_prompt
+
+    def test_failure_does_not_advance_the_span(self) -> None:
+        jarvis = Jarvis(reasoner=LlmReasoner(_FailingModel()))
+        jarvis.think("trigger A")
+        assert jarvis.reasoning_span() == ()
+
+    def test_span_content_is_not_evidence(self) -> None:
+        model = _RecordingModel(["answer A", "answer B"])
+        jarvis = Jarvis(reasoner=LlmReasoner(model))
+        episode_a = jarvis.think("trigger A")
+        from jarvis.domain.enums.evidence_source import EvidenceSource
+
+        evidence_contents = [
+            (e.content, e.source)
+            for e in episode_a.working_belief.evidence
+            if e.supports
+        ]
+        assert len(evidence_contents) == 1
+        assert evidence_contents[0][1] is EvidenceSource.INFERENCE
+        episode_b = jarvis.think("trigger B")
+        evidence_contents_b = [
+            (e.content, e.source)
+            for e in episode_b.working_belief.evidence
+            if e.supports
+        ]
+        assert len(evidence_contents_b) == 1
+        assert evidence_contents_b[0][1] is EvidenceSource.INFERENCE
+
+    def test_no_semantic_memory_leakage(self) -> None:
+        model = _RecordingModel(["answer A"])
+        jarvis = Jarvis(reasoner=LlmReasoner(model))
+        jarvis.think("trigger A")
+        span = jarvis.reasoning_span()
+        store = jarvis.semantic_memories
+        if store is not None:
+            for mem in store.all_memories():
+                for thread in span:
+                    assert thread.statement not in mem.content
+
+    def test_instance_isolation(self) -> None:
+        model_a = _RecordingModel(["answer A"])
+        model_b = _RecordingModel(["answer B"])
+        jarvis_a = Jarvis(reasoner=LlmReasoner(model_a))
+        jarvis_b = Jarvis(reasoner=LlmReasoner(model_b))
+        jarvis_a.think("trigger A")
+        jarvis_b.think("trigger B")
+        a_threads = jarvis_a.reasoning_span()
+        b_threads = jarvis_b.reasoning_span()
+        assert len(a_threads) == 1
+        assert a_threads[0].trigger == "trigger A"
+        assert len(b_threads) == 1
+        assert b_threads[0].trigger == "trigger B"
+
+    def test_same_trigger_revisit_preserves_existing_thread(self) -> None:
+        model = _RecordingModel(["answer A v1"])
+        jarvis = Jarvis(reasoner=LlmReasoner(model))
+        jarvis.think("same trigger")
+        assert len(jarvis.reasoning_span()) == 1
+        assert jarvis.reasoning_span()[0].statement == "answer A v1"
+        jarvis.think("same trigger")
+        assert len(jarvis.reasoning_span()) == 1
+        assert jarvis.reasoning_span()[0].statement == "answer A v1"
+        assert jarvis.reasoning_span()[0].posture is ThreadPosture.ACTIVE
+
+    def test_explicit_empty_span_does_not_substitute_live_span(self) -> None:
+        model = _RecordingModel(["answer A", "answer B"])
+        jarvis = Jarvis(reasoner=LlmReasoner(model))
+        jarvis.think("trigger A")
+        assert len(jarvis.reasoning_span()) == 1
+        jarvis.think("trigger B", span=())
+        b_prompt = model.prompts[1]
+        assert "<reasoning_span>" not in b_prompt
