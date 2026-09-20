@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.enums.evidence_source import EvidenceSource
-from jarvis.domain.events.belief_events import ContradictionDetected
+from jarvis.domain.events.belief_events import BeliefRevised, ContradictionDetected
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
@@ -94,3 +94,31 @@ class TestSummary:
         assert len(summary) == 1
         assert _TRAIT in summary[0]
         assert "picked the minimal option" in summary[0]
+
+
+class TestRevision:
+    """A changed decision supersedes -- it never becomes a second parallel stance."""
+
+    def test_revising_a_trait_resolves_instead_of_accumulating(self) -> None:
+        model = CompanionModel(InMemoryBeliefStore())
+        model.observe(_TRAIT, _ev(0.8, content="chose the simpler design"))
+        replacement = "prefers richly featured options"
+        revised = model.revise(replacement, _ev(0.9), replaces=_TRAIT)
+        assert revised is not None
+        (current,) = model.beliefs()  # one current stance, never two in parallel
+        assert current.statement == replacement
+        assert current.precedents == [_TRAIT]
+        assert len(current.evidence) == 2  # old evidence stays; confidence stays derived
+        assert _TRAIT not in {b.statement for b in model.beliefs()}
+        assert model.superseded_texts() == frozenset({_TRAIT})
+
+    def test_revising_an_unheld_stance_is_an_ordinary_no_op(self) -> None:
+        model = CompanionModel(InMemoryBeliefStore())
+        assert model.revise("a fresh stance", _ev(0.9), replaces="nothing held") is None
+        assert model.beliefs() == ()
+
+    def test_a_revision_emits_a_first_class_event(self) -> None:
+        model = CompanionModel(InMemoryBeliefStore())
+        model.observe(_TRAIT, _ev(0.8))
+        model.revise("prefers richly featured options", _ev(0.9), replaces=_TRAIT)
+        assert BeliefRevised in {type(e) for e in model.pull_events()}

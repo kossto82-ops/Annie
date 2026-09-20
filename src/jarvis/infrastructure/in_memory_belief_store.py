@@ -30,7 +30,20 @@ class InMemoryBeliefStore:
         return self._by_statement.get(statement)
 
     def save(self, belief: Belief) -> None:
+        self._retire_superseded_row(belief)
         self._by_statement[belief.statement] = belief
+
+    def _retire_superseded_row(self, belief: Belief) -> None:
+        """When a revision changes a belief's statement, retire the row that
+        still holds the old stance (same belief ``id``, older statement).
+
+        Keeping both would let the superseded text surface as a parallel
+        "current" stance -- temporal resolution must hold within the process too.
+        """
+        for statement, candidate in list(self._by_statement.items()):
+            if candidate.id == belief.id and statement != belief.statement:
+                del self._by_statement[statement]
+                return
 
     def all_beliefs(self) -> tuple[Belief, ...]:
         return tuple(self._by_statement.values())

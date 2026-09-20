@@ -40,3 +40,18 @@ class ContradictionDetected(CognitiveEvent):
 
     belief_id: str
     evidence_id: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BeliefRevised(CognitiveEvent):
+    """The belief's statement was superseded by a newer decision stance.
+
+    A changed mind is not a contradiction: the earlier stance was held, then
+    deliberately replaced. The previous statement stays archived (the belief's
+    ``precedents``) and the revision itself is first-class -- the change is
+    information, never a silent overwrite (Vision §18).
+    """
+
+    belief_id: str
+    previous_statement: str
+    current_statement: str

@@ -13,10 +13,15 @@ from jarvis.domain.conversation.intent import (
 )
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
+from jarvis.domain.services.abstraction import relatedness
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.response_renderer import uses_spanish
+from jarvis.interface._external import (
+    EXTERNAL_CAPABILITIES,
+    external_not_ready,
+)
 from jarvis.interface._shared import (
     companion_name,
     provenance,
@@ -140,6 +145,80 @@ def _has_first_person(text: str) -> bool:
     return bool(tokens & _FIRST_PERSON)
 
 
+# Explicit "I changed my mind" markers. These are *decision-change* signals, not
+# generic continuity: a sentence that opens with one revises an earlier stance
+# instead of accumulating a second, parallel one (temporal/decision resolution,
+# Vision §18 -- the change is first-class, never a silent merge).
+_REVISION_CUES = (
+    "he cambiado de opinión",
+    "cambié de opinión",
+    "cambié de parecer",
+    "he cambiado de idea",
+    "me retracto",
+    "i changed my mind",
+    "i've changed my mind",
+    "i have changed my mind",
+    "on second thought",
+    "i changed my position",
+)
+
+# Mid-sentence reversal phrases: they announce the same decision-change even when
+# they do not open the sentence ("ya no quiero X" replaces the old X).
+_REVISION_PHRASES = ("ya no quiero", "i no longer want")
+
+
+def _is_revision(text: str) -> bool:
+    """True when the companion explicitly marks the turn as a decision change."""
+    lowered = text.strip().lower()
+    return any(lowered.startswith(cue) for cue in _REVISION_CUES) or any(
+        cue in lowered for cue in _REVISION_PHRASES
+    )
+
+
+def _revision_residue(text: str) -> str:
+    """The new stance itself, with a leading change-of-mind marker stripped.
+
+    "He cambiado de opinión. Quiero que Jarvis pueda usar muchas herramientas."
+    keeps the clean current stance ("Quiero que Jarvis ..."). Mid-sentence
+    reversals keep the whole sentence (a negation frame is itself the stance).
+    """
+    stripped = text.strip()
+    lowered = stripped.lower()
+    for cue in _REVISION_CUES:
+        if lowered.startswith(cue):
+            # lstrip (not strip) the marker's trailing separators: the residue
+            # keeps its own trailing punctuation, so it can still equal the
+            # exact current stance when the companion merely re-affirms it.
+            rest = stripped[len(cue) :].lstrip(" .,;:!?¿¡-").strip()
+            if not rest:
+                return stripped
+            return rest[0].upper() + rest[1:]
+    return stripped
+
+
+def _resolve_revision_target(jarvis: Jarvis, residue: str) -> str | None:
+    """The existing companion trait the new stance supersedes, if any.
+
+    Re-stating the *current* stance confirms it (returns it directly). Otherwise
+    the trait whose words or meaning best match the residue is the one being
+    revised -- a changed mind addresses the nearest prior stance (deterministic,
+    best-overlap; ties fall to the first held). None when nothing matches: the
+    marker with no prior stance is an ordinary new observation.
+    """
+    lowered = residue.strip().lower()
+    for belief in jarvis.companion.beliefs():
+        if belief.statement.strip().lower() == lowered:
+            return belief.statement
+    best: tuple[float, str] | None = None
+    for belief in jarvis.companion.beliefs():
+        strength = relatedness(residue, belief.statement)
+        if strength <= 0.0:
+            continue
+        if best is None or strength > best[0]:
+            best = (strength, belief.statement)
+    return best[1] if best is not None else None
+
+
 def _remember_statement(jarvis: Jarvis, text: str) -> None:
     """Keep a real statement so it is still there tomorrow (Vision §5, §8).
 
@@ -147,7 +226,10 @@ def _remember_statement(jarvis: Jarvis, text: str) -> None:
     a preference -- is stored the same way an explicit "remember" is. First-person
     statements also land on the relational channel, so a later self-question
     ("what am I building?") bridges to what was said regardless of wording.
-    Questions never reach this path.
+    An explicit change-of-mind (``_is_revision``) resolves the decision instead of
+    stacking a second parallel stance: the newest text becomes the current trait
+    and the superseded one stays archived as its precedent. Questions never reach
+    this path.
     """
     evidence = Evidence(
         content=text,
@@ -155,9 +237,18 @@ def _remember_statement(jarvis: Jarvis, text: str) -> None:
         weight=Confidence(1.0),
         context="stated in conversation",
     )
-    if _has_first_person(text):
+    current_stance = text
+    if _has_first_person(text) and _is_revision(text):
+        residue = _revision_residue(text)
+        replaces = _resolve_revision_target(jarvis, residue)
+        if replaces is not None:
+            jarvis.revise_companion(residue, evidence, replaces=replaces)
+            current_stance = residue
+        else:
+            jarvis.observe_companion(text, evidence)
+    elif _has_first_person(text):
         jarvis.observe_companion(text, evidence)
-    jarvis.think(text, (evidence,), conversation=jarvis.conversation.before_current())
+    jarvis.think(current_stance, (evidence,), conversation=jarvis.conversation.before_current())
 
 
 def _say(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -276,14 +367,23 @@ _SEARCH_CUES = (
     "search", "look up", "find out", "google", "search for",
 )
 
-def _try_external_search(jarvis: Jarvis, text: str) -> Reply | None:
-    """Try to route a web search request to the external source, or None."""
+def try_external_search(jarvis: Jarvis, text: str) -> Reply | None:
+    """Route a web search request to the real external source, or decline honestly.
+
+    Only the search cue itself is enough to decide there *is* a search request. What
+    the companion asked for (INSTRUCTION vs a bare conversational turn already happened
+    upstream): here we just check whether a real web-search backend is actually wired.
+    When it is, we run it (search_external) and narrate the real results. When the
+    request is clearly a web search but no backend is wired, we say so plainly with the
+    exact missing prerequisite -- never slip into a fake chatbot answer, never invent
+    results (Vision §25, 06_TOOLS_AGENCY).
+    """
     text_lower = text.lower().strip()
     is_search = any(cue in text_lower for cue in _SEARCH_CUES)
     if not is_search:
         return None
     if not jarvis.can_do("search the web"):
-        return None
+        return external_not_ready(jarvis, EXTERNAL_CAPABILITIES["search"])
     # Extract the query (strip the search cue prefix)
     query = text
     for cue in ("búscame", "busca en", "buscar en", "buscar", "busca",
@@ -331,7 +431,7 @@ def _instruction_reply(jarvis: Jarvis, text: str) -> Reply:
     "lo" resolve against what the companion and Jarvis were just discussing.
     """
     # Check if this is a web search request and route to external source directly
-    search_result = _try_external_search(jarvis, text)
+    search_result = try_external_search(jarvis, text)
     if search_result is not None:
         return search_result
 

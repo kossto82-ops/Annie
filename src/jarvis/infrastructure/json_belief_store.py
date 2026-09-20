@@ -121,6 +121,7 @@ def serialise_belief(belief: Belief) -> dict[str, Any]:
         "id": belief.id,
         "formed_at": belief.formed_at.isoformat(),
         "evidence": [_serialise_evidence(e) for e in belief.evidence],
+        "precedents": list(belief.precedents),
     }
 
 
@@ -133,6 +134,7 @@ def deserialise_belief(
         formed_at=datetime.fromisoformat(data["formed_at"]),
         weighting_policy=policy,
         _evidence=[_deserialise_evidence(e) for e in data["evidence"]],
+        precedents=list(data.get("precedents", [])),
     )
 
 
@@ -156,8 +158,21 @@ class JsonBeliefStore:
         return self._by_statement.get(statement)
 
     def save(self, belief: Belief) -> None:
+        self._retire_superseded_row(belief)
         self._by_statement[belief.statement] = belief
         self._flush()
+
+    def _retire_superseded_row(self, belief: Belief) -> None:
+        """When a revision changes a belief's statement, retire the row that
+        still holds the old stance (same belief ``id``, older statement).
+
+        Keeping both would let the superseded text resurrect as a parallel trait
+        after a restart -- temporal resolution must survive persistence.
+        """
+        for statement, candidate in list(self._by_statement.items()):
+            if candidate.id == belief.id and statement != belief.statement:
+                del self._by_statement[statement]
+                return
 
     def all_beliefs(self) -> tuple[Belief, ...]:
         return tuple(self._by_statement.values())

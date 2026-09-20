@@ -20,6 +20,7 @@ from typing import Any
 from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.belief_events import (
+    BeliefRevised,
     BeliefStrengthened,
     BeliefWeakened,
     ContradictionDetected,
@@ -49,6 +50,7 @@ _EXTRA_FIELDS: dict[type[CognitiveEvent], tuple[str, ...]] = {
     BeliefStrengthened: ("belief_id", "confidence"),
     BeliefWeakened: ("belief_id", "confidence"),
     ContradictionDetected: ("belief_id", "evidence_id"),
+    BeliefRevised: ("belief_id", "previous_statement", "current_statement"),
     HypothesisCreated: ("hypothesis_id", "statement"),
     ActionOutcomeRecorded: ("action_id", "description", "met_expectation"),
     ToolCallRecorded: ("call",),

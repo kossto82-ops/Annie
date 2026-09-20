@@ -98,6 +98,9 @@ from jarvis.companion import (
 from jarvis.companion import (
     perceive_all_about_companion as _perceive_all_about_companion_fn,
 )
+from jarvis.companion import (
+    revise_companion as _revise_companion_fn,
+)
 from jarvis.curiosity import (
     ask_about as _ask_about_fn,
 )
@@ -2733,6 +2736,18 @@ knowledge_graph=knowledge_graph_store,
         the nervous system.
         """
         return _observe_companion_fn(self, trait, evidence)
+
+    def revise_companion(
+        self, trait: str, evidence: Evidence, *, replaces: str
+    ) -> Belief | None:
+        """Record that the companion changed an earlier decision: ``trait``
+        supersedes the trait with statement ``replaces`` (Vision §18).
+
+        Returns the revised belief, or ``None`` when nothing was superseded. The
+        earlier stance stays archived as the belief's precedent and the revision
+        flows through the nervous system -- a corrected decision is first-class.
+        """
+        return _revise_companion_fn(self, trait, evidence, replaces=replaces)
 
     def perceive_about_companion(self, trait: str, observation: str) -> Belief | None:
         """Perceive an observation about the companion and let it shape the lasting

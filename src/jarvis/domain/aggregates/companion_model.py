@@ -61,6 +61,31 @@ class CompanionModel:
         self._pending_events.extend(belief.pull_events())
         return belief
 
+    def revise(
+        self,
+        trait: str,
+        evidence: Evidence,
+        *,
+        replaces: str | None = None,
+    ) -> Belief | None:
+        """Fold a decision *change* into the model: ``trait`` supersedes the trait it
+        replaces (temporal/decision resolution, Vision §18).
+
+        The liked trait keeps its identity and evidence; its current statement
+        becomes ``trait``, the previous stance lands in the belief's ``precedents``
+        timeline, and a :class:`BeliefRevised` event flows with the evidence -- the
+        change is archived, never a silent overwrite. Confidence stays derived.
+        Returns ``None`` when no trait is superseded (the caller then records an
+        ordinary new observation).
+        """
+        target = self._beliefs.get_by_statement(replaces) if replaces is not None else None
+        if target is None:
+            return None
+        target.revise(trait, evidence)
+        self._beliefs.save(target)
+        self._pending_events.extend(target.pull_events())
+        return target
+
     def belief_about(self, trait: str) -> Belief | None:
         """What Jarvis currently believes about ``trait``, or None if nothing yet."""
         return self._beliefs.get_by_statement(trait)
@@ -83,6 +108,19 @@ class CompanionModel:
             ):
                 return belief
         return None
+
+    def superseded_texts(self) -> frozenset[str]:
+        """The exact statements a live decision superseded -- archive, not current.
+
+        Retrieval uses this to stop an older stance answering as if it were still
+        the decision: the resolution is temporal, so only the current stance stays
+        live while the history remains archived in the belief.
+        """
+        return frozenset(
+            precedent
+            for belief in self._beliefs.all_beliefs()
+            for precedent in belief.precedents
+        )
 
     def summarise(self) -> list[str]:
         """A plain-language account of each belief about the companion (Vision §5, §40)."""

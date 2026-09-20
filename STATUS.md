@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-20 (Increment 168, pyright strict 0 in `src/` + `tests/` at this increment)
+Last updated: 2026-09-20 (Increment 169, pyright strict 0 in `src/` + `tests/` at this increment)
 
 ---
 
@@ -2928,6 +2928,66 @@ belief, and the recall stays single and coherent rather than pretending to resol
 opinions). *Note*: a separate, pre-existing uncommitted surface is in the tree
 (`interface/_conversation.py` + `tests/test_real_available_tool.py`, real web-search
 decline + real tool tests) with its own 5 pyright errors; it was left untouched here.
+
+---
+
+### Increment 169 — A changed mind is resolved, not stacked: temporal/decision resolution plus the honest web-surfacing of the real tools (2026-09-20, working tree, not yet committed)
+
+168's documented limitation is closed: before this, saying "He cambiado de opinión…"
+left the old stance and the new one as two parallel companion traits — the companion
+could be "minimalista" and "con muchas herramientas" at once, and recall surfaced the
+unresolved pair. Now a change of mind is first-class: the decision resolves to the
+newest stance, the superseded text is archived (not erased, not answerable), and the
+resolution survives a real restart on the same SQLite database.
+
+- **One `revise` operation on the belief (`domain/entities/belief.py`)**: a belief
+  gains a `precedents` timeline (`list[str]`, oldest first). `revise()` swaps the
+  current statement, moves the previous one into `precedents`, folds the evidence,
+  and records a first-class `BeliefRevised` event (registered in
+  `json_event_serialization.py` with its `previous_statement`/`current_statement`
+  fields). Re-stating the *current* stance through a change-of-mind marker just adds
+  evidence — no duplicate precedent, no second event. Confidence stays derived; a
+  precedent is archived stance, never loaded as evidence against the current one.
+- **`CompanionModel.revise(trait, evidence, *, replaces)` returns the revised belief
+  or `None`** (untargeted → the caller records an ordinary observation), with
+  `superseded_texts()` exposing the exact archive set; `companion.revise_companion`
+  and the public `Jarvis.revise_companion` seam publish the revision through the
+  nervous system like any other belief event.
+- **Conservative bilingual revision cues (`interface/_conversation.py`)**: leading
+  markers "He cambiado de opinión / cambié de parecer / me retracto / I changed my
+  mind / on second thought…" (whole first-person sentence) resolve the decision;
+  mid-sentence reversals "ya no quiero / I no longer want" do too. The marker is
+  stripped to the residue (trailing punctuation kept, so re-affirming the exact
+  current stance confirms rather than re-revises), the best-overlap existing trait is
+  the revision target (`relatedness`, reaffirmation matched first). The wiring lives
+  in `_remember_statement`: the resolved residue becomes the current trait and the
+  thing Jarvis thinks with.
+- **Superseded text is archive, never an answer**: `executive.recall()` and
+  `_recall_into()` skip candidates whose normalized content is a superseded statement —
+  a probe quoting the old words cannot resurrect the old stance as current. The older
+  episode stays in history (honest history, not current decision).
+- **Persistent retirement across all three stores** (`SqliteBeliefStore`,
+  `JsonBeliefStore`, `InMemoryBeliefStore`): `save()` retires the row that still holds
+  a same-`id`, older statement before writing the new one — without this, a restart
+  would rehydrate the superseded text as a parallel trait again. `precedents`
+  serialise/deserialise with the payload; `reconcile_topic` passes the leader's
+  timeline through.
+- **The pre-existing w.i.p. surface is finished and public**: `_EXTERNAL_CAPABILITIES`
+  → `EXTERNAL_CAPABILITIES`, `_external_not_ready` → `external_not_ready`,
+  `_try_external_search` → `try_external_search`, and the generator fixture in
+  `tests/test_real_available_tool.py` is properly typed — pyright strict is 0 across
+  the whole tree again.
+
+**Tests** (real-SQLite restarts): T7 rewritten to assert the resolution end to end
+(one current trait, its precedent, two pieces of evidence, the self-question
+«¿Qué quieres que pueda hacer Jarvis?» answers "muchas herramientas" and never
+"minimalista", and the older stance remains an archived episode); T8 asserts a probe
+quoting the superseded words (even in the other language) cannot recall the stale
+stance; T9 asserts re-affirming the current stance is confirmation (one statement, no
+precedent, growing evidence); plus `TestRevision` unit tests on the aggregate
+(resolves instead of accumulating, untargeted revise is a no-op, `BeliefRevised`
+flows). Full suite: **2200 passed, 3 skipped**; ruff clean; **pyright strict 0**.
+*Increment 168's remaining limitation is resolved; no new limitations documented.*
 
 ---
 

@@ -11,6 +11,7 @@ import jarvis.domain.events as events_package
 from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.events.action_events import ActionOutcomeRecorded
 from jarvis.domain.events.belief_events import (
+    BeliefRevised,
     BeliefStrengthened,
     BeliefWeakened,
     ContradictionDetected,
@@ -69,6 +70,12 @@ _SAMPLES: list[CognitiveEvent] = [
     BeliefStrengthened(correlation_id="e", belief_id="b", confidence=Confidence(0.73)),
     BeliefWeakened(correlation_id="e", belief_id="b", confidence=Confidence(0.21)),
     ContradictionDetected(correlation_id="e", belief_id="b", evidence_id="v"),
+    BeliefRevised(
+        correlation_id="e",
+        belief_id="b",
+        previous_statement="prefers simplicity",
+        current_statement="prefers rich features",
+    ),
     HypothesisCreated(correlation_id="e", hypothesis_id="h", statement="a common cause"),
     ActionOutcomeRecorded(
         correlation_id="e", action_id="a", description="did it", met_expectation=True

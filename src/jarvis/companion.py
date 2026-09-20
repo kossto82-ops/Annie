@@ -88,6 +88,27 @@ def record_companion(
     return belief, contradicted
 
 
+def revise_companion(
+    jarvis: Jarvis, trait: str, evidence: Evidence, *, replaces: str
+) -> Belief | None:
+    """Record that the companion *changed* an earlier view: ``trait`` is the new
+    stance superseding the trait whose statement is ``replaces`` (Vision §18).
+
+    Returns the revised belief (or None when nothing was superseded). The change
+    is first-class: the previous stance stays archived in the belief's
+    ``precedents``, and the revision event flows through the nervous system like
+    any other belief event -- a corrected decision is never silently overwritten.
+    """
+    belief = jarvis.companion.revise(trait, evidence, replaces=replaces)
+    if belief is None:
+        return None
+    events = jarvis.companion.pull_events()
+    for event in events:
+        jarvis.nervous_system.publish(event)
+    jarvis.nervous_system.dispatch()
+    return belief
+
+
 def explain_companion(jarvis: Jarvis, trait: str) -> str:
     """Explain *why* Jarvis believes ``trait`` about its companion (Vision §5, §8).
 

@@ -201,11 +201,10 @@ class TestSemanticRecallMemorizesMeaning:
         for wrong in ("mi propio asistente", "viaje a Japón", "me contradiga"):
             assert wrong not in reply
 
-    # Test 7 -- a changed opinion keeps both halves as parallel beliefs: reply is
-    # a single coherent memory, never a composition, and there is no temporal or
-    # decision resolution (the documented remaining limitation -- no architecture
-    # was added for it).
-    def test_a_changed_opinion_stays_honest_without_false_resolution(
+    # Test 7 -- a changed opinion resolves temporally: the newest stance becomes
+    # the single current trait and the superseded one is archived as its
+    # precedent (still honest history, no longer an answerable current decision).
+    def test_a_changed_opinion_is_resolved_not_parallel(
         self, tmp_path: Path
     ) -> None:
         session_a = Jarvis.database(tmp_path)
@@ -220,13 +219,71 @@ class TestSemanticRecallMemorizesMeaning:
         _say(session_a, older)
         _say(session_a, newer)
 
+        # The change is first-class: one current trait carrying its own precedent,
+        # never two parallel "current" decisions.
+        (current,) = session_a.companion.beliefs()
+        assert current.statement == (
+            "Quiero que Jarvis pueda utilizar muchas herramientas y "
+            "ejecutar tareas reales."
+        )
+        assert current.precedents == [older]
+        assert len(current.evidence) == 2
+
+        # Restart keeps the resolution: the superseded statement must not be
+        # rehydrated as a parallel trait.
         session_b = Jarvis.database(tmp_path)
-        # Both preferences are stored as parallel companion beliefs -- nothing
-        # was collapsed or composed (the limitation: no temporal resolution yet).
-        assert len(session_b.companion.beliefs()) == 2
+        (current_b,) = session_b.companion.beliefs()
+        assert current_b.statement == current.statement
+        assert current_b.precedents == [older]
+        assert older in session_b.companion.superseded_texts()
+
+        # A self-question about the decision answers with the current stance.
         result = _say(session_b, "¿Qué quieres que pueda hacer Jarvis?")
         assert result["stance"] == "memory"
         reply = str(result["reply"])
-        # One coherent memory is recalled -- the system never presents the two
-        # halves simultaneously as "the" current decision.
-        assert not ("minimalista" in reply and "muchas herramientas" in reply)
+        assert "muchas herramientas" in reply
+        assert "minimalista" not in reply
+
+        # The earlier stance is honest history -- an archived episode, not a
+        # current memory.
+        assert older in [e.trigger for e in session_b.episodes.history()]
+
+    # Test 8 -- temporal resolution survives a probe that quotes the superseded
+    # words (even in another language): the archived stance never answers as
+    # current.
+    def test_a_superseded_stance_cannot_be_recalled_as_current(
+        self, tmp_path: Path
+    ) -> None:
+        session_a = Jarvis.database(tmp_path)
+        older = "Quiero que Jarvis sea minimalista, con pocas herramientas."
+        newer = "I changed my mind. I want Jarvis to be able to use many tools."
+        _say(session_a, older)
+        _say(session_a, newer)
+        session_b = Jarvis.database(tmp_path)
+        (current,) = session_b.companion.beliefs()
+        assert current.statement == "I want Jarvis to be able to use many tools."
+        assert current.precedents == [older]
+        assert older in session_b.companion.superseded_texts()
+        candidates = [
+            m.content
+            for m in session_b.recall("wants Jarvis minimalist few tools")
+        ]
+        assert not any(
+            older.strip().lower() == c.strip().lower() for c in candidates
+        )
+
+    # Test 9 -- re-affirming the current stance through a change-of-mind marker is
+    # confirmation, not another revision: one statement, growing evidence, no
+    # duplicate precedent recorded.
+    def test_reaffirming_the_current_stance_is_confirmation_not_a_revision(
+        self, tmp_path: Path
+    ) -> None:
+        session_a = Jarvis.database(tmp_path)
+        stance = "Quiero que Jarvis use muchas herramientas para poder ayudarme mejor."
+        _say(session_a, stance)
+        _say(session_a, f"He cambiado de opinión. {stance}")
+        (current,) = session_a.companion.beliefs()
+        assert current.statement == stance
+        assert current.precedents == []
+        assert len(current.evidence) == 2
+        assert session_a.companion.superseded_texts() == frozenset()

@@ -535,12 +535,18 @@ class ExecutiveController:
         _, retrieved = self._retrieve_with_strategy(query)
         relevant: list[RecalledMemory] = []
         seen: set[str] = set()
+        # A stance a live decision superseded must not answer as if it were still
+        # current: temporal resolution keeps only the newest stance live while the
+        # older text stays archived (Vision §18 revision handling).
+        superseded = {t.strip().lower() for t in self._companion.superseded_texts()}
         for memory in retrieved:
             if memory.relevance < _MIN_RECALL_RELEVANCE:
                 continue
             if self._is_about_current(memory, query):
                 continue
             key = memory.content.strip().lower()
+            if key in superseded:
+                continue
             if key in seen:
                 continue
             seen.add(key)
@@ -795,6 +801,9 @@ class ExecutiveController:
         """
         relevant: list[RecalledMemory] = []
         seen: set[str] = set()
+        # Temporal resolution: a superseded stance is archive, not an answerable
+        # current memory -- the same guard as ``recall()`` above.
+        superseded = {t.strip().lower() for t in self._companion.superseded_texts()}
         # Results come ranked most-relevant first, so the first time a given content
         # appears is its strongest match; later duplicates (e.g. the same text held
         # both as a world belief and an episode) are dropped.
@@ -805,6 +814,8 @@ class ExecutiveController:
             if self._is_about_current(memory, episode.trigger):
                 continue
             key = memory.content.strip().lower()
+            if key in superseded:
+                continue
             if key in seen:
                 continue
             seen.add(key)

@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.events.belief_events import (
+    BeliefRevised,
     BeliefStrengthened,
     BeliefWeakened,
     ContradictionDetected,
@@ -132,6 +133,7 @@ class BeliefExplanation:
     stability: TemporalStability
     supporting: tuple[Evidence, ...]
     contradicting: tuple[Evidence, ...]
+    superseded: tuple[str, ...] = ()
 
     def narrate(self, subject: str | None = None) -> str:
         """Render a human-readable account of why the belief is held.
@@ -175,6 +177,9 @@ class BeliefExplanation:
         if self.contradicting:
             against = "; ".join(_render_evidence(e) for e in self.contradicting[:3])
             parts.append(f"But some evidence contradicts it: {against}. I may be wrong.")
+        if self.superseded:
+            former = "; ".join(self.superseded[:3])
+            parts.append(f"An earlier stance is superseded by this one: previously {former}.")
 
         if confidence < 0.5:
             parts.append("I am not certain — more evidence would help.")
@@ -216,6 +221,10 @@ class Belief:
     _dedup_policy: Callable[[Evidence, Evidence], bool] | None = field(
         default=same_observation, repr=False
     )
+    # The decision timeline: statement texts this belief superseded, oldest first.
+    # A revised stance is not evidence against the current one -- it is the archived
+    # precedent of a deliberate change, so it lives here, not in ``_evidence``.
+    precedents: list[str] = field(default_factory=list[str])
 
     def __post_init__(self) -> None:
         if not self.statement or not self.statement.strip():
@@ -299,6 +308,39 @@ class Belief:
                 )
             )
 
+    def revise(
+        self, new_statement: str, evidence: Evidence, correlation_id: str | None = None
+    ) -> None:
+        """Supersede the belief's statement with a newer decision stance.
+
+        The previous statement moves to ``precedents`` (the decision timeline),
+        ``new_statement`` becomes the current stance, and ``evidence`` folds in.
+        Confidence is still only derived from evidence -- this call never sets it.
+        A re-said current stance just enriches the evidence (no duplicate
+        precedent). The change itself is recorded as a first-class
+        :class:`BeliefRevised` event: a changed mind is information, never a
+        silent overwrite (Vision §18).
+        """
+        replacement = new_statement.strip()
+        if not replacement:
+            raise ValueError("A belief requires a non-empty statement")
+        correlation = correlation_id or self.id
+        previous = self.statement
+        if replacement != previous:
+            self.precedents.append(previous)
+            self.statement = replacement
+            self.add_evidence(evidence, correlation)
+            self._record(
+                BeliefRevised(
+                    belief_id=self.id,
+                    correlation_id=correlation,
+                    previous_statement=previous,
+                    current_statement=self.statement,
+                )
+            )
+            return
+        self.add_evidence(evidence, correlation)
+
     def explain(self) -> BeliefExplanation:
         """Reconstruct why this belief is held, and how strongly."""
         return BeliefExplanation(
@@ -307,6 +349,7 @@ class Belief:
             stability=self.stability,
             supporting=tuple(e for e in self._evidence if e.supports and not e.is_neutral),
             contradicting=tuple(e for e in self._evidence if e.contradicts and not e.is_neutral),
+            superseded=tuple(self.precedents),
         )
 
     def pull_events(self) -> list[CognitiveEvent]:

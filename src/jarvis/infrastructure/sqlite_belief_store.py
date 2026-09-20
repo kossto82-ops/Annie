@@ -67,6 +67,7 @@ class SqliteBeliefStore:
         return self._by_statement.get(statement)
 
     def save(self, belief: Belief) -> None:
+        self._retire_superseded_row(belief)
         self._by_statement[belief.statement] = belief
         payload = json.dumps(serialise_belief(belief), separators=(",", ":"))
         self._conn.execute(
@@ -75,6 +76,22 @@ class SqliteBeliefStore:
             (belief.statement, payload),
         )
         self._conn.commit()
+
+    def _retire_superseded_row(self, belief: Belief) -> None:
+        """When a revision changes a belief's statement, retire the row that
+        still holds the old stance (same belief ``id``, older statement).
+
+        Keeping both rows would let temporal resolution retreat after a restart:
+        the superseded text would rehydrate as a parallel trait. The revised
+        row moves to its new statement key instead.
+        """
+        for statement, candidate in list(self._by_statement.items()):
+            if candidate.id == belief.id and statement != belief.statement:
+                del self._by_statement[statement]
+                self._conn.execute(
+                    f'DELETE FROM "{self._table}" WHERE statement = ?', (statement,)
+                )
+                return
 
     def all_beliefs(self) -> tuple[Belief, ...]:
         return tuple(self._by_statement.values())

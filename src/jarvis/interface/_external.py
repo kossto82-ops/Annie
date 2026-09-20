@@ -23,7 +23,7 @@ Reply = dict[str, object]
 
 # The Internet command (read/search) requires the matching Odysseus capability to
 # be *acquired and backed by a provider* -- using it is earned, not automatic.
-_EXTERNAL_CAPABILITIES = {
+EXTERNAL_CAPABILITIES = {
     "read": "read external documents",
     "search": "search the web",
 }
@@ -32,7 +32,7 @@ _RESEARCH_CAPABILITY = "deep research"
 _COMPARE_CAPABILITY = "compare language models"
 
 
-def _external_not_ready(jarvis: Jarvis, capability: str) -> Reply:
+def external_not_ready(jarvis: Jarvis, capability: str) -> Reply:
     """An honest decline when the Internet capability is not usable right now.
 
     Distinguishes *not wired* (no provider at all -- Jarvis is simply offline)
@@ -79,8 +79,8 @@ def _external(jarvis: Jarvis, payload: Reply) -> Reply:
             ),
             "speak": False,
         }
-    if action in ("read", "search") and not jarvis.can_do(_EXTERNAL_CAPABILITIES[action]):
-        return _external_not_ready(jarvis, _EXTERNAL_CAPABILITIES[action])
+    if action in ("read", "search") and not jarvis.can_do(EXTERNAL_CAPABILITIES[action]):
+        return external_not_ready(jarvis, EXTERNAL_CAPABILITIES[action])
     try:
         if action == "channels":
             channels = jarvis.internet_channels()
@@ -155,12 +155,12 @@ def _investigate(jarvis: Jarvis, payload: Reply) -> Reply:
     )
     if decision.needed and decision.capability is not None:
         gate = (
-            _EXTERNAL_CAPABILITIES["read"]
+            EXTERNAL_CAPABILITIES["read"]
             if decision.capability.is_read
-            else _EXTERNAL_CAPABILITIES["search"]
+            else EXTERNAL_CAPABILITIES["search"]
         )
         if not jarvis.can_do(gate):
-            return _external_not_ready(jarvis, gate)
+            return external_not_ready(jarvis, gate)
     outcome = jarvis.execute_capability_decision(decision)
     reply = _capability_outcome_reply(outcome)
     if _is_ingest(payload) and outcome.status is CapabilityOutcomeStatus.SUCCESS:
