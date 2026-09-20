@@ -127,10 +127,12 @@ from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.aggregates.hypothesis_set import HypothesisSet
 from jarvis.domain.conversation.conversation_context import ConversationContext, Turn
 from jarvis.domain.entities.belief import Belief
+from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.capability_stance import CapabilityStance
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.enums.evidence_source import EvidenceSource
+from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.events.tool_events import ToolCallRecorded
 from jarvis.domain.perception.companion_perception import CompanionPerceptionSource
@@ -242,6 +244,7 @@ from jarvis.domain.value_objects.unresolved_item import UnresolvedItem, Unresolv
 from jarvis.edges import EdgesSurface
 from jarvis.executive.executive_controller import (
     ExecutiveController,
+    is_question_shape,
 )
 from jarvis.goal_surface import GoalSurface
 from jarvis.infrastructure.capability_registry import (
@@ -2073,7 +2076,34 @@ knowledge_graph=knowledge_graph_store,
         inference = episode.inference
         if inference is not None:
             self._reasoning_span.record(trigger, inference.answer)
+        self._note_evidence_request(episode)
         return episode
+
+    def _note_evidence_request(self, episode: CognitiveEpisode) -> None:
+        """Persist a qualifying episode's open question (episode writer, v1).
+
+        A COMPANION-origin, FULL-attention episode that concludes ungrounded and
+        asks for evidence ("does my companion prefer simplicity?", no grounding)
+        leaves its question in the unresolved store so curiosity can return to
+        it -- but only when the trigger reads as a question and no identical
+        question is already open (the UnresolvedItem model's own exact-string
+        identity, the same comparison ``resolve_open_question`` matches on).
+        Echoes (CURIOSITY origin) and probe routing (BRIEF) are excluded by the
+        gate; deliberately inert when no clause holds. The episode is read-only
+        here: no belief, evidence, confidence, memory, topic or span is touched.
+        """
+        request = episode.evidence_request
+        if request is None:
+            return
+        if episode.origin is not TriggerOrigin.COMPANION:
+            return
+        if episode.attention is not Attention.FULL:
+            return
+        if not is_question_shape(request.question):
+            return
+        if any(item.question == request.question for item in self.open_questions()):
+            return
+        self.note_open_question(request.question)
 
     def energy_spent(self) -> int:
         """Total cognitive energy spent so far (Vision §15)."""

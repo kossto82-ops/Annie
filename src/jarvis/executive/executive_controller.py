@@ -164,11 +164,21 @@ def relation_cues_for(trigger: str, relations: Iterable[str]) -> tuple[str, ...]
     return tuple(matched)
 
 
+def is_question_shape(text: str) -> bool:
+    """True when ``text`` reads as a question (``?`` suffix or interrogative cue).
+
+    The question-shape half of the self-question test, shared with the episode
+    writer that decides when an ungrounded companion conclusion leaves a persisted
+    open question. Pure string logic; the companion's intent is not judged.
+    """
+    tokens = set(_WORD.findall(text.lower()))
+    return text.strip().endswith("?") or bool(tokens & _QUESTION_CUES)
+
+
 def _looks_like_self_question(text: str) -> bool:
     """True when the companion is asking Jarvis about the companion themselves."""
     tokens = set(_WORD.findall(text.lower()))
-    is_question = text.strip().endswith("?") or bool(tokens & _QUESTION_CUES)
-    return is_question and bool(tokens & _SELF_REFERENCE)
+    return is_question_shape(text) and bool(tokens & _SELF_REFERENCE)
 
 
 def remembered_inference(belief: Belief) -> Evidence | None:
