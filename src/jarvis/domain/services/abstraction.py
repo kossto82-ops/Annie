@@ -6,8 +6,9 @@ or beliefs, so confidence stays derived and the pattern never outruns its
 evidence.
 
 Design (reworked for semantic generalization):
-- Conceptual vocabulary: common English stems map to canonical concept tokens
-  (e.g. "miss" -> FAIL, "deliver" -> DELIVER). General-purpose, not domain-specific.
+- Conceptual vocabulary: common English supply-chain stems AND a small bilingual
+  (Spanish/English) everyday set map to canonical concept tokens (e.g. "miss" ->
+  FAIL, "build"/"construyendo" -> BUILD). General-purpose, not domain-specific.
 - Normalization: lowercase -> stem -> concept-map -> entity detection.
 - Episode signature: frozenset of canonical concept tokens (entity-independent).
 - Clustering: Jaccard(signature_a, signature_b) >= 0.3 AND shared non-entity concepts >= 1.
@@ -144,6 +145,73 @@ CONCEPT_MAP: dict[str, str] = {
     "vowed": "PROMISE", "swore": "PROMISE",
     "threatened": "RISK", "secured": "SAFE",
     "overdue": "TIME",
+    # ------------------------------------------------------------------
+    # Everyday companion vocabulary (bilingual). A deliberately small set —
+    # the words a companion actually uses with Jarvis about itself, its plans
+    # and its preferences — so a Spanish memory and an English question (or a
+    # paraphrase with no shared words) still meet on the same canonical token.
+    # "create/created" stay unmapped on purpose (matter preservation:
+    # production != causation); "crear/creando" cover the companion sense.
+    # ------------------------------------------------------------------
+    # BUILD — making / building something
+    "build": "BUILD", "building": "BUILD",
+    "construct": "BUILD", "constructing": "BUILD", "constructed": "BUILD",
+    "construir": "BUILD", "construyendo": "BUILD", "construyo": "BUILD",
+    "construye": "BUILD", "construí": "BUILD", "construi": "BUILD",
+    "crear": "BUILD", "creando": "BUILD",
+    # LEARN — learning / studying
+    "learn": "LEARN", "learning": "LEARN", "learned": "LEARN",
+    "aprender": "LEARN", "aprendiendo": "LEARN", "aprendí": "LEARN",
+    "aprendi": "LEARN",
+    # TRAVEL — trips
+    "travel": "TRAVEL", "traveling": "TRAVEL", "travelling": "TRAVEL",
+    "trip": "TRAVEL", "trips": "TRAVEL",
+    "viaje": "TRAVEL", "viajes": "TRAVEL", "viajar": "TRAVEL",
+    "viajando": "TRAVEL",
+    # CHALLENGE — contradicting / dissenting (not victory)
+    "challenge": "CHALLENGE", "challenges": "CHALLENGE",
+    "challenged": "CHALLENGE", "challenging": "CHALLENGE",
+    "contradict": "CHALLENGE", "contradicts": "CHALLENGE",
+    "contradicted": "CHALLENGE", "contradicting": "CHALLENGE",
+    "disagree": "CHALLENGE", "disagrees": "CHALLENGE",
+    "disagreed": "CHALLENGE",
+    "contradecir": "CHALLENGE", "contradiga": "CHALLENGE",
+    "contradigas": "CHALLENGE",
+    # WRONG — error / being mistaken
+    "wrong": "WRONG", "incorrect": "WRONG", "incorrectly": "WRONG",
+    "mistake": "WRONG", "mistakes": "WRONG", "error": "WRONG",
+    "errors": "WRONG",
+    "equivocado": "WRONG", "equivocada": "WRONG",
+    "equivocados": "WRONG", "equivocadas": "WRONG",
+    # AGREE — consenting / conceding
+    "agree": "AGREE", "agrees": "AGREE", "agreed": "AGREE",
+    "agreeing": "AGREE",
+    # REMEMBER — recalling / keeping
+    "remember": "REMEMBER", "remembered": "REMEMBER",
+    "remembering": "REMEMBER",
+    "recordar": "REMEMBER", "recuerda": "REMEMBER",
+    "recuerdo": "REMEMBER", "recuerde": "REMEMBER",
+    "recuerdas": "REMEMBER",
+    # HISTORY — the shared story / past
+    "history": "HISTORY", "historic": "HISTORY",
+    "historia": "HISTORY", "historias": "HISTORY",
+    # COMPANION — the counterpart
+    "companion": "COMPANION", "companions": "COMPANION",
+    "compañero": "COMPANION", "compañera": "COMPANION",
+    "compañeros": "COMPANION",
+    # PURPOSE — an endeavor / what something is for (a long-term project
+    # and its goal share this token on purpose)
+    "purpose": "PURPOSE", "purposes": "PURPOSE", "goal": "PURPOSE",
+    "propósito": "PURPOSE", "proposito": "PURPOSE", "objetivo": "PURPOSE",
+    "objetivos": "PURPOSE", "proyecto": "PURPOSE", "project": "PURPOSE",
+    # Spanish forms of the existing dimensions (the everyday set only)
+    "crecer": "INCREASE", "creciendo": "INCREASE",
+    "reducir": "DECREASE", "reducido": "DECREASE",
+    "costo": "COST", "costos": "COST", "pagar": "COST",
+    "falla": "FAIL",
+    "decidir": "DECIDE", "decisión": "DECIDE", "decision": "DECIDE",
+    "prevenir": "PREVENT",
+    "retraso": "TIME", "retrasar": "TIME",
 }
 
 # Role nouns → ROLE (entity-independent)
@@ -269,6 +337,53 @@ def conceptual_tokens(text: str) -> frozenset[str]:
         if concept is not None and concept not in ("ROLE",):
             concepts.add(concept)
     return frozenset(concepts)
+
+
+def surface_overlap(query: str, text: str) -> float:
+    """Fraction of the query's scoreable tokens the text shares -- 0.0 when disjoint.
+
+    The plain-word channel. Tokens shorter than ``_MIN_CONCEPT_LEN`` carry too
+    little signal to rank on (articles, "me"): a short, language-agnostic floor,
+    not a stopword list.
+    """
+    query_tokens = {
+        word for word in re.findall(r"\w+", query.lower()) if len(word) >= _MIN_CONCEPT_LEN
+    }
+    if not query_tokens:
+        return 0.0
+    text_tokens = {
+        word for word in re.findall(r"\w+", text.lower()) if len(word) >= _MIN_CONCEPT_LEN
+    }
+    return len(query_tokens & text_tokens) / len(query_tokens)
+
+
+def concept_relevance(query: str, text: str) -> float:
+    """Fraction of the query's canonical concepts the text shares -- 0.0 when either
+    side carries none.
+
+    The meaning channel. The CONCEPT_MAP is bilingual, so a Spanish text and an
+    English query that share no surface words still meet on the canonical token
+    (e.g. "build" and "construyendo" both resolve to BUILD).
+    """
+    query_concepts = conceptual_tokens(query)
+    if not query_concepts:
+        return 0.0
+    kept_concepts = conceptual_tokens(text)
+    if not kept_concepts:
+        return 0.0
+    return len(query_concepts & kept_concepts) / len(query_concepts)
+
+
+def relatedness(query: str, text: str) -> float:
+    """How strongly ``text`` bears on ``query``, by words or by concept -- whichever
+    is stronger.
+
+    The offline bridge across paraphrase and language used by the memory
+    retrievers and the companion-trait bridge: one channel can be zero while
+    the other still grounds a match. 0.0 means no signal at all -- honest
+    silence (Vision §37), never a forced guess.
+    """
+    return max(surface_overlap(query, text), concept_relevance(query, text))
 
 
 def valence(trigger: str) -> str:

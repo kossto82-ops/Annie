@@ -2,14 +2,18 @@
 
 This is NOT the intelligence -- it is the seam (mirrors KeywordPerception,
 Vision §32, §35). It ranks what Jarvis already holds (see
-:mod:`jarvis.infrastructure.memory_candidates`) by plain token overlap with the
+:mod:`jarvis.infrastructure.memory_candidates`) by token overlap with the
 query. It knows nothing about meaning: a query and a memory that share no surface
 tokens simply do not match (honest silence, Vision §37), rather than a forced guess.
 
-Semantic memories are the one deliberate exception: their pattern is expressed in
-canonical concept tokens (e.g. "recurrence: FAIL, PROMISE"), so a conceptually
-related but lexically different query still surfaces them by comparing normalized
-concepts instead of surface words. This is still deterministic and offline.
+The one deliberate, still-deterministic exception is the *concept* channel: every
+durable candidate (beliefs, episodes, traits, goals, semantic patterns) is also
+scored against the query's canonical concepts. The concept vocabulary is bilingual
+(``CONCEPT_MAP``), so a paraphrase or a Spanish memory for an English question --
+different surface words, same idea -- surfaces the memory instead of honest silence.
+The query and a memory that share neither words nor concepts still do not match.
+Short-term ``CONVERSATION`` turns stay surface-only: reciting a recent turn by
+meaning would echo the topic back even when the wording differs.
 
 Its whole purpose is to prove the boundary and make memory *usable* in conversation:
 a semantic (embedding-backed) retriever drops in behind the same
@@ -31,7 +35,10 @@ from jarvis.domain.aggregates.companion_model import CompanionModel
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.repositories.belief_repository import BeliefRepository
 from jarvis.domain.repositories.episode_repository import EpisodeRepository
-from jarvis.domain.services.abstraction import conceptual_tokens
+from jarvis.domain.services.abstraction import (
+    concept_relevance as concept_relevance,  # re-exported for the semantic tests
+)
+from jarvis.domain.services.abstraction import relatedness
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.memory_candidates import gather_candidates
 
@@ -61,23 +68,6 @@ def _relevance(query_tokens: set[str], text: str) -> float:
         return 0.0
     shared = query_tokens & _tokens(text)
     return len(shared) / len(query_tokens)
-
-
-def concept_relevance(query: str, pattern: str) -> float:
-    """Fraction of the query's concepts a semantic pattern shares -- 0.0 when disjoint.
-
-    Semantic patterns are expressed as canonical concept tokens, not surface words;
-    this compares the query's normalized concepts against the pattern's so a
-    lexically different but conceptually similar query still surfaces the memory.
-    """
-    query_concepts = conceptual_tokens(query)
-    if not query_concepts:
-        return 0.0
-    pattern_concepts = conceptual_tokens(pattern)
-    if not pattern_concepts:
-        return 0.0
-    shared = query_concepts & pattern_concepts
-    return len(shared) / len(query_concepts)
 
 
 class LexicalMemoryRetriever:
@@ -123,15 +113,16 @@ class LexicalMemoryRetriever:
                 continue
             if until is not None and (observed_at is None or observed_at > until):
                 continue
-            if kind is MemoryKind.SEMANTIC:
-                # Surface patterns are concept-token expressions; match by normalized
-                # concepts so lexically different phrasing surfaces the same memory.
-                relevance = max(
-                    _relevance(query_tokens, match_text),
-                    concept_relevance(query, match_text),
-                )
-            else:
+            if kind is MemoryKind.CONVERSATION:
+                # Short-term turns stay surface-only: matching them by meaning would
+                # echo the recent topic back as recall even when it was phrased
+                # differently. Long-term memory is what paraphrase should reach.
                 relevance = _relevance(query_tokens, match_text)
+            else:
+                # Every durable candidate is reachable by words OR by meaning (the
+                # bilingual concept channel), so a paraphrase or a different language
+                # surfaces the same memory. Both channels empty = honest silence.
+                relevance = relatedness(query, match_text)
             if relevance <= 0.0:
                 continue
             scored.append(
@@ -145,6 +136,18 @@ class LexicalMemoryRetriever:
                 )
             )
         # Most relevant first; ties broken by the more confident memory, then by
-        # content so the order is fully deterministic (D8) without leaning on time.
-        scored.sort(key=lambda m: (-m.relevance, -(m.source_confidence or 0.0), m.content))
+        # content so the order is fully deterministic (D8) without leaning on
+        # time. At an exact relevance tie the distilled semantic pattern outranks
+        # the concrete copies it generalizes over: when a question fully matches
+        # the pattern's meaning it has already matched each copy's meaning, so the
+        # canonical form answers rather than a redundant residue (relevance always
+        # dominates -- concrete sheets rank above a faint pattern, never below).
+        scored.sort(
+            key=lambda m: (
+                -m.relevance,
+                -(m.kind is MemoryKind.SEMANTIC),
+                -(m.source_confidence or 0.0),
+                m.content,
+            )
+        )
         return tuple(scored[: max(0, limit)])

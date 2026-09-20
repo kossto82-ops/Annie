@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-19 (Increment 167, pyright strict 0 at HEAD)
+Last updated: 2026-09-20 (Increment 168, pyright strict 0 in `src/` + `tests/` at this increment)
 
 ---
 
@@ -2867,6 +2867,67 @@ restart-question. Existing tests updated for the now-stored statements
 (`test_conversation.py` Test F, `test_command_center.py`, `test_memory_recall.py`). Full
 suite: **2179 passed, 3 skipped**; ruff clean; **pyright strict 0** across `src/` +
 `tests/`.
+
+---
+
+### Increment 168 — Jarvis recalls meaning, not just words: paraphrase and ES↔EN recall across the durable store (2026-09-20, working tree, not yet committed)
+
+Verbatim recall was real after 167 but *meaning* was not: a paraphrase ("trying to
+build" vs "estoy construyendo") or a different language shared no surface words, so the
+matching memory stayed silent. The semantic pattern channel already spoke concepts, yet
+plain durable memories were still scored word-only, and the self-question trait bridge
+was content-blind (top-3 most confident, verbatim), so «¿Qué quiero aprender?» could
+answer with an unrelated high-confidence trait instead of the learn preference. The
+fix reuses the existing bilingual concept mechanism rather than adding a new layer —
+no vector DB, no synonym lists, no hardcoded test phrases.
+
+- **One meaning scorer at the domain layer (`domain/services/abstraction.py`)**:
+  `relatedness(query, text) = max(surface_overlap, concept_relevance)`. The lexical
+  retriever now scores **every** durable candidate (beliefs, episodes, traits, goals,
+  semantic patterns) with it — a paraphrase or a different language surfaces the
+  stored meaning; both channels empty is still honest silence. Short-term
+  `CONVERSATION` turns stay surface-only (reciting a recent turn by meaning would echo
+  the topic back). The SEMANTIC kind's special case is gone; the scorer was verified to
+  keep executive/domain free of infrastructure imports, and
+  `concept_relevance` stays importable from the retriever for existing semantic tests.
+- **Bilingual concept vocabulary extends meaning deltas**: new concepts BUILD, LEARN,
+  TRAVEL, CHALLENGE, WRONG, AGREE, REMEMBER, HISTORY, COMPANION, PURPOSE, plus Spanish
+  forms of existing dimensions (crecer→INCREASE, reducir→DECREASE, costo/pagar→COST,
+  falla→FAIL, decidir/decisión→DECIDE, prevenir→PREVENT, retraso/retrasar→TIME).
+  `create`/`created` deliberately stay unmapped (matter preservation: producing
+  something is not causing it); only Spanish `crear`/`creando`→BUILD. `wrong`→WRONG is
+  an intentional vocabulary addition documented in
+  `test_matter_preservation.py` (`test_wrong_is_an_intentional_concept_while_estimate_stays_unmapped`).
+- **Self-question trait bridge is evidence-scored (`executive_controller.py`)**:
+  `_companion_traits(query)` scores each trait with `relatedness` over its statement +
+  evidence; traits that score (no floor) are surfaced by strength, then confidence; the
+  top-3-confident-at-1.0 fallback runs only when *nothing* scores (identity questions
+  like «¿cuál es mi nombre?» stay answered). So «¿Qué quiero aprender?» isolates the
+  learn preference instead of an unrelated trait.
+- **Ranking**: at an exact relevance tie the distilled SEMANTIC pattern outranks the
+  concrete copies it generalizes over — relevance always dominates, so a faint pattern
+  never outranks a strong concrete sheet.
+- **ACT classifier fix (`domain/conversation/intent.py`), needed for the contradiction
+  test**: single-word ACT cues ("ejecuta", "delete"…) match only as a whole token, so a
+  sentence *about* capability ("…pueda ejecutar tareas reales") or history (past
+  tense) is a STATEMENT again, while "ejecuta las pruebas" stays an order; phrase cues
+  ("crea un", "write a"…) are unchanged. +2 regression cases in `test_intent.py`.
+
+**Tests** (`tests/test_end_to_end_memory.py`,
+`TestSemanticRecallMemorizesMeaning`, real-SQLite restarts): same-language paraphrase
+(T1), preference recalled by the situation (T2), rephrased project-purpose question (T3),
+ES memory answering an EN question (T4), EN memory answering an ES question (T5),
+«¿Qué quiero aprender?» isolates its own memory and the three distractor memories stay
+out (T6), and a changed opinion recalls the newer stance honestly without a fake
+temporal resolution (T7). Full suite: **2194 passed, 3 skipped**; ruff clean; **pyright
+strict 0** across `src/` + `tests/` for this increment. *Remaining limitation,
+documented in the T7 test*: no temporal/decision resolution yet — companion traits are
+concept-anchored so a first-person restatement merges into the existing trait (the
+newest statement is kept as the visible text; an older stance remains a separate
+belief, and the recall stays single and coherent rather than pretending to resolve two
+opinions). *Note*: a separate, pre-existing uncommitted surface is in the tree
+(`interface/_conversation.py` + `tests/test_real_available_tool.py`, real web-search
+decline + real tool tests) with its own 5 pyright errors; it was left untouched here.
 
 ---
 

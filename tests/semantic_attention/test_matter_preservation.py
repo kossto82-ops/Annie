@@ -15,6 +15,18 @@ Repaired mappings (repair, not redesign):
 - CAUSE: removed create/created (production != causation). "caused X" remains
   {CAUSE}.
 
+Intentionally added (not repair but deliberate, documented vocabulary):
+
+- Everyday companion vocabulary (increment 168, semantic recall): a small
+  bilingual set so a Spanish memory and an English question meet on the same
+  canonical token. "wrong/equivocado" -> WRONG, "build/construir" -> BUILD,
+  "learn/aprender" -> LEARN, "viaje/travel" -> TRAVEL, "contradiga/challenge"
+  -> CHALLENGE, "recuerde/remember" -> REMEMBER, "compañero/companion" ->
+  COMPANION, "propósito/proyecto/purpose" -> PURPOSE, plus a few everyday
+  Spanish forms of the existing dimensions. English "create/created" stay
+  unmapped (matter preservation); only "crear/creando" (Spanish) resolve to
+  BUILD in the companion sense.
+
 Intentionally NOT repaired (deferred):
 
 - FAIL 'lost': ambiguous without context ("lost the key" vs "lost the contract"
@@ -97,8 +109,11 @@ def test_estimate_does_not_inject_time() -> None:
     assert "TIME" not in _sig("the estimate was wrong")
 
 
-def test_the_estimate_was_wrong_is_unmapped() -> None:
-    assert _sig("the estimate was wrong") == set()
+def test_wrong_is_an_intentional_concept_while_estimate_stays_unmapped() -> None:
+    # "wrong" joined the everyday companion vocabulary (WRONG); "estimate" is
+    # deliberately absent (prediction error, not matter). Only the former changed.
+    assert _sig("the estimate was wrong") == {"WRONG"}
+    assert _sig("the estimate") == set()
 
 
 def test_time_lexicon_still_recognised() -> None:

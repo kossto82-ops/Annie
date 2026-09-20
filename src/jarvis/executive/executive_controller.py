@@ -41,6 +41,7 @@ from jarvis.domain.repositories.knowledge_graph_repository import KnowledgeGraph
 from jarvis.domain.repositories.semantic_memory_repository import SemanticMemoryRepository
 from jarvis.domain.repositories.strategy_stats_repository import StrategyStatsRepository
 from jarvis.domain.retrieval.memory_retriever import MemoryRetriever
+from jarvis.domain.services.abstraction import relatedness
 from jarvis.domain.services.entity_extraction import extract_entities
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
 from jarvis.domain.services.knowledge_source import KnowledgeSource
@@ -89,11 +90,14 @@ _MIN_RECALL_RELEVANCE = 0.2
 # shared with the surface so the response stance and the reasoning gate agree.
 STRONG_RECALL_RELEVANCE = 0.6
 
-# When the companion asks about *themselves*, what Jarvis knows about them is fully
-# relevant regardless of shared words ("who am I?" shares nothing with "is named
-# Raúl"). Surface-token recall cannot bridge that, so a self-question consults the
-# companion model directly. This is a bounded, tunable heuristic for *when to look
-# there*, not a judgement of truth; a semantic retriever supersedes it (D11).
+# When the companion asks about *themselves*, what Jarvis knows about them is relevant
+# even when surface words differ ("¿qué quiero aprender?" shares LEARN with "Quiero
+# aprender programación" only through the concept channel; "who am I?" shares nothing
+# with "is named Raúl"). Surface-token recall cannot bridge that, so a self-question
+# consults the companion model directly, ranking each trait by words-or-concepts and
+# falling back to the most confident traits when nothing scores (Vision §5). This is a
+# bounded, tunable heuristic for *when to look there*, not a judgement of truth; a
+# semantic retriever supersedes it (D11).
 _WORD = re.compile(r"\w+")
 _SELF_REFERENCE = frozenset(
     {
@@ -113,7 +117,8 @@ _QUESTION_CUES = frozenset(
         "how", "which", "when", "where", "do", "does", "did", "know", "remember",
     }
 )
-# How many companion traits to surface for a self-question -- the most confident few.
+# When a self-question shares neither words nor concepts with any trait, fall back to
+# this many of the most confident traits -- still the answer to "who am I?".
 _MAX_SELF_QUESTION_TRAITS = 3
 
 
@@ -541,7 +546,7 @@ class ExecutiveController:
             seen.add(key)
             relevant.append(memory)
         if _looks_like_self_question(query):
-            for memory in self._companion_traits():
+            for memory in self._companion_traits(query):
                 key = memory.content.strip().lower()
                 if key not in seen:
                     seen.add(key)
@@ -812,7 +817,7 @@ class ExecutiveController:
         # model directly, since surface-token recall cannot bridge "who am I?" to a
         # trait like "is named Raúl" (Vision §5).
         if _looks_like_self_question(episode.trigger):
-            for memory in self._companion_traits():
+            for memory in self._companion_traits(episode.trigger):
                 key = memory.content.strip().lower()
                 if key in seen:
                     continue
@@ -961,24 +966,46 @@ class ExecutiveController:
             piece.source is not EvidenceSource.INFERENCE for piece in belief.evidence
         )
 
-    def _companion_traits(self) -> list[RecalledMemory]:
-        """What Jarvis knows about the companion, as recalled memories (most confident
-        first) -- fully relevant to a question the companion asks about themselves.
+    @staticmethod
+    def _trait_text(belief: Belief) -> str:
+        """The words behind a companion trait: its statement plus what formed it."""
+        words = " ".join(piece.content for piece in belief.evidence)
+        return f"{belief.statement} {words}".strip()
+
+    def _companion_traits(self, query: str) -> list[RecalledMemory]:
+        """What Jarvis knows about the companion, as recalled memories -- ranked by
+        how much each trait bears on the actual question.
+
+        A self-question asks about the companion, so the query's strongest words or
+        concepts decide relevance ("¿qué quiero aprender?" ranks the LEARN trait
+        above the BUILD and TRAVEL ones instead of blindly gifting the top three
+        full relevance). When no trait shares words or meaning with the question,
+        the few most confident traits still answer the identity shape of a
+        self-question ("who am I?" shares nothing with "is named Raúl") -- Vision §5.
         """
-        traits = sorted(
-            self._companion.beliefs(),
-            key=lambda belief: belief.confidence.value,
-            reverse=True,
+        scored = [
+            (relatedness(query, self._trait_text(belief)), belief)
+            for belief in self._companion.beliefs()
+        ]
+        related = sorted(
+            ((strength, belief) for strength, belief in scored if strength > 0.0),
+            key=lambda item: (-item[0], -(item[1].confidence.value or 0.0)),
         )
+        identity = not related
+        if identity:
+            related = sorted(
+                scored,
+                key=lambda item: -item[1].confidence.value,
+            )[:_MAX_SELF_QUESTION_TRAITS]
         return [
             RecalledMemory(
                 content=belief.statement,
                 kind=MemoryKind.COMPANION_TRAIT,
                 provenance="companion trait",
-                relevance=1.0,
+                relevance=1.0 if identity else strength,
                 source_confidence=belief.confidence.value,
             )
-            for belief in traits[:_MAX_SELF_QUESTION_TRAITS]
+            for strength, belief in related
         ]
 
     @staticmethod

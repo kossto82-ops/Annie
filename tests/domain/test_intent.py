@@ -72,6 +72,10 @@ class TestActCues:
             "the email was already sent",
             "i believe the plan is good",
             "she looked at the report yesterday",
+            # A statement *about* capability or history is not an order, even when it
+            # contains the stem of an imperative cue ("ejecutar" vs "ejecuta").
+            "quiero que jarvis pueda ejecutar tareas reales",
+            "the file was deleted yesterday",
         ],
     )
     def test_free_form_statements_are_not_acts(self, text: str) -> None:

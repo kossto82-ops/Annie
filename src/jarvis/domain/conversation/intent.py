@@ -190,6 +190,26 @@ def _has_phrase(text: str, cues: tuple[str, ...]) -> bool:
     return any(cue in text for cue in cues)
 
 
+def _looks_like_act(text: str) -> bool:
+    """A material directive: a phrase cue, or a single imperative token.
+
+    Phrase cues ("crea un", "guarda el", "write a" ...) match as substrings as
+    today. Single-word cues ("ejecuta", "delete" ...) match only as a whole
+    token, so an ordinary sentence about capability or history ("...pueda
+    ejecutar tareas reales", "the file was deleted") never reads as an order
+    while "ejecuta las pruebas" still does.
+    """
+    lowered = text.strip().lower()
+    tokens = set(_WORD.findall(lowered))
+    for cue in _ACT_CUES:
+        if " " in cue:
+            if cue in lowered:
+                return True
+        elif cue in tokens:
+            return True
+    return False
+
+
 def classify(text: str) -> ConversationIntent:
     """Read a companion's message as one conversational intent (first match wins)."""
     lowered = text.strip().lower()
@@ -199,7 +219,7 @@ def classify(text: str) -> ConversationIntent:
         return ConversationIntent.REMEMBER
     if _has_phrase(lowered, _INSTRUCTION_CUES):
         return ConversationIntent.INSTRUCTION
-    if _has_phrase(lowered, _ACT_CUES):
+    if _looks_like_act(text):
         return ConversationIntent.ACT
     if _is_feedback(lowered, tokens):
         return ConversationIntent.FEEDBACK
