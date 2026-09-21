@@ -167,9 +167,12 @@ def relation_cues_for(trigger: str, relations: Iterable[str]) -> tuple[str, ...]
 def is_question_shape(text: str) -> bool:
     """True when ``text`` reads as a question (``?`` suffix or interrogative cue).
 
-    The question-shape half of the self-question test, shared with the episode
-    writer that decides when an ungrounded companion conclusion leaves a persisted
-    open question. Pure string logic; the companion's intent is not judged.
+    The question-shape half of the self-question test -- the ``is_question`` line
+    the executive and the facade have always shared (public alias, reuse not
+    reimplementation). The episode writer deliberately does NOT use this line:
+    persistence requires the explicit ``?`` suffix (see the writer's predicate),
+    so a cue word alone never turns an ungrounded declaration into an open
+    question. Pure string logic; the companion's intent is not judged.
     """
     tokens = set(_WORD.findall(text.lower()))
     return text.strip().endswith("?") or bool(tokens & _QUESTION_CUES)

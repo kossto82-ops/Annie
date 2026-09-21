@@ -2,11 +2,13 @@
 
 A COMPANION-origin, FULL-attention episode that concludes ungrounded and asks
 for evidence ("does my companion prefer simplicity?", no grounding) leaves its
-question in the unresolved store -- but only when the trigger reads as a question
-and no identical question is already open. Echoes (CURIOSITY), probe routing
-(BRIEF/CHEAP), grounded statements and statement-shaped triggers never write.
-The write is epistemically inert over beliefs, evidence, confidence, semantic
-memory, topic identity and the reasoning span.
+question in the unresolved store -- but only when the trigger carries an explicit
+``?`` and no identical question is already open. Echoes (CURIOSITY), probe
+routing (BRIEF/CHEAP), grounded statements and statement-shaped triggers never
+write. The predicate clauses are pinned directly (tests that would fail if the
+writer were deleted or rewired naively), and the write is epistemically inert
+over beliefs, evidence, confidence, semantic memory, topic identity and the
+reasoning span.
 """
 
 from __future__ import annotations
@@ -15,14 +17,38 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from jarvis import Jarvis
+from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
+from jarvis.domain.enums.attention import Attention
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.trigger_origin import TriggerOrigin
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.evidence_request import EvidenceRequest
+from jarvis.jarvis import qualifies_evidence_request
 
 _TRIGGER = "does my companion prefer simplicity?"
 _BASE = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _episode(
+    origin: TriggerOrigin = TriggerOrigin.COMPANION,
+    attention: Attention = Attention.FULL,
+    question: str = _TRIGGER,
+    *,
+    with_request: bool = True,
+) -> CognitiveEpisode:
+    episode = CognitiveEpisode(trigger=question, origin=origin, attention=attention)
+    if with_request:
+        episode.attach_evidence_request(
+            EvidenceRequest(
+                question=question,
+                statement=" an ungrounded conclusion",
+                confidence=Confidence(0.0),
+                needed="a direct observation",
+            )
+        )
+    return episode
 
 
 def _ev(
@@ -113,6 +139,50 @@ class TestWriterExclusions:
         jarvis = Jarvis()
         episode = jarvis.think(_TRIGGER, value=DeliberationValue.CHEAP)
         assert episode.attention is not None
+        assert episode.evidence_request is not None
+        assert jarvis.open_questions() == ()
+
+
+class TestWriterPredicateClauses:
+    def test_clause_1_requires_an_evidence_request(self) -> None:
+        assert not qualifies_evidence_request(_episode(with_request=False))
+
+    def test_clause_2_excludes_curiosity_origin(self) -> None:
+        episode = _episode(origin=TriggerOrigin.CURIOSITY)
+        assert episode.evidence_request is not None
+        assert episode.attention is Attention.FULL
+        assert episode.origin is TriggerOrigin.CURIOSITY
+        assert not qualifies_evidence_request(episode)
+
+    def test_clause_3_excludes_brief_attention(self) -> None:
+        episode = _episode(attention=Attention.BRIEF)
+        assert episode.evidence_request is not None
+        assert episode.origin is TriggerOrigin.COMPANION
+        assert not qualifies_evidence_request(episode)
+
+    def test_clause_4_excludes_a_cue_word_declaration(self) -> None:
+        # F1: "know" is a _QUESTION_CUES token but declares, it does not ask --
+        # only an explicit "?" promotes an ungrounded episode.
+        episode = _episode(question="I know the supplier failed to deliver")
+        assert episode.evidence_request is not None
+        assert not qualifies_evidence_request(episode)
+
+    def test_all_held_clauses_qualify(self) -> None:
+        assert qualifies_evidence_request(_episode())
+
+
+class TestWriterDeclarationsStayDeclarations:
+    def test_a_cue_word_declaration_never_writes(self) -> None:
+        jarvis = Jarvis()
+        episode = jarvis.think("I know the supplier failed to deliver")
+        assert episode.evidence_request is not None
+        assert jarvis.open_questions() == ()
+
+    def test_an_interrogative_cue_without_question_mark_does_not_write(self) -> None:
+        # Question-shaped by the executive's cue vocabulary but missing the
+        # explicit "?" -- an accepted v1 false negative, never a declaration.
+        jarvis = Jarvis()
+        episode = jarvis.think("does the supplier owe us money")
         assert episode.evidence_request is not None
         assert jarvis.open_questions() == ()
 

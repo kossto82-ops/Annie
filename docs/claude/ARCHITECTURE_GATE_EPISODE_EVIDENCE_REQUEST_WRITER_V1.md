@@ -41,7 +41,7 @@ No other production site creates an `EvidenceRequest`.
 | Tentative conclusion (COMPANION, FULL) | same trigger, weak support | Same, with 0 < confidence < grounded | YES | Same class at lower confidence; still ungrounded at completion |
 | BRIEF/CHEAP/conserve episode left ungrounded | stored thin belief + no evidence, answered briefly | Request attached because the stored belief is below threshold | NO | Deliberate shallow routing, not an investigation target |
 | Statement/remember stored under a raised threshold | taught memory that no longer reaches threshold | Statement taught to Jarvis | NO (excluded by question-shape) | A declaration, not a question worth pursuing |
-| confirm/resolve episodes that fail to ground (only under a learned raised threshold) | the companion's earlier question, re-confirmed | Companion feedback | YES | The companion genuinely asked; still ungrounded under the strict standard |
+| confirm/resolve episodes that fail to ground (a rejecting confirm ungrounds them at any threshold) | the companion's earlier question, re-confirmed | Companion feedback | YES | The companion genuinely asked; a rejecting confirm leaves 0.0 confidence, so it can be ungrounded even under the default threshold |
 | Undecided deliberation (no leader) | `"my companion went quiet mid-project"` | Request on the `Deliberation` value, never attached to the episode | NO (out of v1 scope) | Different semantics (hypothesis competition); not reachable at the conclusion boundary |
 | Deliberation with a low-confidence leader | same observation, weak leader | No request at all | — | Not an EvidenceRequest source |
 | Investigation echo (CURIOSITY) | `"Investigate the open question: X"` | Self-initiated pursuit episode | NO | Self-generated; excluded by origin |
@@ -63,9 +63,10 @@ P(episode) persists an unresolved item ⟺
   1. episode.evidence_request is not None          # ungrounded conclusion (executive_controller.py:1129)
   2. episode.origin is TriggerOrigin.COMPANION       # external, not self-generated (enums/trigger_origin.py)
   3. episode.attention is Attention.FULL             # actually reasoned (enums/attention.py)
-  4. trigger is question-shaped                      # "?"-suffixed or interrogative cue — the exact
-                                                     # is-question line already used by
-                                                     # _looks_like_self_question (executive_controller.py:170)
+  4. request.question ends with "?"                  # v1 requires the explicit question mark; a cue
+                                                     # word alone ("I know the supplier failed to
+                                                     # deliver") never promotes an ungrounded
+                                                     # declaration (clause 4 tightened 2026-09-21)
   5. no OPEN item has item.question == request.question   # exact-string guard over existing open_questions()
 ```
 
@@ -80,12 +81,15 @@ Findings on the dimensions:
 * **Attention (3)** is a real routing signal: BRIEF means "answered from existing
   understanding, not fresh grounding" (Vision §14). The request is still attached in a
   CHEAP/conserve-unforced-BRIEF ungrounded completion; FULL excludes those.
-* **Question-shape (4)** reuses the existing vocabulary (`?` suffix or the executive's
-  `_QUESTION_CUES` set), i.e. the `is_question` line of `_looks_like_self_question`.
-  It is the dimension that removes the statement/declaration class (the strongest
-  residual false-positive source under a learned raised threshold). If private-name
-  import from `executive_controller` is undesired, expose the existing check via a
-  public alias; it is reuse, not a new classification framework.
+* **Question-shape (4)** requires the explicit `?` suffix on the request's trigger.
+  The executive's cue vocabulary is untouched (`is_question_shape` remains the public
+  alias `_looks_like_self_question` shares), but the writer deliberately does not
+  trust a cue word: "I know the supplier failed to deliver" declares, it does not
+  ask, and a cue token anywhere is the strongest residual false-positive source
+  under a learned raised threshold. This is the line that keeps declarations out
+  even when they carry a cue token. (The gate's original version reused
+  `is_question_shape` verbatim; the 2026-09-21 audit finding F1 showed that admits
+  cue-word declarations, so v1 shipped the tightened suffix-only line.)
 * **Dedup (5)** uses the unresolved model's own identity (exact string equality, the
   same comparison `resolve_open_question` uses) via existing `open_questions()`.
   Section E shows this guard is **required**, not optional: without it the existing
@@ -150,6 +154,14 @@ asserts `open_questions() == ()` on Day 3. `resolve_open_question` resolves only
 forever and break that assertion. With the guard, the noted item is seen as already
 open and the writer skips. Guard on **OPEN** items only: a resolved-then-re-asked
 question correctly re-opens.
+
+The guard is atomic within the facade: the writer holds a dedicated
+`threading.Lock` (`Jarvis._unresolved_lock`) across the `open_questions()` check and
+the `note_open_question` write, so two serving threads thinking the same trigger
+cannot both pass the check and duplicate (the command center serves on a
+`ThreadingHTTPServer`). The model still imposes no UNIQUE constraint and
+`note_open_question` itself is unchanged -- the lock only serializes the facade's
+own guard-and-write (remediated 2026-09-21 from audit finding F2).
 
 ---
 
@@ -268,8 +280,8 @@ Minimum set, all offline/deterministic (JSON + SQLite where persistence is asser
   `EvidenceRequest` on the `Deliberation` but **no** item; (2) a CURIOSITY-origin
   pursuit (`pursue(feel_curious())`) after `note_open_question` produces **no** new
   item; (3) a statement/remember with grounding evidence produces **no** item; (4) an
-  ungrounded statement-shaped COMPANION FULL episode (no `?`, no interrogative cue)
-  produces **no** item; (5) an ungrounded BRIEF completion (CHEAP/conserve path)
+  ungrounded statement-shaped COMPANION FULL episode (no `?` -- a cue word alone never
+  qualifies the writer) produces **no** item; (5) an ungrounded BRIEF completion (CHEAP/conserve path)
   produces **no** item.
 * **Test C — investigation echo**: `note_open_question("X")` →
   `pursue(feel_curious())` → `open_questions()` is unchanged (no "Investigate…" item
@@ -311,10 +323,12 @@ clause fails.
 
 ## M. Risks
 
-* **False positives** — question-shaped COMPANION FULL episodes that are rhetorical or
-  transient would persist one resolvable item each. Mitigated by FULL + question-shape
+* **False positives** — `?`-suffixed COMPANION FULL episodes that are rhetorical or
+  transient would persist one resolvable item each. Mitigated by FULL + the explicit
+  `?`-suffix line
   + dedup; residual cases (e.g. rhetorical questions) are bounded and closable.
-* **False negatives** — deliberately accepted: research subjects without question-shape
+* **False negatives** — deliberately accepted: research subjects without an explicit
+  `?`
   (`learn_from_external`, "investigate ingest"), BRIEF completions, deliberation ties,
   and `perceive` flows (no production callers). Revisitable only in a later gate; not
   a v1 defect.
@@ -351,22 +365,31 @@ ReasoningSpan remain frozen and untouched.
 
 ## O. Implementation status
 
-Implemented 2026-09-20, exactly per the section C predicate and the section K–L
-boundary; nothing outside it changed.
+Implemented 2026-09-20 per the section C predicate and the section K–L boundary;
+remediated 2026-09-21 after the forensic audit (findings F1, F2, F3, F5).
 
 * `src/jarvis/executive/executive_controller.py` — `is_question_shape(text)` public
   alias reusing `_QUESTION_CUES` and the `?`-suffix line from `_looks_like_self_question`;
-  `_looks_like_self_question` delegates to it, behavior unchanged.
-* `src/jarvis/jarvis.py` — `Jarvis.think` now calls `self._note_evidence_request(episode)`
-  after the reasoning-span recording (the episode-completion boundary, lines ~2076-2111);
-  the private helper applies predicate P (evidence_request non-None, COMPANION origin,
-  FULL attention, `is_question_shape(request.question)`, exact-string guard over
-  `open_questions()`) and then calls the existing `self.note_open_question(...)`.
+  `_looks_like_self_question` delegates to it, behavior unchanged. The alias stays the
+  shared question-shape line; the writer does not use it (see clause 4).
+* `src/jarvis/jarvis.py` — `Jarvis.think` calls `self._note_evidence_request(episode)`
+  after the reasoning-span recording. The module-level predicate
+  `qualifies_evidence_request(episode)` (public, tested directly) implements clauses
+  1–4: evidence_request non-None, COMPANION origin, FULL attention, and trigger
+  ending in an explicit `?` (tightened 2026-09-21 — F1, see section C). The private
+  helper applies clause 5 (exact-string guard over `open_questions()`) and the write
+  under a dedicated `threading.Lock` (`Jarvis._unresolved_lock`), so concurrent
+  serving threads cannot duplicate an item (F2, see section E).
 * `tests/test_episode_evidence_request_writer.py` — Tests A–E (occurrence + exact one
   via dedup, exclusions {undecided deliberation, CURIOSITY echo, grounded statement,
   grounded question-shaped, CHEAP/BRIEF}, no recursion from investigating an item,
-  JSON + SQLite restart persistence, epistemic isolation U1–U6).
-* Verification: full suite 2213 passed / 3 skipped (zero drift in the attention,
-  curiosity, conversation, deliberation and existing unresolved-lifecycle suites —
-  Test F); `python -m ruff check src tests` clean; `python -m pyright` 0 errors
-  (strict). No commit made.
+  JSON + SQLite restart persistence, epistemic isolation U1–U6) — plus direct
+  predicate-clause pinning (clauses 1–4, constructed episodes: requires request,
+  excludes CURIOSITY, excludes BRIEF, excludes cue-word declarations) and
+  production-path declaration negatives ("I know the supplier failed to deliver" and
+  an interrogative cue without `?` never write) so the writer's existence and each
+  exclusion clause are pinned even if the implementation is later rewired (F5).
+* Verification after remediation: full suite **2220 passed / 3 skipped** (zero drift
+  in the attention, curiosity, conversation, deliberation and existing
+  unresolved-lifecycle suites — Test F); `python -m ruff check src tests` clean;
+  `python -m pyright` 0 errors (strict). No commit made.

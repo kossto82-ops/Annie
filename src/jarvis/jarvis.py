@@ -7,6 +7,7 @@ subscribe to cognitive events *before* thinking begins.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -244,7 +245,6 @@ from jarvis.domain.value_objects.unresolved_item import UnresolvedItem, Unresolv
 from jarvis.edges import EdgesSurface
 from jarvis.executive.executive_controller import (
     ExecutiveController,
-    is_question_shape,
 )
 from jarvis.goal_surface import GoalSurface
 from jarvis.infrastructure.capability_registry import (
@@ -331,6 +331,29 @@ def _is_silent_reasoner(reasoner: Reasoner | None) -> bool:
 # Provider names that mean "no real model": they must never back a live web-search
 # capability (a scripted/stub model does not actually search the web).
 _OFFLINE_PROVIDERS: frozenset[str] = frozenset({"", "scripted", "stub", "keyword"})
+
+
+def qualifies_evidence_request(episode: CognitiveEpisode) -> bool:
+    """Whether ``episode``'s evidence request warrants an unresolved item (P, v1).
+
+    Gate clauses 1-4, testable without the store: an ungrounded conclusion
+    (request attached), COMPANION origin (external, not self-generated), FULL
+    attention (actually reasoned, not probe-routed), and a trigger that reads
+    as a question -- v1 requires the explicit ``?`` suffix. An interrogative cue
+    word alone ("I know the supplier failed to deliver") never turns an
+    ungrounded declaration into a persisted open question; that is the line
+    that keeps declarations out. Clause 5 (no identical OPEN item) needs the
+    store, so it lives at the writer's call site under :attr:`Jarvis._unresolved_lock`.
+    Pure structure over the episode, no side effects.
+    """
+    request = episode.evidence_request
+    if request is None:
+        return False
+    if episode.origin is not TriggerOrigin.COMPANION:
+        return False
+    if episode.attention is not Attention.FULL:
+        return False
+    return request.question.strip().endswith("?")
 
 
 class Jarvis:
@@ -589,6 +612,9 @@ class Jarvis:
         # the lifecycle across restarts.
         self._unresolved_store = unresolved_store
         self._unresolved_memory: dict[str, UnresolvedItem] = {}
+        # Serializes the episode writer's dedup guard+write: two serving threads
+        # thinking the same trigger cannot both pass the OPEN check and duplicate.
+        self._unresolved_lock = threading.Lock()
         # Optional long-term-memory recall (Vision §3): when enabled, a deterministic
         # lexical retriever over Jarvis's own stores lets an episode answer from what
         # it remembers instead of a blank "insufficient evidence". Off by default, so
@@ -2085,25 +2111,24 @@ knowledge_graph=knowledge_graph_store,
         A COMPANION-origin, FULL-attention episode that concludes ungrounded and
         asks for evidence ("does my companion prefer simplicity?", no grounding)
         leaves its question in the unresolved store so curiosity can return to
-        it -- but only when the trigger reads as a question and no identical
-        question is already open (the UnresolvedItem model's own exact-string
-        identity, the same comparison ``resolve_open_question`` matches on).
-        Echoes (CURIOSITY origin) and probe routing (BRIEF) are excluded by the
-        gate; deliberately inert when no clause holds. The episode is read-only
-        here: no belief, evidence, confidence, memory, topic or span is touched.
+        it -- but only when the trigger carries an explicit ``?`` and no
+        identical question is already open (the UnresolvedItem model's own
+        exact-string identity, the same comparison ``resolve_open_question``
+        matches on). Echoes (CURIOSITY origin) and probe routing (BRIEF) are
+        excluded by the gate; a cue word alone never promotes an ungrounded
+        declaration (see :func:`qualifies_evidence_request`). The guard-and-write
+        pair is serialized on :attr:`_unresolved_lock` so concurrent thoughts of
+        the same trigger cannot race past the dedup check. The episode is
+        read-only here: no belief, evidence, confidence, memory, topic or span
+        is touched.
         """
         request = episode.evidence_request
-        if request is None:
+        if request is None or not qualifies_evidence_request(episode):
             return
-        if episode.origin is not TriggerOrigin.COMPANION:
-            return
-        if episode.attention is not Attention.FULL:
-            return
-        if not is_question_shape(request.question):
-            return
-        if any(item.question == request.question for item in self.open_questions()):
-            return
-        self.note_open_question(request.question)
+        with self._unresolved_lock:
+            if any(item.question == request.question for item in self.open_questions()):
+                return
+            self.note_open_question(request.question)
 
     def energy_spent(self) -> int:
         """Total cognitive energy spent so far (Vision §15)."""
