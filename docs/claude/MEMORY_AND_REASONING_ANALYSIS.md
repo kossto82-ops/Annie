@@ -1,5 +1,10 @@
 # Jarvis — Why it stalls, and the next evolution (Memory & Reasoning)
 
+> **HISTORICAL / SUPERSEDED (2026-09-21).** Pre-162 analysis of the "no information" failure mode.
+> The subsequent line resolved it: recall by meaning (Inc 168), statements stored as memory (Inc 167),
+> change-of-mind resolution (Inc 169) and the evidence-request writer (Inc 170). Read
+> `docs/claude/SYSTEM_TODAY.md` + `docs/claude/ARCHITECTURE.md` for the current state.
+
 > Analysis phase only. No code was changed and nothing was installed to produce
 > this. Every claim below points at real code (`file:line`). The purpose is to
 > explain **why Jarvis keeps answering "I don't have enough information"** and to

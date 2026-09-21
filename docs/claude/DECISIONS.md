@@ -53,9 +53,14 @@ The Command Center renders and routes state. It must not become a second brain.
 
 The domain defines repository contracts. Persistence technology can change behind them. Do not introduce PostgreSQL/SQLite/graph DB merely because a feature sounds like memory.
 
-## D11 — Exact matching is currently deliberate
+## D11 — Shallow matching is deliberate outside identity
 
-Belief/connection identity currently relies on exact strings in places. Semantic matching is a future enhancement, not something to sneak into a small feature.
+Belief identity is **canonical-topic-anchored** since Increment 163 (episodes group by concept
+signature, never by raw trigger) and recall reaches the same memory by meaning since Increment 168
+(`relatedness = max(surface_overlap, concept_relevance)` over a bilingual concept map). Deliberately
+*shallow* keyword matching may still be used in surfaces that only *propose* options (capability scout,
+gap detection) — never to decide identity, evidence, or confidence. Embeddings are an opt-in recall
+channel, not an identity mechanism.
 
 ## D12 — Prefer domain concepts over generic abstractions
 
@@ -101,12 +106,13 @@ never writes there. Meta-knowledge stays derived from persisted history.
 
 ## D18 — Semantic abstraction is deterministic and offline
 
-Semantic generalization (paraphrase/analogy/cross-domain ties) is implemented as a
-hand-maintained English concept vocabulary over stemmed tokens — an explicit,
-testable domain service, not an LLM call and not embeddings (D6, D8). LLMs remain
-perception providers that may extract evidence behind the provider seams; they must
-never be smuggled into the abstraction layer as a shortcut. The vocabulary is
-extended in `domain/services/abstraction.py` with tests, never rewritten per-use.
+Semantic generalization (paraphrase/analogy/cross-domain ties and ES↔EN) is implemented as an explicit,
+testable domain service over a hand-maintained bilingual concept vocabulary (stemmed + lemmatised
+tokens, `CONCEPT_MAP` ES↔EN) — not an LLM call and not embeddings (D6, D8). LLMs remain perception
+providers that may extract evidence behind the provider seams; they must never be smuggled into the
+abstraction layer as a shortcut. The vocabulary is extended in `domain/services/abstraction.py` with
+tests, never rewritten per-use. The retriever ranks every durable candidate with the one
+`relatedness` scorer (D8); `SEMANTIC` is a tie-break only, never a separate scoring path (Increment 168).
 
 ## D19 — Attention priorities are derived, never stored
 
@@ -130,3 +136,43 @@ what Jarvis concludes. A preference forms only on well-sampled, meaningful
 gaps, defaults to lexical otherwise, and must always be reversible by later
 counter-evidence. Flooding the record is bounded by the cap and undone by
 honest use.
+
+## D22 — Belief identity is canonical-topic-anchored
+
+Episodes group by canonical concept signature, never by raw trigger; empty
+signatures never fuse (`∅==∅` is a merge bug) and single-concept topics never
+absorb. The most recent trigger survives as display-only `representative`; the
+`topic_id = " > ".join(sorted(signature))` is the identity (Increment 163, refined
+by topic identity v3).
+
+## D23 — Consolidation is COMPANION-only and valence-neutral
+
+Semantic abstraction/consolidation feeds on `COMPANION`-origin episodes only, and
+valence-less episodes contribute *neutral* evidence (`Evidence.is_neutral`) that
+`derive_confidence`/`derive_stability` skip and that emits neither
+`SemanticMemoryReinforced` nor `Contested`. The semantic layer must never build
+valence or contradiction out of episodes that carried none (Increment 164).
+
+## D24 — Turns are context; statements are memory
+
+`MemoryKind.CONVERSATION` entries stay surface-only candidates in recall — matched
+lexically, never recited as answers. Long-term recall is what meaning should reach.
+Statements cross into memory deliberately: an everyday ≥3-word non-question sentence
+is stored as `USER_STATEMENT` evidence (weight 1.0, persisted; companion channel when
+first-person) — turning conversation into memory is explicit, never ambient
+(Increment 167).
+
+## D25 — A changed mind resolves, never stacks
+
+`Belief.revise()` supersedes the earlier stance, moves it into the belief's
+`precedents` archive, and never recalls it as current. A corrected decision is a
+first-class revision (a first-class timeline), not a new contradiction that must be
+argued down. `revise_companion` applies the same rule to the companion model
+(Increment 169).
+
+## D26 — Evidence-request writing is epistemically inert
+
+An evidence-request write is gated (COMPANION-origin, FULL-attention,
+question-shaped, evidence-less), writes no evidence and no belief, and is a
+transient trace so curiosity can return to an unanswered question. It must never
+influence confidence, stability, or ranking (Increment 170).

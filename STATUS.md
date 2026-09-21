@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-20 (Increment 169, pyright strict 0 in `src/` + `tests/` at this increment)
+Last updated: 2026-09-21 (Increment 171 — documentation reconciliation + Zero-Fallout Roadmap)
 
 ---
 
@@ -120,7 +120,7 @@ src/jarvis/
     Jarvis.database wires the whole memory *and* the trace into one jarvis.db -- docs stay as bytes)
 examples/                                8 runnable tours (main_loop, goal_arc, goal_parts, perceiving,
                                          conversation, resolving, reflecting, command_center)
-tests/                                   80+ test modules / 1647 tests mirroring the above
+tests/                                   80+ test modules / 2220 tests mirroring the above
                                          (+ public-surface, console-asset & example guards)
 ```
 
@@ -2154,6 +2154,11 @@ The architectural audit is complete. Post-audit implementation wired existing sy
 
 ## Decisions log (ADR-lite — settled, do not revisit)
 
+> **Legacy numbering.** This log uses its own D1–D40 sequence. The current, non-negotiable
+> constraints live in `docs/claude/DECISIONS.md` (D1–D26), which is the **single authority**;
+> cross-references in docs must resolve there. The mapping from these legacy numbers to `DECISIONS.md`
+> is added by roadmap phase F1 (`docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`). Entries below are history.
+
 - **D1** `src/` layout; `pythonpath=["src"]` in pytest so no install step is needed for tests.
 - **D2** Python 3.13+ target (dev machine runs 3.14). Modern typing, stdlib-first, no deps yet.
 - **D3** Events are frozen, `slots=True`, `kw_only=True` dataclasses. `DomainEvent` carries
@@ -2396,59 +2401,47 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ---
 
-## Next increment (recommended, not yet started)
+## Next increment (see `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`)
 
-**The command center has voice, a synced face, live state, tuning, a reasoning panel, a capability
-catalog, edges (internet/research/compare/tool/notes/mail/calendar/tasks/speech), files/documents as a
-first-class surface, and a real LLM path (Increments 89–142); cognition thresholds are live-tunable (141),
-documents are folder-aware (142), the per-belief weighting policy is root-injectable (144), deep
-multi-turn reasoning rides a session span (145), hypotheses narrate their own temporal stability
-(146), beliefs and hypothesis sets share one `CognitiveEpisode` shape (147), documents carry
-recorded ownership (148) and documents are editable via the chat itself (149).** The audit-gate reset (135), the reasoner-consuming-
-ConversationContext work (138), live knobs (141), the deterministic event guard (143), the
-weighting-policy seam (144), the reasoning span (145), the hypothesis-stability narration (146), the
-episode-shape unification (147), document provenance (148) and chat-based document editing (149) have
-all landed. The mechanical debt is gone; the
-remaining choices are capability. Natural next moves — pick one:
-- **A remaining honest gap:** the real database behind the repository contracts (D10), the live STT
-  backer behind the speech seam, or more §15 energy modelling (charge deliberations).
-- Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable via
-  constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in the suite;
-  §38 boundary intact (the LLM extracts candidate evidence, it never decides).
+**Increments 166–171 are committed and pushed** (statements-as-memory, recall by meaning,
+change-of-mind resolution, the evidence-request writer, and the docs+roadmap close-out behind). The
+memory-correctness debt is gone and every remaining gap has a **scheduled phase with an acceptance
+gate** — nothing opportunistic. Start at Phase **F1** (decision-registry consolidation; the two live
+D-numberings are the first thing an audit finds), then **F2** (schedule honest forgetting/decay),
+**F3** (auto-retire answered open questions), **F4** (passage-level document search), **F5** (live
+voice streaming + VAD), **F6** (edge deepening), **F7** (lockfile, 3-python CI matrix, doc-truth job,
+broad-`except` audit), **F8** (final gates + re-audit checklist).
+
+Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable
+via constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in
+the suite; §38 boundary intact (the LLM extracts candidate evidence, it never decides); docs stay
+truthful (`SYSTEM_TODAY.md` is the source of truth, `DECISIONS.md` is the single decision authority).
 
 ---
 
 ## After that — remaining directions
 
-Track A (the reflective cycle) is complete and persistent; **Track B is live** (Increments 86–98); **Track
-C (§15 energy) has both its seams done** (cost visible + a fatigue budget, Increments 84–85, + decay
-weighting, Increment 113). The remaining directions:
+Track A (the reflective cycle) is complete and persistent; **Track B is live** (Increments 86–98 + 153-161);
+**Track C (§15 energy) has both its seams done** (cost visible + a fatigue budget, Increments 84–85, +
+deliberations charging attention, Increment 155, + decay weighting, Increment 113). The remaining
+directions:
 
 - **Capability depth beyond the seams:** the calendar/tasks/notes/mail/speech/agent edges exist as seams +
-  adapters; each can be deepened (CalDAV sync, scheduling execution, STT integration, richer delegation
-  scopes). Each must stay behind its domain Protocol (D39), earned (D37), and offline-testable (D8).
-- **Conversation context for reasoning (landed, Increment 138);** the deep multi-turn edge is now landed
-  too: the session `ReasoningSpan` (Increment 145) carries the discussion across turns. The span is
-  conversation-scoped; extending it into the *episode* path or a live voice session stays open.
-- **Track C/D leftovers (opportunistic).** More §15 energy modelling (charge deliberations; energy recovery
+  adapters; each can be deepened (CalDAV sync, scheduling execution, streaming/VAD STT, richer delegation
+  scopes). Each must stay behind its domain Protocol (D7), earned (D37), and offline-testable (D8).
+- **Memory-line depth:** the semantic layer is deliberately bounded (COMPANION-only consolidation with
+  neutral evidence, D23; vocabulary-driven meaning recall, D18) — extending it means *vocabulary + policy
+  decisions*, never an LLM shortcut. Decay/forgetting exist as services; wiring them into a running system
+  that stays honest under partial knowledge is a design task, not a code one. Evidence-request writes
+  (Increment 170) open an honest "return to the unanswered question" loop whose scheduling is still open.
+- **Track C/D leftovers (opportunistic).** More §15 energy modelling (energy recovery
   over time); count/recency weighting in `TemporalStability`
-  beyond the opt-in decay policy; injectable
-  weighting policy at the `Jarvis(...)` level (done — decay at Increment 113, per-belief root default at
-  144); pin ruff/pyright in a lockfile; consider a real DB behind the repository
-  contracts (D10).
+  beyond the opt-in decay policy; pin ruff/pyright in a lockfile.
 
-*Recommendation: the mechanical gates debt is gone (Increment 135), the reasoner reads recent turns
-(Increment 138), cognition thresholds are live-tunable (Increment 141), documents are folder-aware
-(Increment 142), the per-belief weighting policy is root-injectable (144), deep multi-turn reasoning
-rides a session span (145), hypotheses narrate their temporal stability (146), beliefs and hypothesis
-sets share one `CognitiveEpisode` shape (147), documents carry recorded ownership (148) and documents
-are editable via the chat itself (149). Document depth is complete; the biggest-value remaining goal is
-a real database (D10) behind the
-repository contracts.*
-
-*(Deferred, natural follow-ups: excessive-complexity self-observation tendency; semantic trigger↔trait
-matching now that embeddings exist; recurring-goals/working-patterns facets; live STT wiring for the speech
-seam.)*
+*Recommendation: the correct-memory foundation is now deep (Increments 166-170). The highest-value
+remaining goals are the things that turn good memory into better companionship: a scheduled, honest
+forgetting/consolidation cycle, streaming live voice, and passage-level document search — each small and
+capability-level (no new abstractions).*
 
 ---
 
@@ -2527,14 +2520,16 @@ seam.)*
 - `TemporalStability` is span-based for both beliefs *and* hypotheses now (Increment 146) — no
   count/recency weighting beyond the opt-in decay policy; hypotheses narrate their narrowness without
   it affecting ranking or ties.
-- Belief/connection identity still keys on exact strings (D17); semantic matching exists for *recall*
-  (embeddings) but not for belief/connection identity.
-- The episode-shape split is *gone* (Increment 147): beliefs and hypothesis sets share one
-  `CognitiveEpisode` shape and `EpisodeKind` is derived from the conclusion, never painted.
-- *Deep multi-turn* reasoning: an incremental reasoning span over several turns is now built — the
-  session `ReasoningSpan` (Increment 145) continues the discussion across turns with a deterministic
-  thread lifecycle. The span is conversation-scoped and bounded; it is not yet carried into the
-  *episode* path or connected to a live-STT voice session.
+- Belief identity is **canonical-topic-anchored** (Increments 163-165); recall matches by meaning
+  (`relatedness`, Increment 168) — embeddings remain an *opt-in recall* channel, never the identity
+  mechanism.
+- Consolidation/abstraction is deliberately bound: COMPANION-origin episodes only, neutral evidence
+  only (Increment 164) — the semantic layer cannot build valence out of nothing.
+- Decay/forgetting are implemented and tested but **nothing schedules them in the running system**
+  (`DecayingWeightingPolicy`, `forget()`, `identify_forgetting_candidates` are opt-in services).
+- `ReasoningSpan` is conversation-scoped (Increment 145); the *episode* path rides it too (Increment
+  166 provenance commits: `think()` supplies the span to episode reasoning) but a live voice session
+  extension stays open.
 - Documents are folder-aware (Increment 142), carry recorded ownership (Increment 148) and are
   editable via the chat itself (Increment 149) — remaining gap: search ranks whole documents, not
   passages.
@@ -2549,6 +2544,10 @@ seam.)*
   have no CalDAV/ICS sync; email has a real IMAP/SMTP adapter but no per-account UI management.
 - NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
 
+> **Every bullet above now maps to a scheduled phase** in `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`
+> (F2–F7), each with an acceptance gate, written as part of Increment 171. The list stays here as the
+> honest snapshot until each phase lands and its bullets are deleted.
+
 **Already built (do not list as missing):** goals & decomposition, curiosity (incl. give-up/ask-for-help),
 episodic + belief + companion + action memory, self-model (3 tendencies), graded autonomy, attention,
 persistence across restart (crash-safe), perception seam + streams + contested-belief resolution, belief
@@ -2558,12 +2557,17 @@ dashboard/sphere/catalog surface, the files/documents surface (accept, recall, s
 live-tunable cognition thresholds, the root-injectable per-belief weighting policy, a real SQLite
 database behind the repository contracts (`Jarvis.database()`) extended across the calendar/notes/tasks
 edge seams and the decision-provenance trace (Increments 150-152), an opt-in live STT backer behind
-the speech seam (Increment 154), and the console mic actually using that live ear when wired
-(Increment 159), and real instruction execution: material directives in conversation perform through
-the earned-agency executor behind the same sandboxed registry, with external/destructive acts
-refusing at the gate (Increment 160). Architectural audit complete: God Object split (Phase 0),
-Semantic Memory (Phase 1), Temporal Reasoning (Phase 2), Knowledge Graph (Phase 3), Persistent
-Conversation (Phase 4), Second-Order Reflection (Phase 5).
+the speech seam (Increment 154), the console mic actually using that live ear when wired
+(Increment 159), real instruction execution (Increment 160), relation-aware graph recall and
+retrieval-strategy selection (Increment 166), **statements as real memory** (Increment 167: everyday
+≥3-word non-question sentences persist as `USER_STATEMENT` evidence and answers survive a restart),
+**recall by meaning** (Increment 168: one `relatedness` scorer over a bilingual concept map, ES↔EN),
+**change-of-mind resolution** (Increment 169: `Belief.revise()`/`revise_companion` archive the superseded
+stance and never recall it as current), and the **episode evidence-request writer** (Increment 170:
+a COMPANION-origin, FULL-attention, question-shaped, evidence-less episode leaves a transient
+`EvidenceRequest` for curiosity to return to). Architectural audit complete: God Object split
+(Phase 0), Semantic Memory (Phase 1), Temporal Reasoning (Phase 2), Knowledge Graph (Phase 3),
+Persistent Conversation (Phase 4), Second-Order Reflection (Phase 5).
 
 ### Architectural Audit Phase 0 — God Object Split ✅ (2026-09-11)
 - Split `jarvis.py` (3336 lines) into 7 focused modules: `cognitive.py`, `companion.py`, `goals.py`, `actions.py`, `curiosity.py`, `introspection.py`, `persistence.py`.
@@ -2831,7 +2835,7 @@ suite: **1906 passed, 3 skipped**; ruff clean; **pyright strict 0**.
 
 ---
 
-### Increment 167 — Statements are real memory: everyday sentences store, recall, and survive a restart (2026-09-19, working tree, not yet committed)
+### Increment 167 — Statements are real memory: everyday sentences store, recall, and survive a restart (2026-09-19, commit `c034799`)
 
 The "no se acuerda de mí" root cause: a statement told in conversation was never written
 to long-term memory — only "remember this" turns were — so after a restart nothing came
@@ -2870,7 +2874,7 @@ suite: **2179 passed, 3 skipped**; ruff clean; **pyright strict 0** across `src/
 
 ---
 
-### Increment 168 — Jarvis recalls meaning, not just words: paraphrase and ES↔EN recall across the durable store (2026-09-20, working tree, not yet committed)
+### Increment 168 — Jarvis recalls meaning, not just words: paraphrase and ES↔EN recall across the durable store (2026-09-20, commit `d5a5996`)
 
 Verbatim recall was real after 167 but *meaning* was not: a paraphrase ("trying to
 build" vs "estoy construyendo") or a different language shared no surface words, so the
@@ -2931,7 +2935,7 @@ decline + real tool tests) with its own 5 pyright errors; it was left untouched 
 
 ---
 
-### Increment 169 — A changed mind is resolved, not stacked: temporal/decision resolution plus the honest web-surfacing of the real tools (2026-09-20, working tree, not yet committed)
+### Increment 169 — A changed mind is resolved, not stacked: temporal/decision resolution plus the honest web-surfacing of the real tools (2026-09-20, commit `331eb48`)
 
 168's documented limitation is closed: before this, saying "He cambiado de opinión…"
 left the old stance and the new one as two parallel companion traits — the companion
@@ -2988,6 +2992,59 @@ precedent, growing evidence); plus `TestRevision` unit tests on the aggregate
 (resolves instead of accumulating, untargeted revise is a no-op, `BeliefRevised`
 flows). Full suite: **2200 passed, 3 skipped**; ruff clean; **pyright strict 0**.
 *Increment 168's remaining limitation is resolved; no new limitations documented.*
+
+---
+
+### Increment 170 — Episode evidence-request writer (2026-09-21, commits `c6c5e1a` + audit remediation `1a03e13`)
+
+Jarvis can now *leave a trace of its own wondering*: an ungrounded, COMPANION-origin,
+FULL-attention, question-shaped episode (e.g. "does my companion prefer simplicity?" with no
+evidence) leaves a transient `EvidenceRequest` in the unresolved store, so curiosity can return to
+the unanswered question instead of losing it.
+
+- **`is_question_shape` public alias (`executive_controller.py`)** reuses `_QUESTION_CUES` + the
+  `?`-suffix line from the self-question test (no behavior change). `Jarvis.think` records the
+  request after the reasoning-span boundary via the existing `note_open_question`, guarded
+  exact-string over OPEN items so the existing lifecycle-dedup test stays green.
+- **Epistemically inert (U1–U6)**: CURIOSITY echoes and BRIEF/CHEAP probes are excluded by
+  origin/attention; no recursion (`pursue` bypasses the facade); the write carries no evidence,
+  no belief, no confidence.
+- **Audit findings F1–F5 (commit `1a03e13`)**: the writer is tightened so a cue word alone (e.g.
+  "…supplier failed to deliver") never turns an ungrounded declaration into a persisted open
+  question. Public `qualifies_evidence_request(episode)` in `jarvis.py` formalizes gate clauses
+  1–4 (request non-None, COMPANION origin, FULL attention, explicit `?`-suffix) and is tested
+  directly; the `open_questions()` guard + `note_open_question` write are serialized on a
+  dedicated `threading.Lock` so concurrent serving threads cannot duplicate an item; +7 tests pin
+  the predicate clauses and two production-path declaration negatives.
+
+**Tests**: `tests/test_episode_evidence_request_writer.py` (A–E, then +7 predicate/negative
+tests). Full suite: **2220 passed, 3 skipped**; ruff clean; **pyright strict 0**.
+
+---
+
+### Increment 171 — Documentation reconciliation + Zero-Fallout Roadmap (2026-09-21)
+
+No behavior change; the codebase at HEAD `1a03e13` was untouched. The doc tree now matches reality
+and carries a plan that turns every known gap into a scheduled phase.
+
+- **Documentation reconciliation** (previous task): `docs/claude/SYSTEM_TODAY.md` created as the
+  operative source of truth (user input → reply, with real module names and IMPLEMENTED /
+  [EXPERIMENTAL] / PARTIAL legend); `CLAUDE.md`, `README.md`, `AI_CONTEXT.md`, `ARCHITECTURE.md`,
+  `DECISIONS.md` (D11 rewritten, D18 extended, **D22–D26 added**), `INDEX.md`, `CONTEXT_POLICY.md`
+  updated; 12 dated plans/audits marked HISTORICAL/SUPERSEDED; README Python floor fixed 3.13+ → 3.11+
+  (matches `requires-python`); Inc-167/168/169 headers in the log corrected to their real commit
+  hashes (`c034799`/`d5a5996`/`331eb48`).
+- **Decisions log**: header annotated — legacy adr-lite numbering D1–D40, superseded by the single
+  authority `docs/claude/DECISIONS.md` (D1–D26); the mapping appendix ships with Phase F1.
+- **`docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`**: `pytest` **2220 passed / 3 skipped** baseline at
+  `1a03e13`; phases F0–F8 close every verified gap — scheduled honest decay/forgetting (no production
+  caller today), open-question auto-retirement (`resolve_open_question` unused in the chat flow),
+  passage-level document search, live-voice streaming/VAD, edge deepening (CalDAV/ICS, per-account
+  mail UI, decided-script executor, voice ReasoningSpan), lockfile + 3-python CI matrix + doc-truth
+  job, and the broad-`except` audit — each with a mechanically checkable acceptance gate and a
+  month-later re-audit checklist.
+
+Full suite: **2220 passed, 3 skipped** (docs-only commit); ruff clean; **pyright strict 0**.
 
 ---
 

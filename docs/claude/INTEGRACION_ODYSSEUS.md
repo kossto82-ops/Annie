@@ -1,5 +1,10 @@
 # Integración Odysseus → Jarvis (Fases 0–3)
 
+> **HISTORICAL / COMPLETADO (2026-09-21).** Plan de integración (Fases 0-3); las fases acordadas se
+> implementaron como `Odysseus` / fases de capacidades y edge seams (Incrementos 115-134 y la
+> configuración por env del Command Center). Conservado por traza; la implementación actual está
+> documentada en `docs/claude/ARCHITECTURE.md` (§Odysseus) y `docs/claude/SYSTEM_TODAY.md`.
+
 Plan de integración de capacidades de **Odysseus** (`odysseus-dev/odysseus`, AGPL-3.0)
 en Jarvis. Alcance acordado: **Fases 0–3** — Tool Registry, Deep Research, Compare y
 capacidades dentro de la cognición.

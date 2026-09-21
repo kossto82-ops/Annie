@@ -160,19 +160,35 @@ Since Increment 162 a deterministic, offline semantic layer sits behind the same
 episode completes
    ↓
 _remember → consolidate_semantic_memories (domain/services/abstraction.py)
-   ↓  conceptual vocabulary (stemmed) → entity-independent signatures → Jaccard clustering →
+   ↓  conceptual vocabulary (stemmed + lemmatised) → entity-independent signatures → Jaccard clustering →
         "recurrence: <shared concepts>" → contradiction-aware evidence
+   ↓
+topic_resolution (domain/services/topic_resolution.py): canonical concept signatures group episodes —
+        never by raw trigger; empty signatures never fuse; representative is display-only (Inc 163)
    ↓
 SemanticMemoryRepository (InMemory / SqliteSemanticMemoryStore / JsonSemanticMemoryStore)
    ↓
-lexical_memory_retriever: SEMANTIC candidates scored max(lexical, conceptual); strong recall
-      bypasses the live reasoner, weak recall reaches it — recall stays candidate context only (D35)
+lexical_memory_retriever: every durable candidate ranked relatedness = max(surface_overlap,
+      concept_relevance) — recall by meaning with no embeddings; SEMANTIC is a tie-break only (Inc 168);
+      strong recall bypasses the live reasoner, weak recall reaches it — candidate context only (D35)
 ```
 
-The vocabulary is a hand-maintained English concept map (~170 stems → FAIL/SUCCEED/DELIVER/PROMISE/…):
-no LLM and no embeddings in the runtime path (D6, D8). Abstracted patterns persist through every
-composition root (`Jarvis.persistent()`, `Jarvis.database()`, `create_jarvis()`), and consolidation
-is bounded to the most recent window so a long-lived session never rescans the whole history.
+The vocabulary is a hand-maintained bilingual concept map (~stems + lemmas, ES↔EN via `CONCEPT_MAP` —
+FAIL/SUCCEED/DELIVER/PROMISE/…): no LLM and no embeddings in the runtime path (D6, D8). Negation is
+parity-counted (an odd number of negation markers inverts polarity). Abstracted patterns persist through
+every composition root (`Jarvis.persistent()`, `Jarvis.database()`, `create_jarvis()`). Since Increment
+164 consolidation/abstraction feeds on **COMPANION-origin episodes only**, and valence-less episodes
+contribute *neutral* evidence (`Evidence.is_neutral`) that `derive_confidence`/`derive_stability` skip —
+never a contradiction — so the semantic layer never builds valence out of nothing; consolidation stays
+bounded to the most recent window so a long-lived session never rescans the whole history.
+
+**Canonical topic identity** (Increment 163, refined by topic identity v3): episodes group by concept
+signature, `topic_id = " > ".join(sorted(signature))` (e.g. `DELIVER > FAIL`), the most recent trigger
+survives as display-only `representative`, single-concept topics never absorb, maturation
+(consolidation/abstraction) rides the canonical topic, and curiosity `wake()`/`pursue()` carry a
+persisted `target_topic_id` and run the topic's real representative trigger — internal cognition cannot
+re-rank attention by echoing itself. The signature memo is a bounded `lru_cache(maxsize=1024)` with
+public `clear_signature_cache()` / `signature_cache_info()`.
 
 **Attention development** shipped as a parallel, ranked surface: `Jarvis.attention_priorities()`
 derives a bounded, reversible per-topic saliency (recurrence / unresolved / revision / recency) from
@@ -213,10 +229,12 @@ The conversational flow (command center `say`, Increment 114) routes by intent f
 ```text
 utterance
    ↓
-classify intent (GREETING/SMALLTALK/…/REMEMBER/STATEMENT)
+classify intent (GREETING/SMALLTALK/…/REMEMBER/STATEMENT/ACT)
    ↓
-conversation turn  OR  perceive (world + companion) → recall (memory + documents)
-                                                  → consult → reason (with recent turns) → reply
+question → perceive (world + companion) → recall (memory + documents)
+         → consult → reason (with recent turns) → reply
+statement → _remember_statement → USER_STATEMENT evidence (1.0) → jarvis.think → memory
+directive → ConversationIntent.ACT → Jarvis.execute → sandboxed tools at approved=False → honest narration
 ```
 
 Since Increment 138 the reasoner receives the short-term `ConversationContext` (recent turns) in this
@@ -230,6 +248,40 @@ flags it disputed (the prompt names corrected proposals so they are never assert
 proposes answer content; it never decides thread state (§38). Replies that
 recalled a matching document carry a `documents` chip list (name + snippet) in the stream meta and the
 fallback JSON.
+
+## Conversation vs long-term memory
+
+Since Increment 167 the memory boundary is explicit and tested:
+
+- **Turns are context, never memory.** `MemoryKind.CONVERSATION` entries are surface-only candidates in
+  recall: matched lexically, never recited as answers. Long-term recall (beliefs, episodes, semantic
+  patterns, graph, documents) is what paraphrase should reach.
+- **Statements are real memory.** A `STATEMENT` intent (an everyday ≥3-word non-question sentence,
+  `_MIN_STATEMENT_WORDS = 3`) is stored through `_remember_statement` as `EvidenceSource.USER_STATEMENT`
+  evidence (weight 1.0) and persisted — first-person statements route through the companion channel — so a
+  follow-up question after a restart is answered from memory, with the stored sentence quoted verbatim.
+- End-to-end proof lives in `tests/test_end_to_end_memory.py` (real SQLite via
+  `Jarvis.database(tmp_path)`; "restart" = a fresh Jarvis over the same directory).
+
+## Change of mind (revision)
+
+Since Increment 169 a corrected decision is first-class, not a new contradiction:
+
+- `Belief.revise(statement, evidence, ...)` swaps the belief's statement, folds the new evidence, and moves
+  the superseded statement into the belief's `precedents` archive (a first-class timeline). `BeliefRevised`
+  flows through the nervous system; `episodes.belief_revision_history` exposes the archive.
+- Companions: `Jarvis.revise_companion(trait, evidence, replaces=…)` supersedes the earlier stance; the old
+  text is never recalled as current. Revision cues are conservative and bilingual ("he cambiado de opinion",
+  "me retracto", "i changed my mind", "on second thought", "ya no quiero", "i no longer want").
+- Resolution survives restarts on all three store families (in-memory, JSON, SQLite).
+
+## Episode evidence-request writer
+
+Since Increment 170 a COMPANION-origin, FULL-attention, question-shaped, evidence-less episode leaves a
+transient `EvidenceRequest` in the unresolved store — the epistemic trace that Jarvis *did* wonder and had
+nothing to conclude, so curiosity can return to it. `is_question_shape` (public alias in
+`executive_controller.py`) reuses the question cues (`_QUESTION_CUES` + trailing `?`). The write is
+epistemically inert: no evidence, no belief, no confidence.
 
 ## Market-edge capabilities & seams
 
@@ -245,7 +297,7 @@ search the web / read documents    ExternalSource                       AgentRea
 deep research                      ResearchSource                       SearXNG adapter
 compare language models            ModelComparator                      RegistryModelComparator
 reason with a language model       Reasoner                             LlmReasoner / SilentReasoner
-recall by meaning                  MemoryRetriever                      EmbeddingMemoryRetriever
+recall by meaning                  MemoryRetriever                      lexical `relatedness` scorer (Inc 168) + EmbeddingMemoryRetriever (opt-in)
 manage notes                       NotesStore                           LocalNotesStore
 send/read email                    MailBox                              IMAPSMTPMailBox
 manage calendar                    CalendarStore                        LocalCalendarStore + Google

@@ -1,5 +1,10 @@
 # Jarvis — Plan de Arquitectura Post-Auditoría
 
+> **HISTORICAL / COMPLETADO (2026-09-21).** Plan generado el 2026-09-11. Todas sus fases
+> (0-5) se implementaron y cerraron el 2026-09-11/13, seguidas de la remediación (2026-09-14)
+> y la línea de memoria 162-170. Documento de planificación conservado por traza — no describe
+> el sistema actual (ver `docs/claude/SYSTEM_TODAY.md`).
+
 > Generado a partir de la auditoría arquitectónica profunda (2026-09-11).
 > **Este es un plan, NO implementación.** Ningún archivo se modifica aquí.
 

@@ -17,11 +17,12 @@ Cognition is centred on **Cognitive Episodes**, not prompt/response pairs.
 Read these files only when relevant:
 
 1. `docs/claude/AI_CONTEXT.md` — compact orientation; start here when the task needs project context.
-2. `docs/claude/ARCHITECTURE.md` — current architecture and boundaries.
-3. `docs/claude/DECISIONS.md` — architectural decisions that must not be casually reversed.
-4. `docs/claude/DEVELOPMENT.md` — development workflow and token-efficient working rules.
-5. `JARVIS_VISION.md` — foundational philosophy/specification; read only when a task touches vision, epistemology, or a major architectural decision.
-6. `STATUS.md` — historical/project log. **Do not read by default.** Read only when the exact history of an increment, decision, or prior implementation matters.
+2. `docs/claude/SYSTEM_TODAY.md` — the operative walkthrough: "how Jarvis works today", user input → reply.
+3. `docs/claude/ARCHITECTURE.md` — current architecture and boundaries.
+4. `docs/claude/DECISIONS.md` — architectural decisions that must not be casually reversed.
+5. `docs/claude/DEVELOPMENT.md` — development workflow and token-efficient working rules.
+6. `JARVIS_VISION.md` — foundational philosophy/specification; read only when a task touches vision, epistemology, or a major architectural decision.
+7. `STATUS.md` — historical/project log. **Do not read by default.** Read only when the exact history of an increment, decision, or prior implementation matters.
 
 `README.md` is for public/project orientation, not default implementation context.
 
@@ -80,9 +81,9 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-~1704 tests passing, ruff clean.
+2220 tests passing (3 skipped), ruff clean, pyright strict 0.
 
-The current project is at Increment 165 (see `STATUS.md`). The reflective cognitive cycle is
+The current project is at Increment 170 (see `STATUS.md`). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),
@@ -141,6 +142,21 @@ feed on `COMPANION` episodes only with *neutral* evidence (`Evidence.is_neutral`
 confidence/stability) for valence-less episodes, negation is parity-counted, the signature
 memo is a bounded lru_cache, and the whole tree is pyright strict 0 (tests included) with
 public seams (`executive.memory_retriever` / `.semantic_memory_store`, `DocumentMemoryRetriever.base`).
+
+The post-165 memory line is complete (Increments 166-170, see `STATUS.md`): relation-aware graph recall
+and retrieval-strategy selection (166), **statements as real memory** (167: an everyday ≥3-word
+non-question sentence is stored as `USER_STATEMENT` evidence through `_remember_statement` — and through
+the companion channel when first-person — and a follow-up question after a restart answers from memory;
+conversation turns stay context and are never recited as answers), **recall by meaning** (168: one
+domain scorer `relatedness = max(surface_overlap, concept_relevance)` ranks every durable candidate,
+the bilingual `CONCEPT_MAP` bridges paraphrase and ES↔EN, and the SEMANTIC special case is gone),
+**change-of-mind resolution** (169: `Belief.revise()` moves the old stance into a `precedents` archive,
+superseded text is never recalled as current, and the resolution survives restarts on all three store
+families), and the **episode evidence-request writer** (170: a COMPANION-origin, FULL-attention,
+question-shaped, evidence-less episode leaves a transient `EvidenceRequest` in the unresolved store so
+curiosity can return to it; `is_question_shape` is a public alias and the write is epistemically inert).
+The source of truth for how Jarvis works *today* is `docs/claude/SYSTEM_TODAY.md`; for detailed
+architecture, `docs/claude/ARCHITECTURE.md`.
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner

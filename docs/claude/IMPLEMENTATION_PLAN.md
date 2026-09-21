@@ -1,5 +1,9 @@
 # Jarvis — Post-Audit Implementation Plan
 
+> **HISTORICAL / COMPLETADO (2026-09-21).** Plan de implementación del 2026-09-13
+> (Phases 0-12 + fases del pydantic-ai thread), todo ejecutado a través del Incremento 161.
+> Conservado por traza; la verdad actual vive en `docs/claude/SYSTEM_TODAY.md`.
+
 Generated: 2026-09-13
 
 ## Baseline (Phase 0)

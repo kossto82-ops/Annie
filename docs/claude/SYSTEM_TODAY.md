@@ -1,0 +1,95 @@
+# How Jarvis Works Today
+
+**Source of truth for the running system** (currently Increment 170). Read this before
+touching memory/cognition/recall code; read `ARCHITECTURE.md` for the detailed layer map and
+`STATUS.md` only for history. Marked `[EXPERIMENTAL]` are implemented, tested, but not the
+runtime default.
+
+## The one-turn flow
+
+```text
+USER INPUT
+   │
+   ▼
+CONVERSATION (interface/_conversation.py, _say → _say_core)
+   │  IntentClassifier (domain/conversation/intent.py, bilingual, deterministic):
+   │  GREETING | SMALLTALK | FEEDBACK | INSTRUCTION | REMEMBER | STATEMENT | ACT
+   │
+   ├─ question ────────────────────────────────────────────────┐
+   │   _is_question = ends in "?" or a _QUESTION_CUES opener    │
+   │   ("when"/"cuando" deliberately NOT question cues)         │
+   ├─ statement → _remember_statement: ≥3-word non-question     │
+   │   → USER_STATEMENT evidence (weight 1.0) → jarvis.think    │  ← statements are MEMORY (Inc 167)
+   ├─ revision cue → companion.revise_companion / Belief.revise │  ← a changed mind is first-class (Inc 169)
+   └─ directive  → ConversationIntent.ACT → Jarvis.execute      │  ← earned agency, sandboxed, approved=False (Inc 160)
+                                                               ▼
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │ EXECUTIVE (ExecutiveController.run)  — the thin decider                   │
+   │   recall   MemoryRetriever: relatedness = max(surface_overlap, concept_relevance)
+   │            (bilingual CONCEPT_MAP; SEMANTIC is a tie-break; turns surface-only)
+   │   consult  KnowledgeSource: one deliberate edge visit (research/web/graph)
+   │   reason   ReasoningSpan across turns (Inc 145); Reasoner proposes, never decides
+   │            strategy selected per query from live, revisable strategy_stats (Inc 166)
+   │   graph    relation-aware traversal when a stored relation cue matches (Inc 166)
+   │   topic    canonical identity: episodes group by concept signature, never raw trigger (Inc 163)
+   └──────────────────────────────────────────────────────────────────────────┘
+   │
+   ▼
+ MEMORY / COGNITION
+   CognitiveEpisode → derive confidence (evidence, NEVER assigned) → Belief/HypothesisSet
+   consolidation/abstraction: COMPANION-only episodes + neutral evidence (Inc 164)
+   change of mind → precedents archive; superseded never recalled (Inc 169)
+   transient EvidenceRequest when a FULL-attention question arrives evidence-less (Inc 170)
+   │
+   ▼
+ CONTEXT → LLM (optional)
+   LanguageModel seam: OpenAiCompatible + pydantic-ai + fallback (JARVIS_LLM_BACKUP_*)
+   guardrail: a decline (EN/ES content filter) is honest silence  (Inc 157)
+   provider_stats: bookkeeping only, never influences a decision (Inc 156)
+   │
+   ▼
+ RESPONSE (rendered from real state, never invented)
+   stance, documents chips, honest "insufficient evidence", or an honest decline
+```
+
+## Facts that hold at HEAD
+
+- **Conversation is context, never memory** (Inc 167): `MemoryKind.CONVERSATION` is surface-only,
+  matched lexically, never recited as an answer. The ring is bounded (`ConversationContext`
+  `capacity=12`), rehydrated from persistence at construction.
+- **Statements are real memory** (Inc 167): an everyday ≥3-word non-question sentence is stored as
+  `USER_STATEMENT` evidence through `_remember_statement` (companion channel when first-person) and
+  *persists* — a follow-up question after a restart answers from memory (proven in
+  `tests/test_end_to_end_memory.py`).
+- **Recall by meaning with no embeddings**: the offline lexical retriever ranks every durable candidate
+  with `relatedness` (paraphrase + ES↔EN). Embedding recall is opt-in
+  (`Jarvis.enable_embedding_recall`) `[EXPERIMENTAL]`.
+- **Belief identity is canonical-topic-anchored** (Inc 163): `topic_resolution.py`, empty signatures
+  never fuse, representative is display-only.
+- **Consolidation is COMPANION-only and neutral-evidence-only** (Inc 164): valence never invented.
+- **Change of mind resolves** (Inc 169): `Belief.revise()` / `Jarvis.revise_companion()` archive the
+  superseded stance; resolution survives restarts on in-memory, JSON, and SQLite.
+- **Confidence is derived, never assigned** (D3); **LLMs are perception components, not judges** (D6);
+  **offline deterministic core** (D8).
+- **Persistence**: `Jarvis()` in-memory · `Jarvis.persistent(dir)` JSON · `Jarvis.database(dir)` SQLite
+  `jarvis.db` (D10/Inc 150-152); command center uses SQLite when a home is set
+  (`JARVIS_HOME=./.jarvis` by default; empty `JARVIS_HOME` = in-memory).
+- **Decay/forgetting are services, not scheduled**: `forget()`/`identify_forgetting_candidates()` and
+  `DecayingWeightingPolicy` exist and are tested; nothing in the running system calls them.
+- **Temporal reasoning is read-only applicability**, not prediction: `belief_timeline` /
+  `what_changed` / `belief_snapshot_at` / `detect_pattern` reconstruct history; there is no expiry
+  or truth-decay in the running path.
+
+## Status legend
+
+| Status | Meaning |
+|---|---|
+| implemented | in the runtime default, tested at HEAD |
+| `[EXPERIMENTAL]` | implemented + tested, opt-in only (live providers, embeddings, fallback, MCP) |
+| partial | seam exists; some surfaces unused at runtime |
+| planned | vision only; do not document as working |
+
+## How to keep this document true
+
+After any change that touches the flow above, update this file in the same commit. It is the shortest
+truthful arc from a user turn to a reply.

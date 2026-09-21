@@ -1,5 +1,9 @@
 # Jarvis — Audit Remediation Report (Stage 2)
 
+> **HISTORICAL RECORD (2026-09-21).** Dated remediation report (2026-09-14, Increment 135). Kept for
+> provenance of what the audit remediation changed; architectural truth lives in
+> `docs/claude/ARCHITECTURE.md` + `docs/claude/SYSTEM_TODAY.md`.
+
 Date: 2026-09-14. Plan: `docs/claude/REMEDIATION_PLAN.md` (committed before any
 production change, Stage 1). Implementation: 11 remediation commits on top of
 the plan (Stage 2). Every finding below was re-verified against the repository

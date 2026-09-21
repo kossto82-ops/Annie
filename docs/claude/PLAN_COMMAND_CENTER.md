@@ -1,5 +1,9 @@
 # PLAN — Command Center al 100%
 
+> **HISTORICAL / COMPLETADO (2026-09-21).** Documento de trabajo del Command Center; su contenido
+> se implementó (Incrementos 124-134, 136-149 y posteriores). Conservado por traza; el estado real
+> está en `docs/claude/SYSTEM_TODAY.md` y el panel en `src/jarvis/interface/console.html`.
+
 > Documento de trabajo. La fuente de la verdad es este fichero: si lo lees en una
 > nueva conversación, este es el punto de partida.
 > Referencia de diseño: `C:\Users\rodri\Downloads\Qwen_html_20260909_5erunrv0u.html`.

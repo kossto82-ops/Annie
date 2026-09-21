@@ -13,13 +13,16 @@ Keep this file small. It contains rules, boundaries, and pointers, not the full 
 ### Tier 1 — normal project work
 
 `docs/claude/AI_CONTEXT.md`
+`docs/claude/SYSTEM_TODAY.md`
 
-Use for orientation when the task is not obviously local.
+Use for orientation when the task is not obviously local. `SYSTEM_TODAY.md` is the operative walkthrough
+(user input → reply); `AI_CONTEXT.md` is the dense current-state snapshot.
 
 ### Tier 2 — architectural work
 
 `docs/claude/ARCHITECTURE.md`
 `docs/claude/DECISIONS.md`
+`docs/claude/SYSTEM_TODAY.md`
 
 Use when changing boundaries, persistence, cognition, providers, or major abstractions.
 
@@ -45,6 +48,7 @@ For an architectural task:
 
 ```text
 CLAUDE.md
+→ SYSTEM_TODAY.md
 → AI_CONTEXT.md
 → ARCHITECTURE.md
 → DECISIONS.md

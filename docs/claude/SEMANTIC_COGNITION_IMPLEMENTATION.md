@@ -1,5 +1,11 @@
 # Semantic Cognition & Attention Development — Implementation
 
+> **HISTORICAL / SUPERSEDED (2026-09-21).** Implementation record for Increment 162. The run-time
+> truth has moved on: consolidation is COMPANION-only with neutral evidence (Inc 164), belief identity
+> is canonical-topic-anchored (Inc 163), and recall ranks every durable candidate by meaning
+> (`relatedness`, Inc 168). Read `docs/claude/SYSTEM_TODAY.md` + `docs/claude/ARCHITECTURE.md` for how
+> it works today.
+
 **Status:** implemented, tested, ship-ready pending final classification (all parts done 2026-09-14).
 **Baseline:** `docs/claude/SEMANTIC_ATTENTION_AUDIT.md` — "SEMANTIC LIMITED / ATTENTION PARTIAL".
 This document records what was changed to close the audited gaps and the honest boundaries that remain.

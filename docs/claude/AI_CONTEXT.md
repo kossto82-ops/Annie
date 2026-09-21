@@ -34,8 +34,12 @@ The response is only one possible output of cognition.
 - `Belief` — evidence-grounded entity. `Hypothesis` / `HypothesisSet` — competing explanations.
 - `CompanionModel` — model of the companion.
 - `IntentClassifier` (`domain/conversation/intent.py`) — deterministic bilingual classify of a user
-  turn (GREETING / SMALLTALK / FEEDBACK / INSTRUCTION / REMEMBER / STATEMENT); short-term
-  `ConversationContext` holds recent turns, separate from long-term memory.
+  turn (GREETING / SMALLTALK / FEEDBACK / INSTRUCTION / REMEMBER / STATEMENT / ACT, Increment 160);
+  short-term `ConversationContext` holds a bounded recent-turn ring (capacity 12), separate from
+  long-term memory. Since Increment 167 the STATEMENT path is a real memory writer: an everyday
+  ≥3-word non-question sentence becomes `USER_STATEMENT` evidence (companion channel when
+  first-person), so conversation stays short-term context but its statements become durable memory
+  (see "Conversation vs long-term memory" below).
 - Value objects cover evidence, confidence, temporal stability, goals, actions, deliberation,
   reflection, energy, connections, state summaries, recalled memories, inferences, capabilities,
   notes, email messages, calendar events, scheduled tasks, tool specs/calls/results, retrieved
@@ -67,10 +71,16 @@ Repositories are defined in the domain and implemented by infrastructure. In-mem
 stores exist, plus a JSONL episode trace; `Jarvis.persistent(directory)` wires durable JSON persistence
 for all stores (incl. capabilities, refutations, trace).
 
-**Recall seam** (`MemoryRetriever` + `RecalledMemory`): a deterministic lexical adapter (offline default)
-and an embedding-backed semantic retriever (recall by meaning, Increment 108). Recall supplies *stance*,
-never belief-confidence (memory is not truth, Vision §22). Since Increment 138 both paths are wrapped by
-`DocumentMemoryRetriever`, which folds matching companion **documents** into the recalled set as
+**Recall seam** (`MemoryRetriever` + `RecalledMemory`): a deterministic lexical adapter is the offline
+default; an embedding-backed retriever (recall by meaning, Increment 108) is opt-in via
+`Jarvis.enable_embedding_recall(embedder)`. Since Increment 168 the lexical adapter itself ranks every
+durable candidate by meaning: one domain scorer `relatedness = max(surface_overlap, concept_relevance)`
+(bilingual `CONCEPT_MAP`, paraphrase and ES↔EN), so the meaning channel works with no embeddings at all.
+`SEMANTIC` is no longer a special case — it is just another durable candidate, winning only as a tie-break
+at exact relevance (the distilled pattern outranks the concrete copies it generalizes over). Short-term
+conversation turns stay surface-only: matched lexically, never echoed as answers. Recall supplies *stance*
+only, never belief-confidence (memory is not truth, Vision §22). Since Increment 138 both paths are wrapped
+by `DocumentMemoryRetriever`, which folds matching companion **documents** into the recalled set as
 `MemoryKind.DOCUMENT` (`DocumentHit` name/snippet/relevance; lexical match; snippets never quote opaque
 binary bytes).
 
@@ -78,11 +88,32 @@ binary bytes).
 the weakest `EvidenceSource.INFERENCE` (0.2) so an unconfirmed answer is held faintly and matures only
 via `confirm()` (learning loop, Increment 110). Since Increment 138 the reasoner receives the short-term
 recent turns (`ConversationContext`) in **both** the conversational (`say`/`reason`) and episode
-(`think(…, conversation=…)` → `executive run` → `_reason_into`) paths; each message is still a fresh
-model call (deep multi-turn spans are open).
+(`think(…, conversation=…)` → `executive run` → `_reason_into`) paths; a session `ReasoningSpan`
+(Increment 145) carries the reasoning threads across turns with a deterministic lifecycle (model proposes
+content only). `Jarvis.reason_stream` records the span only on a completed stream.
+
+**Conversation vs long-term memory**: `MemoryKind.CONVERSATION` turns are surface-only candidates —
+matched lexically, never recited as answers; long-term recall (beliefs, episodes, semantic patterns,
+graph, documents) is what meaning should reach (Increment 167). Statements cross into memory deliberately:
+`_remember_statement` stores an everyday ≥3-word non-question sentence as `USER_STATEMENT` evidence
+(`EvidenceSource.USER_STATEMENT`, weight 1.0, persisted) — and through the companion channel when
+first-person — so a follow-up question after a restart is answered from memory (Increment 167).
+
+**Change of mind** (Increment 169): `Belief.revise()` makes a corrected decision first-class — the new
+stance supersedes the earlier one, the superseded statement moves into the belief's `precedents` archive
+and is never recalled as current, and `BeliefRevised` flows through the nervous system. Companions:
+`companion.revise_companion(...)` / `Jarvis.revise_companion(trait, evidence, replaces=…)`. Resolution
+survives restarts on all three store families (in-memory, JSON, SQLite).
+
+**Evidence-request writer** (Increment 170): an episode that is COMPANION-origin, FULL-attention,
+question-shaped, and carries no evidence leaves a transient `EvidenceRequest` in the unresolved store so
+curiosity can return to it; `is_question_shape` is the public alias (in `executive_controller.py`,
+reusing `_QUESTION_CUES` + trailing `?`). The write is epistemically inert — no evidence, no belief.
 
 **Forgetting** (`DecayingWeightingPolicy`, opt-in): evidence contribution fades with a half-life clock —
-nothing forgets unless a decaying policy is explicitly wired in (Increment 113).
+nothing forgets unless a decaying policy is explicitly wired in (Increment 113). The
+`forget()`/`identify_forgetting_candidates()` consolidation services exist and are tested (Phase 11) but
+nothing schedules them in the running system.
 
 ### Perception / LLM
 
@@ -142,7 +173,10 @@ commands: `say` (with streaming + reasoning panel), `explain`, `reflect`, `wonde
 `perceiver` (switch provider/model/key), `capability` (notice/list/acquire/reject), `tool` (list/run),
 `external` (read/search web), `research`, `compare`, `documents` (list/read/save/remove/search), plus the
 notes/mail/calendar/tasks delegation.
-`_say` routes on intent first (Increment 114): conversation turns never touch perception/memory/beliefs.
+`_say` routes on intent first (Increment 114): questions never touch perception/beliefs; since
+Increment 167 a STATEMENT intent (an everyday ≥3-word non-question sentence) is stored as
+`USER_STATEMENT` evidence through `_remember_statement` and persisted (companion channel when
+first-person), so a follow-up question after a restart answers from memory.
 
 ## Reflective cycle
 
@@ -160,8 +194,12 @@ Increments 111–112).
 
 - Reflective cycle: complete (all seven stages) and traceable.
 - Conversation intent layer + short-term context: implemented.
-- Recall (lexical + semantic embeddings) and identity-aware answers: implemented.
-- Provisional reasoning + learning loop (confirm) + decay forgetting: implemented.
+- Recall by meaning (lexical `relatedness` scorer with a bilingual concept map — the offline default —
+  plus opt-in embedding retrieval) and identity-aware/canonical-topic answers: implemented.
+- Statements become memory (≥3-word non-question sentences persist as `USER_STATEMENT` evidence) and a
+  changed mind is resolved (`Belief.revise()`, precedents archive): implemented.
+- Provisional reasoning + learning loop (confirm) + decay/forgetting *services* (opt-in, not scheduled
+  in the running system): implemented.
 - Episodic, belief, companion, action and goal memory: implemented; all persistent (crash-safe JSON).
 - LLM abstraction/registry/live providers + self-diagnosing errors: implemented; live is opt-in.
 - Capabilities: acquisition model + scout + edge providers + 12+ catalog entries (web, research, compare,
@@ -241,6 +279,22 @@ Increments 111–112).
   which feeds `converse()`; the two mic paths are mutually exclusive (`serverEar` guards), Web Speech
   staying the offline default. Streaming/VAD remains unwired (one blob per hold).
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
+- Relation-aware graph recall & retrieval-strategy selection (Increment 166): the knowledge source can
+  reach a belief connected to the query by traversing `GraphNode`s (relation-aware recall, `_recall_graph_into`
+  plus `GraphNode.path_between`), and `ExecutiveController` selects a retrieval strategy per query —
+  ROUTED_LEXICAL / SEMANTIC / GRAPH / EMBEDDING (`_retrieve_with_strategy`) from live `strategy_stats`
+  (`RetrievalStrategyStats`), self-feedback recordable via `record_retrieval_outcome`.
+- Statements as real memory (Increment 167): see "Conversation vs long-term memory" above; end-to-end
+  tests store a first-person statement, restart on a fresh `Jarvis.database()` handle, and answer a
+  follow-up question from memory.
+- Recall by meaning (Increment 168): one scorer `relatedness = max(surface_overlap, concept_relevance)`
+  ranks every durable candidate; the bilingual `CONCEPT_MAP` bridges paraphrase and ES↔EN; the SEMANTIC
+  special case in retrieval is gone (tie-break only).
+- Change-of-mind resolution (Increment 169): see "Change of mind" above; superseded statements are never
+  recalled as current on any store family.
+- Episode evidence-request writer (Increment 170): see "Evidence-request writer" above; a
+  COMPANION-origin, FULL-attention, question-shaped, evidence-less episode leaves a transient
+  `EvidenceRequest` in the unresolved store for curiosity to return to.
 
 ### Architectural Audit (Phases 0-5)
 
@@ -314,16 +368,18 @@ repair series merged it into the local line and closed the remediation plan A-E:
 ## Known technical debt / future directions
 
 - Reset the audit gates at HEAD: 5 ruff errors + 44 pyright errors (all in newer tests; see STATUS.md). *(DONE — Increment 135: ruff clean · pyright strict 0 errors.)*
-- Deep multi-turn reasoning: a session `ReasoningSpan` (Increment 145) now continues the discussion
-  across turns in the conversational path, with a deterministic thread lifecycle. Still open: carrying
-  the span into the *episode* path or extending it to a live voice session.
-- Semantic matching for belief/connection identity (beyond exact-string D17) — embeddings exist for recall
-  but not yet for identity.
+- Semantic matching for belief/connection identity: resolved forward — since Increments 163-165 belief
+  identity is **canonical-topic-anchored** (`topic_resolution.py`: episodes group by concept signature,
+  never raw trigger, empty signatures never fuse) and since Increment 168 recall reaches the same memory
+  by meaning (relatedness + bilingual concept map). Still open: embeddings are not used for the *identity*
+  path, and consolidation/abstraction deliberately feeds on COMPANION-origin episodes with neutral
+  evidence only.
 - A real SQLite DB now backs the repository contracts (`Jarvis.database()`, Increment 150) and the command
   center's composition root uses it; the JSON stores / `Jarvis.persistent()` remain as the file-backed twin;
-  `TemporalStability` count/recency weighting beyond the opt-in decay policy.
-- Speech: a live STT backer (Increment 154) is wired; streaming/VAD mic delivery to the server ear
-  remain open.
+  `TemporalStability` count/recency weighting beyond the opt-in decay policy. Decay/forgetting services
+  exist and are tested but nothing schedules them in the running system.
+- Speech: a live STT backer (Increment 154) is wired and used in the console (Increment 159);
+  streaming/VAD mic delivery to the server ear remain open.
 - Real instruction execution (earned agency, Increment 160): a material directive in conversation is
   classified as `ConversationIntent.ACT` and performed through `Jarvis.execute` behind the same
   sandboxed ToolRegistry without approval — sandbox reads/writes run, external/destructive acts

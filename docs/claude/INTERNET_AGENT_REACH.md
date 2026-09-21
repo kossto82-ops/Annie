@@ -1,5 +1,9 @@
 # Accesso a Internet: integración de Agent-Reach
 
+> **HISTORICAL / IMPLEMENTADO (2026-09-21).** Documento de integración de Agent-Reach; el seam
+> `ExternalSource`/`AgentReachSource` está implementado y es el adaptador por defecto del edge de
+> internet (ver `docs/claude/ARCHITECTURE.md`). Conservado por traza.
+
 Jarvis puede consultar, leer y recuperar información de Internet a través de
 **Agent-Reach** (`C:\Projects\agent-reach`, upstream `https://github.com/Panniantong/agent-reach`).
 

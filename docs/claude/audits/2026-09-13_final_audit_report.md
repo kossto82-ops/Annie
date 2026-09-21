@@ -1,5 +1,9 @@
 # Jarvis — Final Architectural Audit Report
 
+> **HISTORICAL RECORD (2026-09-21).** Final audit report (2026-09-13); its remediation landed at
+> Increment 135 (2026-09-14) and the memory line continued through Increment 170. Kept for
+> provenance; the current system is documented in `docs/claude/SYSTEM_TODAY.md`.
+
 > Generated 2026-09-13. Read-only analysis — no code modified.
 > Method: Source-level verification against all 5 audit phases, code inspection, test suite execution (1647 passed, 3 skipped in 21.84s).
 

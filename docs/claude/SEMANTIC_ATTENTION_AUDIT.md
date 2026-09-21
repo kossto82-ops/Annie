@@ -1,5 +1,9 @@
 # Semantic & Attention Audit — JARVIS
 
+> **HISTORICAL / SUPERSEDED (2026-09-21).** Dated audit record (2026-09-14); the gaps it graded
+> ("SEMANTIC LIMITED / ATTENTION PARTIAL") are closed by Increments 162-165. Read
+> `docs/claude/SYSTEM_TODAY.md` + `docs/claude/ARCHITECTURE.md` for the current state.
+
 **Date:** 2026-09-14
 **Scope:** `src/jarvis` (HEAD of `main`)
 **Evidence:** live runtime probes (`python` against the real package, quoted below) + a new 45-test harness at `tests/semantic_attention/` + full source review of the cognition path. Full suite: **1718 passed, 1 failed (pre-existing env-dependent pydantic-ai test), 6 skipped** — the harness introduced zero regressions.

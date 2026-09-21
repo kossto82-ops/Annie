@@ -1,5 +1,9 @@
 # Jarvis — Audit Remediation Plan (Stage 1)
 
+> **HISTORICAL / SUPERSEDED (2026-09-21).** Stage-1 plan for the 2026-09-13 audit remediation
+> (complete at Increment 135 / 2026-09-14; see `REMEDIATION_REPORT.md`). Kept for provenance — it is
+> not a description of the current system.
+
 Date: 2026-09-13. Baseline: 1704 tests collected, ruff clean, pyright **461 errors**
 (374 in `src/`, 87 in `tests/`). Epistemic repro: 50x identical evidence →
 confidence **0.9259** (weight 0.5; ≈0.98 at weight 1.0). Knobs split-brain repro:

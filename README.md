@@ -108,19 +108,25 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 - Patterns and abstractions derived from multiple episodes/beliefs. Confidence and stability are derived from the supporting evidence, never set directly.
 - `MemoryKind.SEMANTIC` — semantic memories appear in recall alongside beliefs and episodes.
 - Abstraction service identifies patterns across episodes and creates `SemanticMemory` entities.
+- Recall ranks every durable candidate by *meaning*: one scorer `relatedness = max(surface_overlap, concept_relevance)` (Increment 168). A bilingual `CONCEPT_MAP` lets a paraphrase — or the same idea in the other language (ES↔EN) — reach the same memory. At an exact relevance tie, a distilled `SEMANTIC` pattern outranks the concrete copies it generalizes over (by meaningful match it already beats each copy).
 
 **Knowledge Graph**
 - `KnowledgeNode` — entities (people, projects, concepts, decisions, events) with properties and evidence.
 - `KnowledgeEdge` — directed relationships between nodes (works_on, knows, caused, etc.) with derived weight.
-- `KnowledgeGraphRepository` — CRUD, edges_from/edges_to, neighbors (BFS traversal), path_between.
+- `KnowledgeGraphRepository` — CRUD, edges_from/edges_to, neighbors (BFS traversal), path_between, and relation-aware recall (a query about a related entity can reach the connected belief through the graph, Increment 166).
 - Entity extraction service discovers nodes and edges from text.
 - `MemoryKind.GRAPH_NODE` / `MemoryKind.GRAPH_EDGE` — graph entities appear in recall.
+- Recall selects a retrieval strategy per query (lexical / semantic / graph / embedding) from live `strategy_stats` (Increment 166).
 
-**Conversation Persistence**
+**Conversation Persistence & statements**
 - `PersistedTurn` — a single conversation turn with timestamp, intent, and outcome.
-- `ConversationRepository` — stores and retrieves conversation history.
-- `MemoryKind.CONVERSATION` — conversation turns appear in recall for continuity.
+- `ConversationRepository` — stores and retrieves conversation history; the in-episode `ConversationContext` is a bounded ring (capacity 12) that rehydrates from it across restarts.
+- Conversation is **context, never memory**: turns are surface-only candidates (matched lexically), never recited as answers — long-term recall is what paraphrase should reach (Increment 167).
+- **Statements are real memory**: an everyday ≥3-word non-question sentence is stored as `USER_STATEMENT` evidence (via `_remember_statement`, plus the companion channel when first-person) and *persisted*, so a follow-up question after a restart answers from memory (Increment 167).
 - `Jarvis.database()` persists conversations across restarts.
+
+**Change of mind**
+- `revise_companion(trait, evidence, replaces=…)` — a corrected decision is first-class: the new stance supersedes the earlier one, the superseded statement moves into the belief's `precedents` archive and is never recalled as current, and the revision flows through the nervous system (Increment 169). Verified honorable on all three store families (in-memory, JSON, SQLite).
 
 **Second-Order Reflection (Meta-Knowledge)**
 - `MetaKnowledge` — knowledge about one's own cognitive process (reasoning strategies, retrieval quality, attention patterns).
@@ -138,7 +144,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 **Memory Consolidation**
 - `identify_forgetting_candidates(beliefs)` — finds beliefs with low effective confidence, stale evidence, or no evidence.
 - `forget(statement)` — removes a belief from any store (in-memory, JSON, or SQLite).
-- `DecayingWeightingPolicy` — fades evidence contribution with a half-life clock (opt-in).
+- `DecayingWeightingPolicy` — fades evidence contribution with a half-life clock. The services exist and are tested; nothing in the running system schedules decay or forgetting yet.
 
 **Knowledge Graph (wired)**
 - Entity extraction from beliefs populates the graph automatically during episode recording.
@@ -148,6 +154,7 @@ store, or use `Jarvis.persistent(directory)` for full cross-restart continuity.
 
 **Model of its companion**
 - `observe_companion(trait, evidence)` — evolve a belief about the companion.
+- `revise_companion(trait, evidence, replaces=…)` — a changed mind supersedes the earlier stance; the old one stays archived and is never recalled as current (Increment 169).
 - `explain_companion(trait)` — why it believes that (evidence, confidence, "I may be wrong"), or "no view yet".
 - `companion.belief_about(trait)` / `companion.beliefs()` / `companion.summarise()`.
 
@@ -215,10 +222,10 @@ the decider. The API secret lives only in `JARVIS_LLM_API_KEY`, never in code.
 
 ## Development
 
-Requires Python 3.13+.
+Requires Python 3.11+.
 
 ```bash
-python -m pytest -q        # tests (~1704 tests, all passing)
+python -m pytest -q        # tests (~2220 tests, all passing)
 python -m ruff check .     # lint (clean)
 python -m pyright          # type check (strict, 0 errors)
 ```

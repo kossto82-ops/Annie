@@ -1,5 +1,9 @@
 # Jarvis — Auditoría Arquitectónica (2026-08-28)
 
+> **HISTORICAL RECORD (2026-09-21).** Informe de auditoría fechado (2026-08-28); conservado por
+> traza. El sistema ha avanzado (auditoría post-fase completada 2026-09-11/14, línea de memoria
+> 162-170) — no describe el estado actual (ver `docs/claude/SYSTEM_TODAY.md`).
+
 > Fase 1 del pipeline `docs/claude/prompts/01_AUDITORIA.md`. Solo análisis — no se modificó código durante la auditoría.
 > Método: 4 agentes de exploración read-only (dominio, infraestructura/model-layer, orquestación/UI, tests/config) + verificación de suite y estado git.
 
