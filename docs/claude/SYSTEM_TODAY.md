@@ -74,11 +74,16 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
 - **Persistence**: `Jarvis()` in-memory · `Jarvis.persistent(dir)` JSON · `Jarvis.database(dir)` SQLite
   `jarvis.db` (D10/Inc 150-152); command center uses SQLite when a home is set
   (`JARVIS_HOME=./.jarvis` by default; empty `JARVIS_HOME` = in-memory).
-- **Decay/forgetting are services, not scheduled**: `forget()`/`identify_forgetting_candidates()` and
-  `DecayingWeightingPolicy` exist and are tested; nothing in the running system calls them.
+- **Forgetting is scheduled and honest** (Inc 173): `ForgettingCandidates` (domain service) runs
+  `identify_forgetting_candidates` + the decay policy on the rest cadence (`rest()` → read-only
+  `refresh_forgetting`) and behind the `forgetting` command (`health` / `dry-run` / `apply`); the UI
+  shows memory health and **never deletes without an explicit apply**. Gates: never a grounded
+  ≥threshold companion trait, never a belief reaffirmed in the last 30 days (anti-nagging).
+- **Decay weighting is wired** (Inc 173): the server root instantiates `DecayingWeightingPolicy`, so
+  recall ranks old, rarely-touched topics lower (`relatedness * recency(t)`).
 - **Temporal reasoning is read-only applicability**, not prediction: `belief_timeline` /
-  `what_changed` / `belief_snapshot_at` / `detect_pattern` reconstruct history; there is no expiry
-  or truth-decay in the running path.
+  `what_changed` / `belief_snapshot_at` / `detect_pattern` reconstruct history. Stored belief confidence
+  is never silently decayed — only an explicit `apply` forgets (storage stays honest).
 
 ## Status legend
 

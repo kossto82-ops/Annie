@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-22 (Increment 172 — single decision authority + doc-truth gate)
+Last updated: 2026-09-22 (Increment 173 — scheduled honest forgetting, roadmap F2)
 
 ---
 
@@ -3119,6 +3119,60 @@ numbering and is enforced mechanically.
   wired as the `doc-truth` CI job and exercised by `tests/test_doc_decision_refs.py` (+2 tests).
 
 Full suite: **2222 passed, 3 skipped** (+2 doc-truth); ruff clean; **pyright strict 0**.
+
+---
+
+### Increment 173 — Scheduled honest forgetting & consolidation (roadmap F2, 2026-09-22)
+
+Closes the last honest gap from the F0 audit: decay/forgetting were implemented but nothing scheduled
+them. Now `ForgettingCandidates` runs on the rest cadence and the decay policy biases recall at the
+server root. Nothing is ever deleted without an explicit `apply`.
+
+- **New domain service** `src/jarvis/domain/services/forgetting.py` (not a manager — wraps
+  `identify_forgetting_candidates` + the decay policy): `ForgettingCandidates` (default constructor
+  params: `stale_after=STALE_AFTER`, `reaffirm_window=REAFFIRM_WINDOW=30d`,
+  `grounded_bar=DEFAULT_GROUNDED_CONFIDENCE=0.5`), `ForgettingProfile`, `ForgettingResult`.
+  **Honesty gates** (checked at identify and re-checked at apply): (a) never a grounded companion trait
+  (`belief.confidence.value >= grounded_bar` — the bar is the existing `knobs().grounded_confidence`),
+  (b) anti-nagging — a belief whose latest evidence landed inside the reaffirm window is excluded.
+  `identify` is read-only; `apply` deletes only the explicitly named statements and re-checks the gates
+  (`refused`/`missing` in the result). Constants `FORGETTABLE_THRESHOLD`/`STALE_AFTER` are reused from
+  `memory_consolidation.py`.
+- **Schedule on the rest cadence**: `Jarvis.rest()` now runs the read-only sweep via
+  `refresh_forgetting()` beside the energy restore; `Jarvis` constructor accepts `forgetting=None`
+  (default `ForgettingCandidates` over beliefs + companion, `grounded_confidence=lambda:
+  self.knobs().grounded_confidence`, plus the live weighting policy). New fachadas:
+  `refresh_forgetting`, `forgetting_profile`, `memory_health` (candidates with
+  statement/effective_confidence/reason/last_reinforced, protected, reaffirmed, swept_at, decay_wired),
+  `forget(statements) -> ForgettingResult`.
+- **Wired decay weighting**: root-injectable `DecayingWeightingPolicy` gets a public
+  `recency(observed_at)` (`evidence_weighting.py`; `effective_weight` uses it). `LexicalMemoryRetriever`
+  gains a `decay` param — durable candidates with a timestamp rank `relatedness * recency(t)`, so old,
+  rarely-touched topics drop below `_MIN_RECALL_RELEVANCE=0.2` and out of recall (deterministic because
+  the policy's clock is injected). `create_jarvis` (`server.py`) instantiates
+  `DecayingWeightingPolicy(now=lambda: datetime.now(tz=UTC))` and passes `weighting_policy=` to both
+  the offline and persistent Jarvis branches.
+- **Command center**: `forgetting` command (`interface/_forgetting.py`, registered in
+  `command_center.py`) with `health` (default), `dry-run`, and `apply` (`statements=[...]` or
+  `all:true`; any other action errors). The memory panel card "Salud de memoria — el olvido honesto"
+  renders `memory_health` (Informe button) and an "Olvidar desvanecidos" button that **cannot delete
+  without a `window.confirm` and an explicit api `action: "apply"`**. `_state._memory_block` carries
+  `forgetting` in every snapshot.
+- **Tests** (`tests/test_forgetting_schedule.py`): candidate selection over a synthetic timeline
+  (low-confidence old · stale · reaffirmed-excluded · always-confident protected via
+  `grounded_confidence=lambda: 0.4` — a single USER_STATEMENT weighs ≈0.4737); explicit apply
+  (+persist/restart); no-delete-without-apply; anti-nagging; decay ranking deltas (old topic ranks
+  0.25 vs fresh 1.0 on the same query; no decay = equal relevance). `test_console_asset.py` gains
+  tripwires for the health card/buttons/JS and for `memory.forgetting` in the snapshot; the
+  accidentally-renamed `test_openpanel_really_shows_the_pane` is restored. **+22 tests**.
+- **Docs**: `SYSTEM_TODAY.md` (forgetting is now scheduled/wired, not a dormant service);
+  `AI_CONTEXT.md` (forgetting block + status line rewritten); `ARCHITECTURE.md` (recall scoring +
+  weighting sections note the Inc-173 wiring); REST → 2244.
+
+Full suite: **2244 passed, 3 skipped** (+22); ruff clean; **pyright strict 0** (whole tree);
+`scripts/check_decision_refs.py` clean. Acceptance gates F2 —— `rg "identify_forgetting_candidates"`
+hits `src/` (`forgetting.py` wrapper), `rg "DecayingWeightingPolicy"` hits `src/` (`evidence_weighting.py`
++ `server.py` wiring): **both pass, not tests only**.
 
 ---
 

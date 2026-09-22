@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -23,6 +24,7 @@ from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
+from jarvis.domain.services.evidence_weighting import DecayingWeightingPolicy
 from jarvis.domain.services.model_compare import ModelComparator
 from jarvis.infrastructure.agent_reach_source import build_web_source, llm_search_from_model
 from jarvis.infrastructure.calendar_store import build_calendar_store
@@ -138,6 +140,12 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     acquired, so the assistant starts out owning what it was configured with (D29).
     """
     settings = settings_from_env()
+    # Honest forgetting (roadmap F2, Vision §10, §22): the root-injectable
+    # weighting bias. With this policy wired, stale evidence fades from belief
+    # confidence AND from recall ranking over a 30-day half-life, and the
+    # forgetting dry-run sees the same recency the recall uses. The clock is
+    # injected so decay stays deterministic wherever it is measured.
+    decaying = DecayingWeightingPolicy(now=lambda: datetime.now(tz=UTC))
     # Build the language model with optional fallback (backup provider)
     backup = backup_settings_from_env()
     base_model: LanguageModel | None = None
@@ -197,6 +205,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
             documents_store=documents_store,
             instrumentation=instrumentation,
             semantic_memory_store=InMemorySemanticMemoryStore(),
+            weighting_policy=decaying,
         )
     else:
         base = Path(home)
@@ -235,6 +244,7 @@ learned_state_store=repositories.learned_state,
             notes_store=notes_store,
             documents_store=documents_store,
             instrumentation=instrumentation,
+            weighting_policy=decaying,
         )
     jarvis.set_voice(renderer_from_settings(settings))  # reply in the user's language
     # The ear (the input mirror of the mouth): the command center's browser does

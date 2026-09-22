@@ -18,8 +18,11 @@ meaning would echo the topic back even when the wording differs.
 Its whole purpose is to prove the boundary and make memory *usable* in conversation:
 a semantic (embedding-backed) retriever drops in behind the same
 :class:`MemoryRetriever` Protocol without the cognitive core changing (Vision §38,
-D11). Everything here is deterministic and offline (D8): no clocks, no randomness, no
-network -- the same stores and query always yield the same ranking.
+D11). Everything here is deterministic and offline (D8): no randomness, no
+network -- when a *decaying weighting policy* is explicitly wired the ranking
+also fades stale memories by recency (F2), which remains deterministic because
+the policy's clock is injected. The same stores and query always yield the same
+ranking.
 
 It only *surfaces candidates* carrying provenance; folding a recalled item into an
 episode, and deriving any confidence from it, stays the executive's job.
@@ -39,6 +42,7 @@ from jarvis.domain.services.abstraction import (
     concept_relevance as concept_relevance,  # re-exported for the semantic tests
 )
 from jarvis.domain.services.abstraction import relatedness
+from jarvis.domain.services.evidence_weighting import DecayingWeightingPolicy
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.infrastructure.memory_candidates import gather_candidates
 
@@ -81,6 +85,7 @@ class LexicalMemoryRetriever:
         goals: BeliefRepository,
         semantic_memories: SemanticMemoryRepository | None = None,
         conversation: ConversationRepository | None = None,
+        decay: DecayingWeightingPolicy | None = None,
     ) -> None:
         self._beliefs = beliefs
         self._episodes = episodes
@@ -88,6 +93,12 @@ class LexicalMemoryRetriever:
         self._goals = goals
         self._semantic_memories = semantic_memories
         self._conversation = conversation
+        # The optional recency bias (F2): when a decaying weighting policy is wired,
+        # durable memories rank not only by relevance but by how recent they still
+        # are, so a stale, rarely-touched topic ranks below an equally-relevant fresh
+        # one -- the same honest forgetting the belief engine applies, on the read
+        # side. Reads stay read-only: nothing here mutates the stores.
+        self._decay = decay
 
     def recall(
         self,
@@ -123,6 +134,13 @@ class LexicalMemoryRetriever:
                 # bilingual concept channel), so a paraphrase or a different language
                 # surfaces the same memory. Both channels empty = honest silence.
                 relevance = relatedness(query, match_text)
+                # Recency bias for durable memories (F2): when a decaying policy is
+                # wired, an old memory's contribution fades below an equally-relevant
+                # fresh one. A topic with no observed_at keeps its full relevance --
+                # there is no clock to judge it by, and silence about it would be
+                # a guess, not a memory (Vision §37).
+                if self._decay is not None and observed_at is not None:
+                    relevance *= self._decay.recency(observed_at)
             if relevance <= 0.0:
                 continue
             scored.append(

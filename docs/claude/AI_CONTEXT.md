@@ -110,10 +110,12 @@ question-shaped, and carries no evidence leaves a transient `EvidenceRequest` in
 curiosity can return to it; `is_question_shape` is the public alias (in `executive_controller.py`,
 reusing `_QUESTION_CUES` + trailing `?`). The write is epistemically inert — no evidence, no belief.
 
-**Forgetting** (`DecayingWeightingPolicy`, opt-in): evidence contribution fades with a half-life clock —
-nothing forgets unless a decaying policy is explicitly wired in (Increment 113). The
-`forget()`/`identify_forgetting_candidates()` consolidation services exist and are tested (Phase 11) but
-nothing schedules them in the running system.
+**Forgetting** (`DecayingWeightingPolicy` + `ForgettingCandidates`, wired at Increment 173): evidence
+contribution fades with a half-life clock. The composition root (`server.py`) wires the decaying policy,
+so recall ranks old, rarely-touched topics lower; `ForgettingCandidates` schedules
+`identify_forgetting_candidates()` on the rest cadence — a read-only sweep, plus an explicit `forgetting`
+command in the command center (`dry-run` → `apply`). Nothing is deleted without an explicit `apply`, never
+a grounded companion trait, never a reaffirmed belief (anti-nagging).
 
 ### Perception / LLM
 
@@ -198,8 +200,8 @@ Increments 111–112).
   plus opt-in embedding retrieval) and identity-aware/canonical-topic answers: implemented.
 - Statements become memory (≥3-word non-question sentences persist as `USER_STATEMENT` evidence) and a
   changed mind is resolved (`Belief.revise()`, precedents archive): implemented.
-- Provisional reasoning + learning loop (confirm) + decay/forgetting *services* (opt-in, not scheduled
-  in the running system): implemented.
+- Provisional reasoning + learning loop (confirm) + decay/forgetting *services*: implemented and
+  scheduled (Inc 173: rest-cadence sweep + explicit `forgetting` command, honesty-gated).
 - Episodic, belief, companion, action and goal memory: implemented; all persistent (crash-safe JSON).
 - LLM abstraction/registry/live providers + self-diagnosing errors: implemented; live is opt-in.
 - Capabilities: acquisition model + scout + edge providers + 12+ catalog entries (web, research, compare,

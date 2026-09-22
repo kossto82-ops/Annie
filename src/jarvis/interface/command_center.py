@@ -30,6 +30,7 @@ from jarvis.interface._conversation import COMMANDS as _CONVERSATION_COMMANDS
 from jarvis.interface._conversation import StreamEvent, stream_say
 from jarvis.interface._crud import COMMANDS as _CRUD_COMMANDS
 from jarvis.interface._external import COMMANDS as _EXTERNAL_COMMANDS
+from jarvis.interface._forgetting import COMMANDS as _FORGETTING_COMMANDS
 from jarvis.interface._providers import COMMANDS as _PROVIDER_COMMANDS
 from jarvis.interface._recall import COMMANDS as _RECALL_COMMANDS
 from jarvis.interface._state import snapshot
@@ -77,6 +78,7 @@ COMMANDS: dict[str, Command] = {
     **_CRUD_COMMANDS,
     **_RECALL_COMMANDS,
     **_WORKFLOW_COMMANDS,
+    **_FORGETTING_COMMANDS,
 }
 
 

@@ -687,6 +687,44 @@ def test_f9_snapshot_carries_recall_mode_and_tool_origins() -> None:
     assert state["recall"] == {"mode": "lexical"}
 
 
+def test_f2_console_wires_forgetting_health() -> None:
+    """F2: the memory-health panel offers a read-only report and a confirmed apply.
+
+    Viewing is never deletion: the report actions are exposed honestly, and every
+    forget path goes through an explicit ``window.confirm`` before it calls apply.
+    """
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="healthbody"',
+        'id="forgetHealthBtn"',
+        'id="applyForgetBtn"',
+        "renderMemoryHealth(",
+        "refreshForgetting(",
+        "applyForget(",
+        "forgetAllCandidates(",
+        'api("forgetting"',
+        'action: "dry-run"',
+        'action: "apply"',
+        "window.confirm(",
+    ):
+        assert marker in html, f"forgetting health wiring lost its {marker!r}"
+
+
+def test_f2_snapshot_carries_forgetting_health() -> None:
+    """F2: the memory block reports potential fade + gate-holders, honestly.
+
+    A fresh offline Jarvis has nothing faded, time does not decay (no policy
+    wired by default), and the gates hold nothing -- there is nothing to delete.
+    """
+    mem = _snapshot_block("memory")
+    forgetting = cast(dict[str, object], mem.get("forgetting", {}))
+    assert forgetting["candidates"] == []
+    assert forgetting["protected"] == []
+    assert forgetting["reaffirmed"] == []
+    assert forgetting["decay_wired"] is False
+    assert "swept_at" in forgetting
+
+
 def test_openpanel_really_shows_the_pane() -> None:
     """Tripwire: the drawer pane must become visible, not fall back to CSS-hidden.
 
@@ -694,6 +732,7 @@ def test_openpanel_really_shows_the_pane() -> None:
     (``""``) keeps it invisible and every drawer opens blank. The target pane
     must be set to ``block`` explicitly.
     """
+
     html = _CONSOLE.read_text(encoding="utf-8")
     assert 'pane.style.display = "block"' in html
     assert 'pane.style.display = ""' not in html

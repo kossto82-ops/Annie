@@ -1809,6 +1809,15 @@
         <div id="beliefbody"><div class="muted">cargando…</div></div>
       </div>
       <div class="card2">
+        <h3>Salud de memoria — el olvido honesto</h3>
+        <div class="hint">Lo que puede desvanecerse (olvido programado, nunca automático). Ver el informe no borra nada: olvidar pide tu confirmación explícita y las conclusiones arraigadas están protegidas.</div>
+        <div class="docsearch">
+          <button type="button" class="switch" id="forgetHealthBtn">Informe</button>
+          <button type="button" class="switch" id="applyForgetBtn">Olvidar desvanecidos (confirmar)</button>
+        </div>
+        <div id="healthbody"><div class="muted">pulsa Informe para ver la salud de la memoria</div></div>
+      </div>
+      <div class="card2">
         <h3>Recuerdo activo — buscar en mi memoria</h3>
         <div class="hint">Candidatos con su fuerza de coincidencia y procedencia — nunca un veredicto.</div>
         <div class="docsearch">
@@ -3316,6 +3325,7 @@ function renderMemoryPanel(s) {
   setVal("memTend", mem.self_tendencies || 0);
   setVal("memTraits", mem.companion_traits || 0);
   setVal("memGoals", mem.goals || 0);
+  renderMemoryHealth(mem.forgetting);
   if (!box) return;
   const acts = (s && s.activity) || [];
   if (!acts.length) {
@@ -3332,6 +3342,66 @@ function renderMemoryPanel(s) {
     row.appendChild(lbl); row.appendChild(val);
     box.appendChild(row);
   });
+}
+
+/* ---- memory health & honest forgetting (F2) ------------------------------- */
+function renderMemoryHealth(health) {
+  const box = $("healthbody");
+  if (!box) return;
+  if (!health) {
+    box.innerHTML = "<div class=\"muted\">pulsa Informe para ver la salud de la memoria</div>";
+    return;
+  }
+  box.innerHTML = "";
+  const note = document.createElement("div"); note.className = "muted";
+  if (!health.candidates.length) {
+    note.textContent = health.decay_wired
+      ? "Nada desvanecido ahora."
+      : "Nada desvanecido ahora. El decaimiento no está cableado: el tiempo todavía no desvanece recuerdos.";
+    box.appendChild(note);
+  }
+  const list = document.createElement("ul");
+  health.candidates.forEach((c) => {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.textContent = c.statement + " (efectiva " + c.effective_confidence + ") — " + c.reason;
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "switch"; btn.textContent = "olvidar";
+    btn.onclick = function () { applyForget([c.statement]); };
+    li.appendChild(span); li.appendChild(btn);
+    list.appendChild(li);
+  });
+  box.appendChild(list);
+  if ((health.protected || []).length || (health.reaffirmed || []).length) {
+    const held = document.createElement("div"); held.className = "muted";
+    const parts = [];
+    if ((health.protected || []).length) parts.push("Protegidas (rasgo arraigado): " + health.protected.join(", "));
+    if ((health.reaffirmed || []).length) parts.push("Renovadas hace poco (anti-nagging): " + health.reaffirmed.join(", "));
+    held.textContent = parts.join(" · ");
+    box.appendChild(held);
+  }
+}
+async function refreshForgetting() {
+  const data = await api("forgetting", { action: "dry-run" });
+  if (data && data.forgetting) renderMemoryHealth(data.forgetting);
+  return data;
+}
+async function applyForget(statements) {
+  if (!statements || !statements.length) return;
+  if (!window.confirm("Olvidar " + statements.length + " recuerdo(s)?")) return;
+  const data = await api("forgetting", { action: "apply", statements: statements });
+  if (data && data.forgetting) renderMemoryHealth(data.forgetting);
+}
+async function forgetAllCandidates() {
+  const data = await refreshForgetting();
+  const candidates = (data && data.forgetting && data.forgetting.candidates) || [];
+  if (!candidates.length) return;
+  if (!window.confirm("Olvidar " + candidates.length + " recuerdo(s) desvanecido(s)?")) return;
+  const done = await api("forgetting", {
+    action: "apply",
+    statements: candidates.map(function (c) { return c.statement; })
+  });
+  if (done && done.forgetting) renderMemoryHealth(done.forgetting);
 }
 
 /* ---- memory depth (F5): beliefs, active recall, past sessions ------------- */
@@ -4298,6 +4368,8 @@ $("memRecallBtn").addEventListener("click", searchMemories);
 $("memRecallInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") searchMemories();
 });
+$("forgetHealthBtn").addEventListener("click", refreshForgetting);
+$("applyForgetBtn").addEventListener("click", forgetAllCandidates);
 $("noticeBtn").addEventListener("click", noticeGaps);
 $("capScoutBtn").addEventListener("click", scoutCapability);
 $("capScoutInput").addEventListener("keydown", (e) => {

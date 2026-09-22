@@ -81,11 +81,13 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-2222 tests passing (3 skipped), ruff clean, pyright strict 0.
+2244 tests passing (3 skipped), ruff clean, pyright strict 0.
 
-The current project is at Increment 172 (see `STATUS.md`; Increments 171–172 shipped the docs
+The current project is at Increment 173 (see `STATUS.md`; Increments 171–172 shipped the docs
 reconciliation, the zero-fallout roadmap, and the single decision authority — `DECISIONS.md` D1–D32 —
-guarded by the offline `doc-truth` check `scripts/check_decision_refs.py`). The reflective cognitive cycle is
+guarded by the offline `doc-truth` check `scripts/check_decision_refs.py`, and Increment 173 shipped the
+scheduled honest forgetting — `ForgettingCandidates` on the rest cadence, the `forgetting` command, and
+root-wired `DecayingWeightingPolicy` recall bias). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),

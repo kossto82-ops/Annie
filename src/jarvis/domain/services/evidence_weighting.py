@@ -89,11 +89,19 @@ class DecayingWeightingPolicy:
         if self.half_life.total_seconds() <= 0.0:
             raise ValueError("half_life must be a positive duration")
 
-    def effective_weight(self, evidence: Evidence) -> float:
-        base_weight = self.base.effective_weight(evidence)
-        age_seconds = (self.now() - evidence.observed_at).total_seconds()
+    def recency(self, observed_at: datetime) -> float:
+        """How much of a memory from ``observed_at`` still counts, as a [0, 1] factor.
+
+        One half-life of age cuts the factor in half, two quarter it, and so on --
+        asymptotically to zero but never negative. Just-observed (or future-dated,
+        e.g. clock skew) evidence does not decay at all. Public so cold (non-belief)
+        read-side surfaces can rank memories by the same honest recency the belief
+        engine already applies (F2: recall bias, memory-health reporting).
+        """
+        age_seconds = (self.now() - observed_at).total_seconds()
         if age_seconds <= 0.0:
-            # Just-observed (or future-dated, e.g. clock skew) evidence does not decay.
-            return base_weight
-        recency = 0.5 ** (age_seconds / self.half_life.total_seconds())
-        return base_weight * recency
+            return 1.0
+        return 0.5 ** (age_seconds / self.half_life.total_seconds())
+
+    def effective_weight(self, evidence: Evidence) -> float:
+        return self.base.effective_weight(evidence) * self.recency(evidence.observed_at)

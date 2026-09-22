@@ -175,7 +175,13 @@ from jarvis.domain.services.capability_orchestration import (
 )
 from jarvis.domain.services.evidence_weighting import (
     DEFAULT_WEIGHTING,
+    DecayingWeightingPolicy,
     EvidenceWeightingPolicy,
+)
+from jarvis.domain.services.forgetting import (
+    ForgettingCandidates,
+    ForgettingProfile,
+    ForgettingResult,
 )
 from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.model_compare import ModelComparator, ModelRun
@@ -406,6 +412,7 @@ class Jarvis:
         knowledge_graph_store: KnowledgeGraphRepository | None = None,
         unresolved_store: UnresolvedRepository | None = None,
         strategy_stats_store: StrategyStatsRepository | None = None,
+        forgetting: ForgettingCandidates | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         # Live-provider instrumentation (Phase 4): a shared collector that recorded
@@ -615,6 +622,12 @@ class Jarvis:
         # Serializes the episode writer's dedup guard+write: two serving threads
         # thinking the same trigger cannot both pass the OPEN check and duplicate.
         self._unresolved_lock = threading.Lock()
+        # How working beliefs weigh evidence (Vision §10, §22). None -> the default
+        # (no decay); a DecayingWeightingPolicy makes stale evidence fade over time.
+        # Stored first so the retriever below can share the *same* injected policy
+        # as its read-side recency bias (F2): the recall ranking and the belief
+        # engine disagree about nothing, and only when decay is explicitly wired.
+        self._weighting_policy = weighting_policy
         # Optional long-term-memory recall (Vision §3): when enabled, a deterministic
         # lexical retriever over Jarvis's own stores lets an episode answer from what
         # it remembers instead of a blank "insufficient evidence". Off by default, so
@@ -631,14 +644,16 @@ class Jarvis:
                     self._goals,
                     semantic_memories=self._semantic_memory_store,
                     conversation=self._conversation_repository,
+                    decay=(
+                        self._weighting_policy
+                        if isinstance(self._weighting_policy, DecayingWeightingPolicy)
+                        else None
+                    ),
                 )
             )
             if enable_recall
             else None
         )
-        # How working beliefs weigh evidence (Vision §10, §22). None -> the default
-        # (no decay); a DecayingWeightingPolicy makes stale evidence fade over time.
-        self._weighting_policy = weighting_policy
         # Short-term conversational context (Vision §3): the last few turns of THIS
         # conversation, kept separate from long-term memory so follow-ups and pronouns
         # resolve against what was just said, not against the belief store.
@@ -686,6 +701,18 @@ knowledge_graph=knowledge_graph_store,
         self._cal_surface = CalendarSurface(self)
         self._task_surface = TaskSchedulerSurface(self)
         self._goal_surface = GoalSurface(self)
+        # Scheduled honest forgetting (F2). Identifies faded beliefs each sweep,
+        # shields grounded companion traits and recently-renewed memories behind
+        # two honesty gates, and deletes nothing by itself: `apply` is the only
+        # non-read-only path, and it forgets only explicitly named statements.
+        # The weighting policy is shared with the belief engine and the retriever,
+        # so what the health report says and what recall actually does agree.
+        self._forgetting: ForgettingCandidates = forgetting or ForgettingCandidates(
+            self.beliefs,
+            companion=self.companion,
+            grounded_confidence=lambda: self.knobs().grounded_confidence,
+            weighting_policy=self._weighting_policy,
+        )
 
     def set_reasoner(self, reasoner: Reasoner | None) -> None:
         """Swap the reasoner at runtime (Vision §37, §38; Track B).
@@ -2143,8 +2170,71 @@ knowledge_graph=knowledge_graph_store,
         return _is_conserving_fn(self)
 
     def rest(self) -> None:
-        """Restore energy to full (Vision §15)."""
-        return _rest_fn(self)
+        """Restore energy to full and run a scheduled forgetting sweep (Vision §15, F2).
+
+        Rest is Jarvis's daily upkeep: the energy ledger refills, and the
+        memory-health profile is re-derived so the surface reads what may fade
+        *today* rather than whenever forgetting was last inspected. The sweep is
+        read-only -- nothing is deleted by resting (F2: apply is the only
+        track that touches the store).
+        """
+        _rest_fn(self)
+        self.refresh_forgetting()
+
+    def refresh_forgetting(self) -> ForgettingProfile:
+        """Re-derive the forgetting profile from live state (scheduled sweep, F2).
+
+        Read-only, so it is safe to run every rest and every turn: it tells what
+        *may* be forgotten and what the honesty gates protect, deleting nothing.
+        """
+        return self._forgetting.identify()
+
+    def forgetting_profile(self) -> ForgettingProfile:
+        """The current forgetting dry-run: may-fade candidates + what the gates hold."""
+        return self._forgetting.identify()
+
+    def memory_health(self) -> dict[str, object]:
+        """An honest JSON-ready memory-health report for the surface (F2).
+
+        ``candidates`` are the beliefs that may be forgotten (with their effective
+        confidence and *why* they faded, so a declined suggestion stays honest,
+        Vision §22, §37); ``protected`` and ``reaffirmed`` are the statements the
+        two gates hold back; ``decay_wired`` reports whether a decaying weighting
+        policy is actually in play -- the report never pretends time is fading
+        memories when no decay policy is wired.
+        """
+        profile = self.refresh_forgetting()
+        decay_wired = isinstance(self._weighting_policy, DecayingWeightingPolicy)
+        return {
+            "candidates": [
+                {
+                    "statement": c.belief.statement,
+                    "effective_confidence": round(c.effective_confidence, 4),
+                    "reason": c.reason,
+                    "last_reinforced": (
+                        c.last_reinforced.isoformat()
+                        if c.last_reinforced is not None
+                        else None
+                    ),
+                }
+                for c in profile.candidates
+            ],
+            "protected": list(profile.grounded_protected),
+            "reaffirmed": list(profile.reaffirmed_excluded),
+            "swept_at": profile.swept_at.isoformat(),
+            "decay_wired": decay_wired,
+        }
+
+    def forget(self, statements: list[str] | tuple[str, ...]) -> ForgettingResult:
+        """Forget exactly the explicitly named beliefs -- the F2 apply path.
+
+        The deliberate, non-read-only counterpart of :meth:`forgetting_profile`:
+        only statements the caller names are deleted, and the honesty gates are
+        re-checked at apply time (a grounded companion trait or a just-renewed
+        memory is ``refused``, an unknown statement is ``missing``). This is the
+        only route that touches the belief store for forgetting.
+        """
+        return self._forgetting.apply(statements)
 
     def set_energy_budget(self, budget: int | None) -> None:
         """Set (or clear) the recoverable energy budget at runtime (Vision §15, §40)."""

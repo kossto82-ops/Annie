@@ -170,7 +170,9 @@ SemanticMemoryRepository (InMemory / SqliteSemanticMemoryStore / JsonSemanticMem
    ↓
 lexical_memory_retriever: every durable candidate ranked relatedness = max(surface_overlap,
       concept_relevance) — recall by meaning with no embeddings; SEMANTIC is a tie-break only (Inc 168);
-      strong recall bypasses the live reasoner, weak recall reaches it — candidate context only (D27)
+      strong recall bypasses the live reasoner, weak recall reaches it — candidate context only (D27);
+      optional `decay` (a `DecayingWeightingPolicy`) multiplies durable candidates with a timestamp by
+      `recency(t)`, so old topics rank lower (Inc 173; wired at the server root)
 ```
 
 The vocabulary is a hand-maintained bilingual concept map (~stems + lemmas, ES↔EN via `CONCEPT_MAP` —
@@ -350,6 +352,15 @@ so goals, actions, companion traits and self-observed habits all inherit it; the
 creations only, so nothing stored is silently re-weighted. `CompanionModel` and the self-observation
 observers accept the policy as their default, and `Jarvis.persistent()` forwards it at boot (Increment 144).
 The episode-path decay composition remains separately injectable per belief (Increment 113).
+
+**Scheduled honest forgetting** (Increment 173): `ForgettingCandidates`
+(`domain/services/forgetting.py`) wraps `identify_forgetting_candidates` + the decay policy with honesty
+gates — never a grounded ≥threshold companion trait, never a belief reaffirmed in the last 30 days.
+`Jarvis.rest()` runs the read-only sweep; the command-center `forgetting` command (`health`/`dry-run`/
+`apply`) and the memory-panel "Salud de memoria" card surface it; **no delete without an explicit apply**
+(read-only identify, gated apply). `DecayingWeightingPolicy.recency(observed_at)` is public and the
+composition root passes a live clock (`server.py`), so recall biases old topics lower without touching
+stored belief confidence.
 
 ## Odysseus (capability acquisition)
 
