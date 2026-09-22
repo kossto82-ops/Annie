@@ -2,7 +2,7 @@
 
 When the primary model fails (network error, timeout, provider error),
 the fallback model is tried. This gives Jarvis resilience against provider
-outages without changing the core cognition (Vision §38, D33).
+outages without changing the core cognition (Vision §38, D6).
 """
 
 from __future__ import annotations

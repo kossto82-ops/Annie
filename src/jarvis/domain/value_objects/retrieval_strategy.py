@@ -1,6 +1,6 @@
 """Retrieval-strategy experience (P2-C): which recall side was chosen and how it went.
 
-The accumulated record is routing evidence only (D20): it decides which
+The accumulated record is routing evidence only (D21): it decides which
 retriever *surfaces candidates* for the executive, never what Jarvis
 concludes. It is bounded (the most recent 100 outcomes), revisable (a
 meaningful run of honest counter-evidence reverses a preference), and

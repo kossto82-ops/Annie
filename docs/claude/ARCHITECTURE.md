@@ -135,9 +135,9 @@ CognitiveEpisode
        ↓
 retrieve/adopt existing belief if present
        ↓
-recall       (memory seam: stance/context, never belief-conf — D35)
-consult      (knowledge-source seam: one deliberate edge visit — D38)
-reason       (reasoner seam: optional provisional inference — D36)
+recall       (memory seam: stance/context, never belief-conf — D27)
+consult      (knowledge-source seam: one deliberate edge visit — D30)
+reason       (reasoner seam: optional provisional inference — D28)
 observe evidence
        ↓
 derive confidence/stability
@@ -170,7 +170,7 @@ SemanticMemoryRepository (InMemory / SqliteSemanticMemoryStore / JsonSemanticMem
    ↓
 lexical_memory_retriever: every durable candidate ranked relatedness = max(surface_overlap,
       concept_relevance) — recall by meaning with no embeddings; SEMANTIC is a tie-break only (Inc 168);
-      strong recall bypasses the live reasoner, weak recall reaches it — candidate context only (D35)
+      strong recall bypasses the live reasoner, weak recall reaches it — candidate context only (D27)
 ```
 
 The vocabulary is a hand-maintained bilingual concept map (~stems + lemmas, ES↔EN via `CONCEPT_MAP` —
@@ -288,7 +288,7 @@ epistemically inert: no evidence, no belief, no confidence.
 Every concrete capability sits behind a **domain Protocol** in `domain/retrieval` (or `domain/tools`)
 with an **infrastructure adapter** at the edge (injectable io/net, offline default, `build_*() -> None`
 when unconfigured — D7/D8). Jarvis exposes delegated methods; a `CapabilityProvider` in the registry
-reports readiness, so `can_do` is honest (D37).
+reports readiness, so `can_do` is honest (D29).
 
 ```text
 capability name                    seam (Protocol)                      adapter at the edge
@@ -467,7 +467,7 @@ provider is configured as `pydantic` with a model, and the package is installed.
 ## Recall / reasoning / consult boundary
 
 The three "answer the unknown" seams mirror each other and are strictly candidate-or-context
-(D35/D36/D38):
+(D27/D28/D30):
 
 ```text
 question with no grounded belief

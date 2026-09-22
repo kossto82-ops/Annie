@@ -31,7 +31,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 from jarvis.domain.value_objects.evidence import Evidence
 
-# The grounded threshold is owned by ``CognitiveKnobs`` (single source, D14);
+# The grounded threshold is owned by ``CognitiveKnobs`` (single source, D17);
 # these observers take it as an injectable knob (default = the value above).
 
 # Too few episodes to judge a tendency honestly.

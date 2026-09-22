@@ -419,7 +419,7 @@ class OpenBotCapability:
 
     Reports whether Jarvis has a live OpenBot execution environment.  The
     capability is available only when the adapter's transport is reachable --
-    merely having configuration does not count (D37).
+    merely having configuration does not count (D29).
     """
 
     def __init__(self, agent: TaskAgent, capability: str = "execute on computer") -> None:

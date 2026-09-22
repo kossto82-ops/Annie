@@ -6,7 +6,7 @@
 | `docs/claude/SYSTEM_TODAY.md` | **Source of truth**: how Jarvis works today, user input → reply | Tasks on cognition/memory/recall |
 | `docs/claude/AI_CONTEXT.md` | Compact current project context + increment snapshots | Yes for context |
 | `docs/claude/ARCHITECTURE.md` | Architecture, layer map, boundaries | Architecture tasks |
-| `docs/claude/DECISIONS.md` | Non-negotiable architectural decisions (D1–D26) — **single decision authority** | Architecture tasks |
+| `docs/claude/DECISIONS.md` | Non-negotiable architectural decisions (D1–D32) — **single decision authority** | Architecture tasks |
 | `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md` | Phased plan (F0–F8) closing every verified gap, each with an acceptance gate | "What's next"/gap work |
 | `docs/claude/DEVELOPMENT.md` | Efficient coding/testing workflow | Development tasks |
 | `docs/claude/CONTEXT_POLICY.md` | Context/token loading rules | Reference |

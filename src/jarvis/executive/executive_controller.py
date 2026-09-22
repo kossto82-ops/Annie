@@ -71,7 +71,7 @@ from jarvis.domain.value_objects.retrieval_strategy import (
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
 from jarvis.nervous_system.nervous_system import NervousSystem
 
-# The grounded threshold (D14) now lives in ``CognitiveKnobs`` (default 0.5), the
+# The grounded threshold (D17) now lives in ``CognitiveKnobs`` (default 0.5), the
 # single validated source shared with the domain services and the Jarvis surface.
 
 # The stability narration threshold lives in the domain alongside the estimator it
@@ -297,7 +297,7 @@ class ExecutiveController:
         # above. Absent -> every recall is lexical, exactly as before (zero
         # overhead, zero recording). Present -> each recall consults the
         # accumulated strategy evidence to choose which retriever answers; the
-        # choice routes candidates only, never confidence (D20).
+        # choice routes candidates only, never confidence (D27).
         self._embedding_retriever = embedding_retriever
         # P2-C: durable retrieval-strategy experience. Absent -> the evidence
         # lives for the session only (still consumed, lost on restart); a wired
@@ -356,7 +356,7 @@ class ExecutiveController:
         seam is also public so tests and operators can replay history. Like
         every Jarvis input it is trusted-boundary data, and like every
         preference it stays revisable: the record is bounded and a meaningful
-        run of contrary evidence reverses the preference (D20).
+        run of contrary evidence reverses the preference (D21).
         """
         self._strategy_stats = self._strategy_stats.recorded(
             StrategyOutcome(strategy=strategy, success=success, query=query)
@@ -441,7 +441,7 @@ class ExecutiveController:
     def set_knobs(self, knobs: CognitiveKnobs) -> None:
         """Swap the cognition thresholds at runtime (the command center's tune dials).
 
-        Values are validated by :class:`CognitiveKnobs` at the value level (D7),
+        Values are validated by :class:`CognitiveKnobs` at the value level (D17),
         so an out-of-range threshold is rejected before it ever reaches cognition.
         """
         self._knobs = knobs

@@ -1,6 +1,6 @@
 # How Jarvis Works Today
 
-**Source of truth for the running system** (currently Increment 170). Read this before
+**Source of truth for the running system** (currently Increment 172). Read this before
 touching memory/cognition/recall code; read `ARCHITECTURE.md` for the detailed layer map and
 `STATUS.md` only for history. Marked `[EXPERIMENTAL]` are implemented, tested, but not the
 runtime default.

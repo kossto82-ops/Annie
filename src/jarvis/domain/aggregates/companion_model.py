@@ -9,7 +9,7 @@ overwritten (Vision §18): the distinction between an observation, a repeated
 pattern, and a settled model is carried by how much evidence a belief has, not by
 flattening everything into "facts".
 
-Like other aggregates it collects the events its beliefs emit (D4/D15) and leaves
+Like other aggregates it collects the events its beliefs emit and leaves
 dispatch to the orchestrator.
 """
 

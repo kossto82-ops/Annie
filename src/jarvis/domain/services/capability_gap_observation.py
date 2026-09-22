@@ -20,7 +20,7 @@ from jarvis.domain.enums.episode_kind import EpisodeKind
 from jarvis.domain.value_objects.cognitive_knobs import CognitiveKnobs
 from jarvis.domain.value_objects.episode_record import EpisodeRecord
 
-# The grounded threshold is owned by ``CognitiveKnobs`` (single source, D14), so
+# The grounded threshold is owned by ``CognitiveKnobs`` (single source, D17), so
 # gap detection gets it as an injectable knob -- the same dial the executive and
 # the self-observation services use, instead of a third mirroring constant.
 

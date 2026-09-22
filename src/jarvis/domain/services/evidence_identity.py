@@ -39,7 +39,7 @@ Deliberate limitations, documented so they are not mistaken for bugs:
   the same fact should name their channels.
 * ``weight`` is not identity: a stronger re-confirmation the same day does
   not replace the first recording. Strength affects credit, not identity.
-* Content matches exactly (D11/D17): near-duplicates count separately.
+* Content matches exactly (D11/D15): near-duplicates count separately.
 
 Skipped duplicates are dropped silently: the observation is already
 recorded, so nothing is lost and the trace is not flooded.

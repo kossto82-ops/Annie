@@ -42,7 +42,7 @@ from jarvis.domain.services.topic_resolution import topic_id_of
 from jarvis.domain.value_objects.evidence import Evidence
 
 # The internal identity prefix for a working conclusion. It disambiguates working
-# beliefs from other belief kinds and keeps retrieval deterministic (D17) — but it is
+# beliefs from other belief kinds and keeps retrieval deterministic (D22) — but it is
 # machine bookkeeping, never shown to the companion (use `subject_of` at the surface).
 WORKING_PREFIX = "Working conclusion about: "
 

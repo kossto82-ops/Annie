@@ -22,7 +22,7 @@ from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.evidence import Evidence
 
 # Explicit confirmation strongest; repeated behaviour above an isolated
-# observation (Vision §11). Factors are tunable and live in one place (D19).
+# observation (Vision §11). Factors are tunable and live in one place (D13).
 _DEFAULT_FACTORS: Mapping[EvidenceSource, float] = {
     EvidenceSource.USER_STATEMENT: 1.0,
     EvidenceSource.REPEATED_BEHAVIOR: 0.8,

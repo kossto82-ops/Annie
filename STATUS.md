@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-21 (Increment 171 — documentation reconciliation + Zero-Fallout Roadmap)
+Last updated: 2026-09-22 (Increment 172 — single decision authority + doc-truth gate)
 
 ---
 
@@ -2155,9 +2155,10 @@ The architectural audit is complete. Post-audit implementation wired existing sy
 ## Decisions log (ADR-lite — settled, do not revisit)
 
 > **Legacy numbering.** This log uses its own D1–D40 sequence. The current, non-negotiable
-> constraints live in `docs/claude/DECISIONS.md` (D1–D26), which is the **single authority**;
-> cross-references in docs must resolve there. The mapping from these legacy numbers to `DECISIONS.md`
-> is added by roadmap phase F1 (`docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`). Entries below are history.
+> constraints live in `docs/claude/DECISIONS.md` (D1–D32), which is the **single authority**;
+> cross-references in live docs and `src/` must resolve there. The mapping from these legacy numbers
+> to `DECISIONS.md` is in the appendix below (roadmap phase F1, Increment 172). Entries below are
+> history.
 
 - **D1** `src/` layout; `pythonpath=["src"]` in pytest so no install step is needed for tests.
 - **D2** Python 3.13+ target (dev machine runs 3.14). Modern typing, stdlib-first, no deps yet.
@@ -2321,6 +2322,51 @@ The architectural audit is complete. Post-audit implementation wired existing sy
   writes to beliefs/memory directly, and is governed by the controlled-autonomy policy + Tool Registry
   permission levels (see the revised D1 in `docs/claude/DECISIONS.md`).
 
+### Legacy → `DECISIONS.md` mapping (appendix, Increment 172)
+
+| Legacy # | What it settled | Today (single authority `docs/claude/DECISIONS.md`) |
+|---|---|---|
+| D1 | `src/` layout; `pythonpath=["src"]` for tests | Convention — no curated counterpart |
+| D2 | Python 3.13+ target (dev runs 3.14) | Convention — package now requires `>=3.11` |
+| D3 | Frozen/slotted event dataclasses | Convention — no curated counterpart |
+| D4 | Aggregate collects events; controller dispatches | Convention (infra inner shape) |
+| D5 | `NervousSystem` is synchronous | Convention (infra) — still true |
+| D6 | Six episode states only | Convention |
+| D7 | `Confidence` rejects invalid input (never clamps) | Supports **D3** (evidence-strength enforced at the value level) |
+| D8 | No `services/`/`repositories/` folders yet | Superseded — note: later "D8" means *offline deterministic core* → **D8** |
+| D9 | `CognitiveEvent.episode_id` optional | Convention |
+| D10 | Evidence weight reuses `Confidence` | Convention |
+| D11 | Confidence is **derived, never assigned** | **D3** |
+| D12 | Belief/Hypothesis share the estimator, not a base class | Convention (rule of three) |
+| D13 | `leading()` returns None on a tie | **D5** (competing hypotheses remain possible) |
+| D14 | `GROUNDED_CONFIDENCE_THRESHOLD = 0.5` | **D17** (the threshold is a `CognitiveKnobs` knob, single authoritative copy) |
+| D15 | `CognitiveEpisode` owns the working belief | **D2** (episode is the unit of cognition) |
+| D16 | Repository `Protocol` in domain, impl in infrastructure | **D10** |
+| D17 | `working_statement(trigger)` exact-string identity | **D11/D22** (superseded: identity is canonical-topic-anchored) |
+| D18 | `TemporalStability` separate from `Confidence` | **D32** |
+| D19 | One injectable `SourceWeightingPolicy` | **D13** (configuration over hard-coded) |
+| D20 | Self-observation uses ordinary epistemology | **D3** (evidence discipline); never a confidence setter |
+| D21 | Self-observation COMPANION-only; `pursue` deliberate | **D23** spirit (origin discipline) |
+| D22 | Learning = behaviour change derived from self-model | **D19** spirit (derived, never a stored flag) |
+| D23 | Companion belief informs `think` as evidence | **D3/D6** (evidence, never an override) |
+| D24 | Persistence stores evidence, re-derived on load | **D10** (storage swaps behind contracts) |
+| D25 | Belief events correlate to the episode | Convention |
+| D26 | `consider` is a distinct deliberation shape | **D2** spirit |
+| D27 | (referenced but never formally logged) | — none |
+| D28 | `state_summary()` reports `(statement, confidence)` | Convention |
+| D29 | Curiosity checks sources in a fixed priority | Convention (behavioural) |
+| D30 | Stuck-goal give-up after `_MAX_GOAL_REFLECTIONS` | Convention (behavioural) |
+| D31 | Perception = `PerceptionSource` producing evidence only | **D6** |
+| D32 | Reflective cycle built inside the core, not a wrapper | **D1** |
+| D33 | LLM enters only via `LanguageModel`, extracts never decides | **D6/D7** |
+| D34 | Command center = local web app; UI is not cognition | **D9** |
+| D35 | Recall is a **candidate, never a belief** | **D27** |
+| D36 | Reasoning is **inference, not judgement** | **D28** |
+| D37 | Capabilities are **earned and live-backed** | **D29** |
+| D38 | Edge consultation is a **deliberate, gated step** | **D30** |
+| D39 | Material edges follow **one seam** (Protocol + adapter + provider) | **D31** |
+| D40 | Agent-bridge may **delegate material actions**, never cognition | **D1** |
+
 ---
 
 ## Roadmap — the reflective cycle & outstanding threads  (2026-08-24)
@@ -2391,8 +2437,8 @@ energy); Track D finish-offs (incl. persisting reflective-cycle refutations).
 ### Track D — smaller finish-offs (fold in opportunistically, not their own phase)
 - `TemporalStability` count/recency weighting (currently span-only; hypotheses now derive it too, 146).
 - Injectable weighting policy at `Jarvis(...)` level (currently per-belief default).
-- Semantic matching for belief/connection identity (beyond exact-string D17) — naturally becomes an
-  LLM/embedding job once Track B exists.
+- Semantic matching for belief/connection identity (beyond the canonical-topic identity,
+  D11/D22) — naturally becomes an LLM/embedding job once Track B exists.
 - Persist traces; consider a real DB behind the JSON stores; pin ruff/pyright in a lockfile.
 
 **Sequencing decision:** finish Track A (the cycle) next — it is what makes the system *revolutionary*
@@ -2403,14 +2449,15 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (see `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`)
 
-**Increments 166–171 are committed and pushed** (statements-as-memory, recall by meaning,
-change-of-mind resolution, the evidence-request writer, and the docs+roadmap close-out behind). The
-memory-correctness debt is gone and every remaining gap has a **scheduled phase with an acceptance
-gate** — nothing opportunistic. Start at Phase **F1** (decision-registry consolidation; the two live
-D-numberings are the first thing an audit finds), then **F2** (schedule honest forgetting/decay),
-**F3** (auto-retire answered open questions), **F4** (passage-level document search), **F5** (live
-voice streaming + VAD), **F6** (edge deepening), **F7** (lockfile, 3-python CI matrix, doc-truth job,
-broad-`except` audit), **F8** (final gates + re-audit checklist).
+**Increments 166–172 are committed and pushed** (statements-as-memory, recall by meaning,
+change-of-mind resolution, the evidence-request writer, the docs+roadmap close-out, and the
+decision-registry consolidation). Phase **F1 is done**: `DECISIONS.md` is the one numbering
+(D1–D32), live docs and `src/` resolve every D-token there, the legacy mapping is an appendix
+in this log, and an offline `scripts/check_decision_refs.py` + CI `doc-truth` job + the
+`tests/test_doc_decision_refs.py` gate hold it that way. Start at phase **F2** (schedule honest
+forgetting/decay), then **F3** (auto-retire answered open questions), **F4** (passage-level
+document search), **F5** (live voice streaming + VAD), **F6** (edge deepening), **F7** (lockfile,
+3-python CI matrix, broader broad-`except` audit), **F8** (final gates + re-audit checklist).
 
 Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable
 via constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in
@@ -2428,7 +2475,7 @@ directions:
 
 - **Capability depth beyond the seams:** the calendar/tasks/notes/mail/speech/agent edges exist as seams +
   adapters; each can be deepened (CalDAV sync, scheduling execution, streaming/VAD STT, richer delegation
-  scopes). Each must stay behind its domain Protocol (D7), earned (D37), and offline-testable (D8).
+  scopes). Each must stay behind its domain Protocol (D7), earned (D29), and offline-testable (D8).
 - **Memory-line depth:** the semantic layer is deliberately bounded (COMPANION-only consolidation with
   neutral evidence, D23; vocabulary-driven meaning recall, D18) — extending it means *vocabulary + policy
   decisions*, never an LLM shortcut. Decay/forgetting exist as services; wiring them into a running system
@@ -2695,7 +2742,7 @@ Closes the two operational gaps of the `docs/claude/SEMANTIC_ATTENTION_AUDIT.md`
   `Jarvis.database()`, `create_jarvis()` all carry the store. Restart-safe.
 - **Concept-aware recall**: SEMANTIC candidates scored `max(lexical, concept_relevance)`;
   strong concept hits bypass the live reasoner, weak ones reach it; recall stays
-  candidate context only (D35).
+  candidate context only (D27).
 - **Bounded consolidation**: clustering plus-updates only the most recent `window=50`
   episodes, and `by_id` merging kills the quadratic full-history rescan.
 - **Attention development (ranked, honest)**: new `AttentionPriority` service deriving
@@ -3045,6 +3092,33 @@ and carries a plan that turns every known gap into a scheduled phase.
   month-later re-audit checklist.
 
 Full suite: **2220 passed, 3 skipped** (docs-only commit); ruff clean; **pyright strict 0**.
+
+---
+
+### Increment 172 — Single decision authority + doc-truth gate (roadmap F1, 2026-09-22)
+
+No behavior change (the refactor from Increment 171 is untouched). The decision registry is now one
+numbering and is enforced mechanically.
+
+- **`docs/claude/DECISIONS.md` is the only authority**, extended to **D27–D32** (consolidated from
+  the legacy STATUS log): D27 recall-is-a-candidate (legacy D35), D28 reasoning-is-inference (legacy
+  D36), D29 earned/live-backed edges (legacy D37), D30 gated consultation (legacy D38), D31
+  material-edge one seam (legacy D39), D32 temporal-stability axis (legacy D18).
+- **Live docs remapped** (`ARCHITECTURE.md`, `AI_CONTEXT.md`, `ROADMAP_TO_ZERO_FALLOUT.md`): every
+  legacy-only citation now resolves — D27/D28/D29/D30/D31 used directly; the roadmap's Fronteras
+  numbers corrected; `INDEX.md` DECISIONS row → D1–D32.
+- **Legacy D-numberings reconciled in `src/` comments**: 25+ stale citations remapped (e.g.
+  hypothesis `D11→D3`, belief `D18→D32`, evidence_weighting `D19→D13`, retrieval_strategy/knobs/
+  self-observation `D14/D20→D17/D21`, fallback/std OpenAI adapters `D33→D6`, goal_reflection/
+  belief_repository `D17→D22`, capability + document + server `D37→D29`, jarvis Odysseus links
+  `D37→D29`). A final inventory shows **no legacy-only token left in live docs or `src/`**.
+- **STATUS.md**: the legacy-log header now points to the appendix, and the appendix maps every
+  legacy D1–D40 → `DECISIONS.md` (or marks it a folded engineering convention).
+- **Machine gate**: `scripts/check_decision_refs.py` (stdlib-only, offline) scans live docs + `src/`,
+  fails on any unresolvable `D<number>` and on non-contiguous numbering; embedded `--selftest`;
+  wired as the `doc-truth` CI job and exercised by `tests/test_doc_decision_refs.py` (+2 tests).
+
+Full suite: **2222 passed, 3 skipped** (+2 doc-truth); ruff clean; **pyright strict 0**.
 
 ---
 

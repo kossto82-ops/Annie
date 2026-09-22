@@ -11,11 +11,11 @@ an architectural decision — the D-boundaries below are provisions, not permiss
   capability seams; F7 makes the *reproducibility* of all of the above machine-verifiable; F8 closes.
 - **Fronteras intocables.** The invariants below are constraints on every phase. If a phase seems to
   need one, the phase is wrong, not the invariant.
-  - Epistemology: confidence is derived from evidence — no imperative confidence setter (D2).
+  - Epistemology: confidence is derived from evidence — no imperative confidence setter (D3).
   - Offline determinism: the default suite is offline and deterministic; live providers are opt-in
-    behind seams only (D8/D20 series — see `DECISIONS.md`).
+    behind seams only (D8, D29 — see `DECISIONS.md`).
   - The LLM extracts candidate evidence; it never decides (D6) and never replaces a domain service.
-  - Recall is a candidate, not a belief (D7); reasoning is inference, not judgement (D8).
+  - Recall is a candidate, not a belief (D27); reasoning is inference, not judgement (D28).
   - No generic `Manager`/`Orchestrator`/`Engine` abstractions (D12-style); every new service has a
     clear domain responsibility.
   - Cognitive truth lives in `SYSTEM_TODAY.md`/`ARCHITECTURE.md`; historical docs stay HISTORICAL.
@@ -49,23 +49,26 @@ Everything further on needs trustworthy numbers. Record them before touching cod
 
 ## F1 — Decision-registry consolidation (single authority)
 
-**Problem:** two conflicting D-numbering schemes are both live. `STATUS.md` carries an adr-lite log
-D1–D40 (lines 2157–2314, its own numbering, e.g. D11 "confidence derived", D35 "recall candidate",
-D37 "earned capabilities", D39/D40 edge-agent). `docs/claude/DECISIONS.md` curates D1–D26 with a
-*different* mapping (e.g. its D7 "recall is a candidate", D8 "inference not judgement") and adds
-D22–D26 with no STATUS equivalent. `ARCHITECTURE.md` cross-references **both** families
-(D15/D16/D17/D20/D21 resolve in `DECISIONS.md`; D35/D36/D37/D38/D39/D40 resolve only in the STATUS
-log). Any re-audit finds this in the first five minutes.
+**Problem:** `STATUS.md` carries a legacy adr-lite decisions log with its own numeric sequence
+(numbered for its own history), while `docs/claude/DECISIONS.md` curates the current decisions with a
+*different* mapping — and some live docs cited numbers that only exist in the legacy log (e.g.
+recall-candidate cited by its legacy number). Any re-audit finds this in the first five minutes.
 
-- `DECISIONS.md` becomes the single authority (keep its D1–D26 numbering untouched).
-- Build the full mapping STATUS-legacy → DECISIONS per entry in an appendix of `STATUS.md`, and
-  label the STATUS log header "legacy ADR-lite numbering — superseded by `docs/claude/DECISIONS.md`".
-- Rewrite every `D###` cross-reference in `ARCHITECTURE.md`, `SYSTEM_TODAY.md`, `AI_CONTEXT.md`,
-  `README.md`, `CLAUDE.md` to resolve in `DECISIONS.md`; delete or remap the dangling D35–D40 refs.
-- Add `scripts/check_decision_refs.py` + a CI job: scans `docs/claude` + root docs, asserts every
-  `D\d+` token resolves in `DECISIONS.md` (STATUS legacy log whitelisted).
-- **Tests:** self-tests for the checker (fixtures with/without dangling refs).
-- **Acceptance:** `python scripts/check_decision_refs.py` green; `rg "D35|D36|D37|D38|D39|D40" docs` → 0.
+- `DECISIONS.md` is the single authority; its numbering is extended (D27–D32) so every load-bearing,
+  cited constraint has a home there: recall-candidate (D27), inference-not-judgement (D28), earned
+  live-backed edges (D29), gated consultation (D30), the material-edge seam (D31), temporal stability
+  (D32).
+- A mapping appendix STATUS-legacy → DECISIONS is added to `STATUS.md`; the log header already notes
+  the legacy numbering is superseded.
+- Every cross-reference in live docs (`ARCHITECTURE.md`, `SYSTEM_TODAY.md`, `AI_CONTEXT.md`,
+  `README.md`, `CLAUDE.md`, this file) **and in `src/` comments** is rewritten to resolve in
+  `DECISIONS.md`; no legacy-only number remains.
+- Add `scripts/check_decision_refs.py` + a CI job: scans live docs and `src/`, asserts every `D\d+`
+  token resolves in `DECISIONS.md` (STATUS, `audits/`, and dated gate/closure records whitelisted).
+- **Tests:** checker self-tests (fixtures with/without dangling refs) plus a live-repo run inside the
+  suite.
+- **Acceptance:** `python scripts/check_decision_refs.py` green; no legacy-only tokens (e.g. recall
+  candidate cited by a status-log number) remain in live docs or `src/`.
 
 ## F2 — Scheduled honest forgetting & consolidation
 

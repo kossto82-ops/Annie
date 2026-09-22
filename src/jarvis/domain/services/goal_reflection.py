@@ -7,7 +7,7 @@ memory. It names what Jarvis has come back to -- nothing about whether that is
 good, wise, or worth pursuing. Judgement, if any, is a later and separate step.
 
 Matching is exact-string on the goal statement (the same deliberate
-simplification as trigger identity, D17); semantic clustering of related goals
+simplification as trigger identity, D22); semantic clustering of related goals
 is a future concern.
 """
 

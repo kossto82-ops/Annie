@@ -9,7 +9,7 @@ The actual HTTP send is a `Transport` (a callable) so the network stays at the
 edge and out of tests: the default uses the standard library (`urllib`, no
 dependency); tests inject a fake transport and never touch the network. Whatever
 the model returns is only ever *text* here -- turning it into evidence, and never
-into a decision, is `LlmPerception`'s job (Vision §38, D33).
+into a decision, is `LlmPerception`'s job (Vision §38, D6).
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 Pure string logic, no model involved. The default is lexical recall; a
 preference for embedding recall forms only on well-sampled, meaningful
-evidence and always stays reversible (D20).
+evidence and always stays reversible (D21).
 """
 
 from __future__ import annotations

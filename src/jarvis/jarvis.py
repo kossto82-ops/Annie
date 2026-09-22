@@ -314,7 +314,7 @@ if TYPE_CHECKING:
 
 # The goal-reflection cap and the insight threshold now live in ``CognitiveKnobs``
 # (defaults 3 and 0.5, the historical constants), validated at the value level
-# (D7) and tunable at runtime from the command center.
+# (D17) and tunable at runtime from the command center.
 
 # The companion trait Jarvis learns about from help it received on a stuck goal.
 HELPFUL_COMPANION_TRAIT = "is helpful when I am stuck"
@@ -847,7 +847,7 @@ knowledge_graph=knowledge_graph_store,
         The recall paths call this automatically; the seam stays public so
         history can be replayed or corrected. Bounded and revisable: a
         meaningful run of contrary evidence always reverses the preference
-        (D20).
+        (D21).
         """
         self._executive.record_retrieval_outcome(strategy, success, query)
 
@@ -1551,7 +1551,7 @@ knowledge_graph=knowledge_graph_store,
 
         The composition root registers one bounded :class:`FileSystemTool` per
         shared project folder and marks the seam live, so ``can_do("edit project
-        files")`` reflects reality (D37).
+        files")`` reflects reality (D29).
         """
         self._project_files_capability.set_live(available)
 
@@ -1989,7 +1989,7 @@ knowledge_graph=knowledge_graph_store,
         return self._cap_surface.usable_capabilities()
 
     def provision_live_capabilities(self) -> tuple[Capability, ...]:
-        """Mark every live-backed catalog capability as acquired (Odysseus, D37).
+        """Mark every live-backed catalog capability as acquired (Odysseus, D29).
 
         A capability counts as live when a registered edge provider serves it and
         reports available -- i.e. the operator has actually wired that seam (web,
@@ -2179,7 +2179,7 @@ knowledge_graph=knowledge_graph_store,
     def set_knobs(self, knobs: CognitiveKnobs) -> None:
         """Swap the cognition thresholds at runtime (the command center's dials).
 
-        Values are validated by :class:`CognitiveKnobs` at the value level (D7);
+        Values are validated by :class:`CognitiveKnobs` at the value level (D17);
         an out-of-range threshold is rejected before it reaches cognition. The
         executive owns the live copy; every gate reads it through :meth:`knobs`.
         """

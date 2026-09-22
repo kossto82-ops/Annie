@@ -168,7 +168,7 @@ class LocalDocumentStore:
         """The recorded provenance of ``name``, or None when none was recorded.
 
         A file on disk with no meta entry -- e.g. one that predates provenance
-        tracking -- honestly reads ``None`` rather than being guessed at (D11).
+        tracking -- honestly reads ``None`` rather than being guessed at (honest provenance).
         """
         key = self._require_name(name)
         entry = self._load_meta().get(key)
@@ -216,7 +216,7 @@ class LocalDocumentStore:
         """The document's utf-8 text, or ``None`` when it is not readable text.
 
         Bytes that fail to decode are honest binaries -- searchable by name, but not
-        quoted as if their content were legible (D37).
+        quoted as if their content were legible (D29).
         """
         try:
             return self._io("read", name, b"").decode("utf-8")

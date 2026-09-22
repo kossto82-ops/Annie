@@ -52,14 +52,14 @@ The response is only one possible output of cognition.
 - reflection (genuine review stage, Increment 112), connection/association
 - curiosity, hypothesis generation, action recommendation (graded stance)
 - goal reflection (recurring goals / reflection effort), self-observation (3 tendencies)
-- capability scout / evaluator / gap-observation (Odysseus, D37)
-- knowledge source (deliberate edge consultation, D38), model compare
+- capability scout / evaluator / gap-observation (Odysseus, D29)
+- knowledge source (deliberate edge consultation, D30), model compare
 
 ### Executive/core
 
 `ExecutiveController` orchestrates the lifecycle of an episode. It stays thin; before deciding it may
 **recall** (memory seam), **consult** a knowledge edge, and **reason** (reasoner seam) — each a
-candidate-evidence source, never a decision-maker (D35/D36/D38).
+candidate-evidence source, never a decision-maker (D27/D28/D30).
 
 `Jarvis` is the public composition/API surface (~110 methods). `NervousSystem` provides synchronous
 event signalling. `EpisodeTrace` groups cognitive events by episode; persistent Jarvis keeps the trace
@@ -148,7 +148,7 @@ nothing schedules them in the running system.
 
 ### Capabilities (Odysseus + edges)
 
-`Capability` is bookkeeping; the live side is a `CapabilityProvider` at the edge (D7/D37).
+`Capability` is bookkeeping; the live side is a `CapabilityProvider` at the edge (D7/D29).
 `Jarvis.can_do(name)` is true only when a capability is *acquired* and live-backed. Recognised needs are
 ordinary beliefs whose confidence is derived from evidence; autonomy is earned (deliberate acquire/reject).
 Gap detection (`capability_gap_observation`) can self-initiate needs from recurring failure subjects and

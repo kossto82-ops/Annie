@@ -176,3 +176,47 @@ An evidence-request write is gated (COMPANION-origin, FULL-attention,
 question-shaped, evidence-less), writes no evidence and no belief, and is a
 transient trace so curiosity can return to an unanswered question. It must never
 influence confidence, stability, or ranking (Increment 170).
+
+## D27 — Recall is a candidate, never a belief
+
+A `MemoryRetriever` supplies *recalled context* on the episode (never belief-evidence;
+memory is not truth, Vision §22) and a *stance* (Memory / partial_memory) for the surface.
+The seam is a domain Protocol with a deterministic lexical adapter as the offline default;
+semantic/embedding retrieval swaps in behind the same Protocol. A question-shaped memory is
+never recalled as knowledge. (Consolidated from the legacy STATUS log; Increment 172.)
+
+## D28 — Reasoning is inference, not judgement
+
+A `Reasoner` proposes a provisional answer as response context — never belief-evidence, never
+confidence. Its output may be folded in as the *weakest* `EvidenceSource.INFERENCE` evidence
+(weight 0.2, Increment 110) so an unconfirmed answer is held faintly and a later confirmation
+matures it via `confirm()`. The executive is the decider (Vision §37, §38; D6). (Consolidated
+from the legacy STATUS log.)
+
+## D29 — Edge capabilities are earned and live-backed
+
+`can_do(name)` is true only when a capability is *acquired* (a deliberate step, Vision §28) and
+backed by a ready `CapabilityProvider`. Research/compare/reason/semantic-recall register providers
+like the web seams, so one gate applies to every catalog capability — speech included (a silent
+reasoner or lexical-only recall never reports `can_do`). (Consolidated from the legacy STATUS log.)
+
+## D30 — Edge consultation is a deliberate, gated step
+
+A `KnowledgeSource` edge (research → weaker `EXTERNAL_SOURCE`; compare → weakest `INFERENCE`) is
+consulted only when the episode lacks real support and strong recall, at most once, and recorded in
+the episode (`consulted`/`record_consult`). It gathers candidate evidence; empty/failed is honest
+`None` (D6). Opt-in: an un-wired Jarvis never consults. (Consolidated from the legacy STATUS log.)
+
+## D31 — Material-edge capabilities follow one seam
+
+A domain Protocol at the edge + an infrastructure adapter (injectable io/net → offline tests,
+env-gated root, `build_*() -> None` when unconfigured, D7/D8) + delegated `Jarvis` methods + a
+`CapabilityProvider` in the registry. Calendar/tasks/notes/mail/speech/agent all follow it;
+`can_do` reflects acquisition AND provider availability. (Consolidated from the legacy STATUS log.)
+
+## D32 — Temporal stability is a distinct axis from confidence
+
+`TemporalStability` never collapses into `Confidence` (Vision §10): both are [0,1] magnitudes but
+different axes. Stability is span-based (`span / (span + reference)`, `STABILITY_REFERENCE = 30d`,
+`LOW_STABILITY_THRESHOLD = 0.2`, tunable); count/recency weighting is deferred to the opt-in decay
+policy. (Consolidated from the legacy STATUS log.)

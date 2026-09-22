@@ -135,7 +135,7 @@ def create_jarvis(home: str | Path | None = None) -> Jarvis:
     notes, documents) are wired from the environment when configured and stay ``None``
     otherwise, so the same Jarvis works fully offline. ``can_do`` reflects which are
     live. Every capability with a live provider at build time is provisioned as
-    acquired, so the assistant starts out owning what it was configured with (D37).
+    acquired, so the assistant starts out owning what it was configured with (D29).
     """
     settings = settings_from_env()
     # Build the language model with optional fallback (backup provider)
@@ -279,7 +279,7 @@ learned_state_store=repositories.learned_state,
         jarvis.set_project_files(True)
     # Provision every capability whose provider is wired and available at boot, so a
     # freshly configured assistant starts out owning what it was set up with and the
-    # command center keeps showing it as ready (D37). The stores persist those
+    # command center keeps showing it as ready (D29). The stores persist those
     # acquisitions under ``home``; deliberate rejects are respected.
     jarvis.provision_live_capabilities()
     return jarvis

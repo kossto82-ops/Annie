@@ -3,7 +3,7 @@
 A hypothesis sits earlier in the epistemic hierarchy than a settled belief
 (Vision §7: Observation -> Pattern -> Hypothesis -> Mental Model). Like a belief,
 it never owns its own strength -- confidence is always ``derive_confidence`` over
-its evidence (D11). Unlike a belief, a hypothesis is meant to coexist with rivals
+its evidence (D3). Unlike a belief, a hypothesis is meant to coexist with rivals
 inside a :class:`HypothesisSet`; the point is comparison, not standalone truth.
 
 The estimator is deliberately shared with :mod:`jarvis.domain.entities.belief`

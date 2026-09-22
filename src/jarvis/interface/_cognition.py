@@ -153,7 +153,7 @@ def _tunables(jarvis: Jarvis, payload: Reply) -> Reply:
     builds the updated :class:`CognitiveKnobs` (``dataclasses.replace`` keeps the
     untouched dials) and swaps it via :meth:`Jarvis.set_knobs` — one value object,
     the single source the executive and Jarvis's own gates read. An out-of-range
-    value is a clear error, rejected at the value level (D7), never a crash.
+    value is a clear error, rejected at the value level (D17), never a crash.
     """
     current = jarvis.knobs()
     fields = {
