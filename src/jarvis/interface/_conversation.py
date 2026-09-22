@@ -295,6 +295,9 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
     if verdict is not None and history:
         belief = jarvis.confirm(history[-1].trigger, affirm=verdict)
         if belief is not None:
+            # A confirmation grounds the confirmed conclusion: if it was an open
+            # question's echo, the question is now answered (F3 auto-retire).
+            _retire_answered_questions(jarvis, history[-1].trigger)
             return _turn(jarvis, _confirmation_reply(verdict, belief))
 
     intent = classify(text)
@@ -315,7 +318,30 @@ def _say_core(jarvis: Jarvis, text: str) -> Reply:
     # question is answered from memory and reasoning and is itself not stored.
     if len(_WORD.findall(text)) >= _MIN_STATEMENT_WORDS and not _is_question(text):
         _remember_statement(jarvis, text)
-    return _turn(jarvis, _knowledge_reply(jarvis, text))
+    answer = _knowledge_reply(jarvis, text)
+    _retire_answered_questions(jarvis, text)
+    return _turn(jarvis, answer)
+
+
+def _retire_answered_questions(jarvis: Jarvis, text: str) -> None:
+    """Settle every open question this turn grounded (roadmap F3 auto-retire).
+
+    An open question stops competing for attention once the companion's turn
+    *re-triggers* it (it bears on the question at the recall relevance floor)
+    and Jarvis now holds a grounded belief about it (confidence >= the grounded
+    knob). Matching alone never retires — an ungrounded "I still wonder …"
+    stays open (the grace rule); only :meth:`Jarvis.resolve_open_question`
+    writes, resolving the item with the grounded evidence as the answer. This
+    path is the conversation surface only: CURIOSITY echoes raised by
+    ``feel_curious``/``pursue`` are episodes, not turns, and never reach it, and
+    the writer's exact-string dedup (Inc 170) is untouched.
+    """
+    settled: set[str] = set()
+    for item, answer in jarvis.retirable_open_questions(text):
+        if item.question in settled:
+            continue
+        jarvis.resolve_open_question(item.question, answer)
+        settled.add(item.question)
 
 
 def _turn(jarvis: Jarvis, reply: Reply) -> Reply:

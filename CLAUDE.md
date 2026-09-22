@@ -81,13 +81,16 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-2244 tests passing (3 skipped), ruff clean, pyright strict 0.
+2259 tests passing (3 skipped), ruff clean, pyright strict 0.
 
-The current project is at Increment 173 (see `STATUS.md`; Increments 171–172 shipped the docs
+The current project is at Increment 174 (see `STATUS.md`; Increments 171–172 shipped the docs
 reconciliation, the zero-fallout roadmap, and the single decision authority — `DECISIONS.md` D1–D32 —
-guarded by the offline `doc-truth` check `scripts/check_decision_refs.py`, and Increment 173 shipped the
+guarded by the offline `doc-truth` check `scripts/check_decision_refs.py`, Increment 173 shipped the
 scheduled honest forgetting — `ForgettingCandidates` on the rest cadence, the `forgetting` command, and
-root-wired `DecayingWeightingPolicy` recall bias). The reflective cognitive cycle is
+root-wired `DecayingWeightingPolicy` recall bias — and Increment 174 shipped the open-question loop
+completion — a conversational turn that re-triggers an open question and grounds it retires it through
+`resolve_open_question` (`retirable_open_questions`, the F3 acceptance caller), with the
+`open-questions`/`settle-question` surfaces and `memory.open_questions` in the snapshot). The reflective cognitive cycle is
 complete; recall (lexical + semantic), provisional reasoning with a learning loop (the reasoner now
 consumes the short-term `ConversationContext` **and** carries a session `ReasoningSpan` across turns for
 deep multi-turn reasoning), memory decay, hypothesis temporal-stability narration (Increment 146),

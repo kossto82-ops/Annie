@@ -142,6 +142,7 @@ from jarvis.domain.perception.speech_perception import SpeechPerceptionSource
 from jarvis.domain.reasoning.reasoner import Reasoner
 from jarvis.domain.reasoning.reasoning_span import ReasoningSpan, SpanThread
 from jarvis.domain.repositories.belief_repository import (
+    WORKING_PREFIX,
     BeliefRepository,
     resolve_belief_for,
 )
@@ -162,6 +163,7 @@ from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.retrieval.task_scheduler import TaskScheduler
+from jarvis.domain.services.abstraction import relatedness
 from jarvis.domain.services.attention_priority import (
     derive_attention_priorities as _derive_attention_priorities_fn,
 )
@@ -251,6 +253,7 @@ from jarvis.domain.value_objects.unresolved_item import UnresolvedItem, Unresolv
 from jarvis.edges import EdgesSurface
 from jarvis.executive.executive_controller import (
     ExecutiveController,
+    subject_of,
 )
 from jarvis.goal_surface import GoalSurface
 from jarvis.infrastructure.capability_registry import (
@@ -360,6 +363,25 @@ def qualifies_evidence_request(episode: CognitiveEpisode) -> bool:
     if episode.attention is not Attention.FULL:
         return False
     return request.question.strip().endswith("?")
+
+
+# How strongly a conversational turn must bear on an open question for it to
+# *re-trigger* it (roadmap F3): the same honest relevance floor the recall
+# pipeline demands of a durable candidate (executive `_MIN_RECALL_RELEVANCE`).
+# Re-triggering alone never retires anything -- a grounded belief must exist too.
+_RE_TRIGGER_RELEVANCE = 0.2
+
+# How strongly a grounded belief must bear on the question to count as *its
+# answer*. Retiring a question is a permanent decision, so this is deliberately
+# past mere recall noise: a scrap at exactly the recall floor (0.2, e.g. a
+# tentative "the weather is nice today") must never settle "why do the swallows
+# return?". The derived-confidence threshold still applies on top of this floor.
+_RE_ANSWER_RELEVANCE = 0.3
+
+# The companion's own wording never reads like machine bookkeeping. These are
+# the one-liners Jarvis writes itself while learning (see `confirm`); they are
+# not answers and are never chosen as an open question's resolution.
+_CONFIRM_INTRO = {"the companion confirmed this", "the companion corrected this"}
 
 
 class Jarvis:
@@ -2528,6 +2550,88 @@ knowledge_graph=knowledge_graph_store,
             ],
         )
         return resolved
+
+    def retirable_open_questions(
+        self, text: str
+    ) -> tuple[tuple[UnresolvedItem, str], ...]:
+        """Open questions this conversational turn settles, with the answer (F3).
+
+        The evidence-request writer (Inc 170) opens a question when Jarvis cannot
+        settle it; this read-only helper closes that loop. A turn *re-triggers* an
+        open question when it bears on it at the same relevance floor the recall
+        pipeline uses (``relatedness`` >= ``_RE_TRIGGER_RELEVANCE``), and the
+        question is *settled* only when Jarvis now holds a grounded belief about it
+        (confidence >= ``knobs().grounded_confidence``). Returns ``(item, answer)``
+        pairs, oldest first -- the answer is the strongest grounded belief's
+        statement, so the conversation flow can retire each via
+        :meth:`resolve_open_question`. An ungrounded return of the same question
+        ("I still wonder ...") matches nothing: only a grounded belief retires
+        (the grace rule), and matching alone never deletes.
+        """
+        threshold = self.knobs().grounded_confidence
+        open_items = self.open_questions()
+        if not open_items:
+            return ()
+        retirable: list[tuple[UnresolvedItem, str]] = []
+        for item in open_items:
+            if relatedness(text, item.question) < _RE_TRIGGER_RELEVANCE:
+                continue
+            answer = self._grounded_answer_for(item.question, threshold)
+            if answer is not None:
+                retirable.append((item, answer))
+        return tuple(retirable)
+
+    def _grounded_answer_for(self, question: str, threshold: float) -> str | None:
+        """The strongest grounded belief already addressing ``question``, or None.
+
+        Only beliefs whose derived confidence clears ``threshold`` and whose
+        statement bears on the question at the *answer* relevance floor (stronger
+        than mere recall noise) count. The
+        answer wording prefers the companion's own words (the supporting
+        USER_STATEMENT content when it is not machine bookkeeping) and only then
+        falls back to the natural subject. The deterministic winner is the
+        highest-confidence belief with such a companion-level answer (ties: most
+        recently formed, then wording order). None means no grounded answer
+        exists yet -- the question stays open.
+        """
+        candidates: list[tuple[Belief, str, bool]] = []
+        for belief in self.beliefs.all_beliefs():
+            if belief.confidence.value < threshold:
+                continue
+            if relatedness(question, belief.statement) < _RE_ANSWER_RELEVANCE:
+                continue
+            natural, companion_level = self._answer_wording(belief)
+            candidates.append((belief, natural, companion_level))
+        if not candidates:
+            return None
+        best = max(
+            candidates,
+            key=lambda c: (
+                c[0].confidence.value,
+                c[2],
+                c[0].formed_at.timestamp(),
+                c[1],
+            ),
+        )
+        return best[1]
+
+    def _answer_wording(self, belief: Belief) -> tuple[str, bool]:
+        """The companion-level wording of a belief, when it exists.
+
+        Prefers the newest supporting USER_STATEMENT that is the companion's own
+        statement -- skipping the internal working-conclusion bookkeeping and the
+        generic confirmation one-liners -- and falls back to the belief's natural
+        subject (so the wording is never "Working conclusion about: ...").
+        """
+        for piece in reversed(belief.evidence):
+            if (
+                piece.source is EvidenceSource.USER_STATEMENT
+                and piece.supports
+                and not piece.content.startswith(WORKING_PREFIX)
+                and piece.content.strip() not in _CONFIRM_INTRO
+            ):
+                return piece.content, True
+        return subject_of(belief.statement), False
 
     def self_beliefs(self) -> tuple[Belief, ...]:
         """Every self-tendency Jarvis currently holds about its own cognition

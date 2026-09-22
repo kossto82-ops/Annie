@@ -285,6 +285,19 @@ nothing to conclude, so curiosity can return to it. `is_question_shape` (public 
 `executive_controller.py`) reuses the question cues (`_QUESTION_CUES` + trailing `?`). The write is
 epistemically inert: no evidence, no belief, no confidence.
 
+**The loop closes** (Increment 174, roadmap F3): `retirable_open_questions` (`jarvis.py`) is the read-only
+*retirement* side of the same seam — when a conversational turn *re-triggers* an open item (turn bears on
+it at the recall floor `_RE_TRIGGER_RELEVANCE = 0.2`), Jarvis looks for a grounded belief that is
+*not* the working-conclusion wrapper (`WORKING_PREFIX`), for whom the natural wording is the newest
+companion-origin statement (excluding the `_CONFIRM_INTRO` "the companion confirmed/corrected this"
+echoes), falling back to the belief subject. Only a grounded belief (conf ≥ `grounded_confidence`) that
+bears on the question at `_RE_ANSWER_RELEVANCE = 0.3` retires it — the answer is handed to
+`resolve_open_question` so the loop completes in the conversation flow (`_retire_answered_questions`
+in `_conversation.py`). A confirmation also grounds+retires its question; an ungrounded re-ask
+("I still wonder …") never retires (grace); CURIOSITY echoes never reach the say flow. `open-questions`
+/ `settle-question` command-center surfaces + `memory.open_questions` snapshot expose the store.
+
+
 ## Market-edge capabilities & seams
 
 Every concrete capability sits behind a **domain Protocol** in `domain/retrieval` (or `domain/tools`)

@@ -1,6 +1,6 @@
 # How Jarvis Works Today
 
-**Source of truth for the running system** (currently Increment 172). Read this before
+**Source of truth for the running system** (currently Increment 174). Read this before
 touching memory/cognition/recall code; read `ARCHITECTURE.md` for the detailed layer map and
 `STATUS.md` only for history. Marked `[EXPERIMENTAL]` are implemented, tested, but not the
 runtime default.
@@ -81,6 +81,15 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
   ≥threshold companion trait, never a belief reaffirmed in the last 30 days (anti-nagging).
 - **Decay weighting is wired** (Inc 173): the server root instantiates `DecayingWeightingPolicy`, so
   recall ranks old, rarely-touched topics lower (`relatedness * recency(t)`).
+- **Open-question loop completion** (Inc 174, roadmap F3): an open question is an *attention* candidate,
+  never a standing item on a shelf. When a conversational turn *re-triggers* an open question (same
+  honest relevance floor the writer uses, `relatedness >= 0.2`) **and** Jarvis grounds it
+  (confidence ≥ `grounded_confidence`, the answer belief bears at the firmer `relatedness >= 0.3`),
+  the turn's own wording retires the question (newest companion-language USER_STATEMENT, else the
+  belief's subject) via `resolve_open_question`. A companion confirmation also grounds+retires;
+  an ungrounded re-ask ("I still wonder …") **never** retires (grace). `open-questions` /
+  `settle-question` surfaces + `memory.open_questions` in the snapshot; the loop closes in the
+  conversation flow (`_retire_answered_questions` in the `say` handler).
 - **Temporal reasoning is read-only applicability**, not prediction: `belief_timeline` /
   `what_changed` / `belief_snapshot_at` / `detect_pattern` reconstruct history. Stored belief confidence
   is never silently decayed — only an explicit `apply` forgets (storage stays honest).

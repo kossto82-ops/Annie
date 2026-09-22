@@ -34,6 +34,7 @@ from jarvis.interface._forgetting import COMMANDS as _FORGETTING_COMMANDS
 from jarvis.interface._providers import COMMANDS as _PROVIDER_COMMANDS
 from jarvis.interface._recall import COMMANDS as _RECALL_COMMANDS
 from jarvis.interface._state import snapshot
+from jarvis.interface._unresolved import COMMANDS as _UNRESOLVED_COMMANDS
 from jarvis.interface._workflow import COMMANDS as _WORKFLOW_COMMANDS
 from jarvis.jarvis import Jarvis
 
@@ -79,6 +80,7 @@ COMMANDS: dict[str, Command] = {
     **_RECALL_COMMANDS,
     **_WORKFLOW_COMMANDS,
     **_FORGETTING_COMMANDS,
+    **_UNRESOLVED_COMMANDS,
 }
 
 

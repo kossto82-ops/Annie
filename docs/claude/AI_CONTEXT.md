@@ -109,6 +109,15 @@ survives restarts on all three store families (in-memory, JSON, SQLite).
 question-shaped, and carries no evidence leaves a transient `EvidenceRequest` in the unresolved store so
 curiosity can return to it; `is_question_shape` is the public alias (in `executive_controller.py`,
 reusing `_QUESTION_CUES` + trailing `?`). The write is epistemically inert — no evidence, no belief.
+**Open-question loop completion** (Increment 174): the same loop now *closes*. A conversational turn
+re-triggering an open question (turn bears on it at `_RE_TRIGGER_RELEVANCE = 0.2`, the recall floor) is
+settled only when Jarvis holds a grounded belief about it (confidence ≥ `grounded_confidence`, belief
+bears at `_RE_ANSWER_RELEVANCE = 0.3`, deliberately past recall noise) — `retirable_open_questions`
+picks the strongest answer in the companion's own wording, and the conversation flow
+(`_retire_answered_questions`) retires it via `resolve_open_question` (its first production caller).
+Confirmations ground and retire their question; ungrounded re-asks ("I still wonder …") never retire
+(grace); CURIOSITY echoes never reach the say flow. `open-questions`/`settle-question` command-center
+commands + server actions and `memory.open_questions` in the snapshot expose the surface.
 
 **Forgetting** (`DecayingWeightingPolicy` + `ForgettingCandidates`, wired at Increment 173): evidence
 contribution fades with a half-life clock. The composition root (`server.py`) wires the decaying policy,

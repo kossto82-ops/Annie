@@ -518,7 +518,8 @@ def _memory_block(jarvis: Jarvis, summary: object) -> Reply:
     conclusions; ``reasoning`` is the live session span size; ``provider`` folds
     the instrumentation surface so the panel can show real tool/call activity
     (zero when no live edge ever ran); ``forgetting`` is the memory-health
-    report (what may fade and what the honesty gates protect, F2).
+    report (what may fade and what the honesty gates protect, F2);
+    ``open_questions`` is the still-unsatisfied attention queue (F3).
     """
     try:
         beliefs = len(jarvis.beliefs.all_beliefs())
@@ -531,6 +532,9 @@ def _memory_block(jarvis: Jarvis, summary: object) -> Reply:
     forgetting: dict[str, object] = {"candidates": [], "protected": [], "reaffirmed": []}
     with contextlib.suppress(Exception):  # noqa: BLE001 - the store boundary
         forgetting = jarvis.memory_health()
+    open_questions: list[str] = []
+    with contextlib.suppress(Exception):  # noqa: BLE001 - the store boundary
+        open_questions = [item.question for item in jarvis.open_questions()]
     return {
         "episodes": getattr(summary, "episode_count", 0),
         "beliefs": beliefs,
@@ -543,6 +547,7 @@ def _memory_block(jarvis: Jarvis, summary: object) -> Reply:
         "goals": len(getattr(summary, "recurring_goals", ())),
         "episode_series": _episode_series(jarvis),
         "forgetting": forgetting,
+        "open_questions": open_questions,
     }
 
 

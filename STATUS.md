@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-22 (Increment 173 — scheduled honest forgetting, roadmap F2)
+Last updated: 2026-09-22 (Increment 174 — open-question loop completion, roadmap F3)
 
 ---
 
@@ -3173,6 +3173,55 @@ Full suite: **2244 passed, 3 skipped** (+22); ruff clean; **pyright strict 0** (
 `scripts/check_decision_refs.py` clean. Acceptance gates F2 —— `rg "identify_forgetting_candidates"`
 hits `src/` (`forgetting.py` wrapper), `rg "DecayingWeightingPolicy"` hits `src/` (`evidence_weighting.py`
 + `server.py` wiring): **both pass, not tests only**.
+
+---
+
+### Increment 174 — Open-question loop completion (roadmap F3, 2026-09-22)
+
+Closes the last loop of the Inc-170 thread: the evidence-request writer opens a question when Jarvis
+cannot settle it, curiosity proposes the oldest one — **and nothing retired an answered question**, so
+open items accumulated and the oldest was nagged forever. Now a conversational turn re-triggering an
+open question *with a grounded belief* auto-retires it; `resolve_open_question` finally has a
+production caller.
+
+- **Domain (read-only decision, zero writes)**: `Jarvis.retirable_open_questions(text)` returns every
+  open `(UnresolvedItem, answer)` pair the turn settles — a question is *re-triggered* when the turn
+  bears on it at the recall floor (`_RE_TRIGGER_RELEVANCE = 0.2`, the same value as the executive's
+  `_MIN_RECALL_RELEVANCE`), and *settled* only when Jarvis holds a grounded belief about it
+  (confidence ≥ `knobs().grounded_confidence`) that bears on the question at `_RE_ANSWER_RELEVANCE =
+  0.3` — deliberately past recall noise (0.2, e.g. "the weather is nice today", must never settle "why
+  do the swallows return?"). `_grounded_answer_for`/`_answer_wording` pick the strongest answer's
+  *companion-level wording**: newest supporting USER_STATEMENT that is not the internal working-
+  conclusion wrapper nor the generic confirm phrases, falling back to `subject_of`. The denial-of-
+  grounded-bearing cases are unit-tested; the method itself writes nothing (matching alone never
+  retires).
+- **Conversation flow (the F3 acceptance caller)**: `interface/_conversation._retire_answered_questions`
+  runs at the end of `_say_core` (every non-confirmation turn, so a *statement* that grounds the
+  answer retires) and in the yes/no confirm branch (a confirmation grounds the concluded trigger, so a
+  confirmed question echo retires too). CURIOSITY echoes raised by `feel_curious`/`pursue` are
+  episodes, not turns, and never reach `_say_core` (the pursue/echo path stays excluded); the writer's
+  exact-string dedup is untouched.
+- **Surfaces**: `interface/_unresolved.py` (registered in `command_center.py` → server actions
+  `POST /api/open-questions` and `POST /api/settle-question`) — `open-questions` lists the queue
+  read-only, `settle-question` needs `question` + `resolution` and refuses unknown/absent items
+  (previously zero handlers existed in `interface/`). `_state._memory_block` carries
+  `open_questions` in every snapshot.
+- **Tests** (`tests/test_open_question_retirement.py`, 15): statement-answer auto-retires across a
+  restart (resolution is the companion's own words); the grace rule — "I still wonder …" does
+  **not** retire; confirmation grounds the echo and retires (including the pursued-question path);
+  curiosity proposes the oldest, then the next-oldest after retirement; direct
+  `retirable_open_questions` unit cases (no open / ungrounded / unrelated-grounded / below-floor /
+  companion-wording pair); `open-questions`/`settle-question` command + snapshot surfaces. Inc-170
+  tests (`test_unresolved_continuity.py`, `test_episode_evidence_request_writer.py`) stay green.
+- **Docs**: `SYSTEM_TODAY.md` (auto-retire in the say flow + the two surfaces); `AI_CONTEXT.md`
+  (open-question block + status line); `ARCHITECTURE.md` (auto-retirement in the unresolved-lifecycle
+  section); `CLAUDE.md` → Increment 174, 2259. REST → 2259.
+
+Full suite: **2259 passed, 3 skipped** (+15); ruff clean; **pyright strict 0** (whole tree);
+`scripts/check_decision_refs.py` clean. Acceptance gates F3 —— `rg "resolve_open_question"` hits the
+conversation flow in `src/` (`interface/_conversation.py` via `retirable_open_questions`), and
+`feel_curious` proposes the oldest *still-unsatisfied* question (`curiosity.py:220-222`, verified in
+`TestCuriosityOldestStillUnsatisfied`): **both pass, not tests only**.
 
 ---
 
