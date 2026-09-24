@@ -237,17 +237,20 @@ class GoogleCalendarStore:
         description: str = "",
         location: str = "",
         all_day: bool = False,
+        event_id: str = "",
     ) -> CalendarEvent:
         body = self._event_to_google(
             CalendarEvent(
-                id="", title=title, start=start, end=end,
+                id=event_id, title=title, start=start, end=end,
                 description=description, location=location, all_day=all_day,
             )
         )
+        if event_id:
+            body["id"] = event_id
         data = self._request(
             "POST", f"/calendars/{self._calendar_id}/events", body=body
         )
-        event_id = str(data.get("id", ""))
+        event_id = str(data.get("id", event_id))
         return self.get_event(event_id)
 
     def update_event(

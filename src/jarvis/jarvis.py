@@ -154,6 +154,7 @@ from jarvis.domain.repositories.refutation_repository import RefutationRepositor
 from jarvis.domain.repositories.strategy_stats_repository import StrategyStatsRepository
 from jarvis.domain.repositories.unresolved_repository import UnresolvedRepository
 from jarvis.domain.retrieval.calendar_store import CalendarStore
+from jarvis.domain.retrieval.calendar_sync import CalendarSyncer, CalendarSyncResult
 from jarvis.domain.retrieval.document_editor import DocumentEditor
 from jarvis.domain.retrieval.document_store import DocumentStore
 from jarvis.domain.retrieval.external_source import ChannelStatus, ExternalSource
@@ -420,6 +421,7 @@ class Jarvis:
         openbot_agent: TaskAgent | None = None,
         notes_store: NotesStore | None = None,
         calendar_store: CalendarStore | None = None,
+        calendar_sync: CalendarSyncer | None = None,
         task_scheduler: TaskScheduler | None = None,
         speech_perception: SpeechPerceptionSource | None = None,
         capability_providers: CapabilityRegistry | None = None,
@@ -551,6 +553,11 @@ class Jarvis:
         # events stays in the core (D6), and mutating them is a reversible action
         # gated in the caller.
         self._calendar_store: CalendarStore | None = calendar_store
+        # Calendar sync (roadmap F6a): an optional one-way CalDAV/ICS pull that
+        # upserts an upstream feed into the local calendar store on request.
+        # None by default -> `calendar sync` replies honestly that none is
+        # configured, and Jarvis stays offline to the feed (D7/D8).
+        self._calendar_sync: CalendarSyncer | None = calendar_sync
         # Task scheduler (Odysseus #7): a local scheduler that lists/creates/updates/
         # deletes/enables/disables recurring tasks on request. None by default ->
         # offline. It only keeps and returns plain task content with provenance;
@@ -1733,6 +1740,35 @@ knowledge_graph=knowledge_graph_store,
     ) -> tuple[CalendarEvent, ...]:
         """Return calendar events overlapping ``[start, end]``, or raise when offline."""
         return self._cal_surface.calendar_events_in_range(start, end, limit=limit)
+
+    @property
+    def calendar_sync(self) -> CalendarSyncer | None:
+        """The one-way CalDAV/ICS pull, or ``None`` when offline (F6a).
+
+        Read-only so a surface can report whether ``calendar sync`` is reachable
+        without pretending a feed exists. Sync is a material, on-request action:
+        it upserts upstream events into the wired ``calendar_store`` and never
+        deletes local events.
+        """
+        return self._calendar_sync
+
+    def set_calendar_sync(self, syncer: CalendarSyncer | None) -> None:
+        """Wire (or clear) the CalDAV/ICS sync adapter at runtime.
+
+        ``None`` disables it: ``calendar sync`` stays offline and replies
+        honestly. Config-only (env-driven at the composition root), so no
+        capability gating changes.
+        """
+        self._calendar_sync = syncer
+
+    def sync_calendar(self, *, limit: int | None = None) -> CalendarSyncResult:
+        """Pull the upstream CalDAV/ICS feed into the local calendar store.
+
+        Raises a clear error when no sync source or store is wired. The returned
+        counts describe exactly what happened (added/updated/unchanged); local
+        events the feed no longer lists are never deleted (one-way pull).
+        """
+        return self._cal_surface.sync_calendar(limit=limit)
 
     # -- Task scheduler (Odysseus #7) -----------------------------------------
 

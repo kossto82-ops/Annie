@@ -27,6 +27,7 @@ from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.services.evidence_weighting import DecayingWeightingPolicy
 from jarvis.domain.services.model_compare import ModelComparator
 from jarvis.infrastructure.agent_reach_source import build_web_source, llm_search_from_model
+from jarvis.infrastructure.caldav_sync import build_caldav_sync
 from jarvis.infrastructure.calendar_store import build_calendar_store
 from jarvis.infrastructure.document_store import build_document_store
 from jarvis.infrastructure.env_settings import (
@@ -270,6 +271,11 @@ learned_state_store=repositories.learned_state,
         local_calendar = build_calendar_store()
         if local_calendar is not None:
             jarvis.set_calendar_store(local_calendar)
+    # A CalDAV/ICS feed, when configured, becomes the one-way pull behind `calendar sync`
+    # (roadmap F6a): it only upserts upstream events into the store above on request.
+    caldav_sync = build_caldav_sync()
+    if caldav_sync is not None:
+        jarvis.set_calendar_sync(caldav_sync)
     # And the local task scheduler backs `manage tasks` when its root is configured
     # (Odysseus #7). Google Tasks is intentionally not mapped (contract mismatch).
     local_tasks = build_task_scheduler()

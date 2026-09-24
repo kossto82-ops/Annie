@@ -78,7 +78,7 @@ class TestSnapshotNeverReadsRemoteCalendars:
     def test_snapshot_with_remote_calendar_wired_is_honest_and_offline(self) -> None:
         jarvis = _calendar_capable_jarvis(_google_store(_hostile_transport))
         state = snapshot(jarvis)
-        assert state["calendar"] == {"source": "google", "connected": True}
+        assert state["calendar"] == {"source": "google", "connected": True, "sync": False}
         assert state["calendar_events"] == []
 
     def test_handle_with_remote_calendar_wired_returns_promptly(self) -> None:
@@ -87,7 +87,7 @@ class TestSnapshotNeverReadsRemoteCalendars:
         jarvis = _calendar_capable_jarvis(_google_store(_hostile_transport))
         result = handle(jarvis, "state", {})
         state = cast(dict[str, object], result["state"])
-        assert state["calendar"] == {"source": "google", "connected": True}
+        assert state["calendar"] == {"source": "google", "connected": True, "sync": False}
         assert state["calendar_events"] == []
 
     def test_calendar_list_still_reads_on_demand(self) -> None:

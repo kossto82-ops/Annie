@@ -1772,6 +1772,12 @@
         <div class="muted" id="calGoogleOut"></div>
       </div>
       <div class="card2 tune">
+        <h3>CalDAV / ICS — sincronizar</h3>
+        <div class="muted">Trae el feed remoto (<b>JARVIS_CALDAV_URL</b>) al calendario local; nunca borra eventos locales.</div>
+        <button type="button" id="calDavSyncPull" class="switch">Traer eventos (sync)</button>
+        <div class="muted" id="calDavSyncOut"></div>
+      </div>
+      <div class="card2 tune">
         <h3>Crear / consultar eventos</h3>
         <button type="button" id="calList" class="switch">List events</button>
         <input type="hidden" id="calEditId" value="">
@@ -4418,6 +4424,7 @@ $("calDay").addEventListener("change", loadCalDay);
 $("calGoogleConnect").addEventListener("click", googleConnect);
 $("calGoogleComplete").addEventListener("click", googleComplete);
 $("calGoogleDisconnect").addEventListener("click", googleDisconnect);
+$("calDavSyncPull").addEventListener("click", () => runToolPanel("calendar", { action: "sync" }, "calDavSyncOut"));
 $("noteList").addEventListener("click", loadNotes);
 $("noteSearchBtn").addEventListener("click", searchNotes);
 $("noteQuery").addEventListener("keydown", (e) => {

@@ -97,8 +97,9 @@ class SqliteCalendarStore:
         description: str = "",
         location: str = "",
         all_day: bool = False,
+        event_id: str = "",
     ) -> CalendarEvent:
-        event_id = self._id_factory()
+        event_id = event_id or self._id_factory()
         now = _now()
         event = CalendarEvent(
             id=event_id,

@@ -23,6 +23,7 @@ from jarvis.domain.value_objects.task_result import TaskResult
 
 if TYPE_CHECKING:
     from jarvis.domain.retrieval.calendar_store import CalendarStore
+    from jarvis.domain.retrieval.calendar_sync import CalendarSyncResult
     from jarvis.domain.retrieval.document_editor import DocumentEditor
     from jarvis.domain.retrieval.document_store import DocumentStore
     from jarvis.domain.retrieval.notes_store import NotesStore
@@ -235,6 +236,18 @@ class CalendarSurface:
         self, start: datetime, end: datetime, *, limit: int = 100
     ) -> tuple[CalendarEvent, ...]:
         return self._store().events_in_range(start, end, limit=limit)
+
+    def sync_calendar(self, *, limit: int | None = None) -> CalendarSyncResult:
+        """Pull the CalDAV/ICS feed into the calendar store (roadmap F6a).
+
+        One-way on request: never pushes back, never deletes local events. The
+        returned ``CalendarSyncResult`` counts what the pull actually changed,
+        so the surface narrates it truthfully.
+        """
+        syncer = self._jarvis.calendar_sync
+        if syncer is None:
+            raise RuntimeError("no calendar sync configured; set_calendar_sync")
+        return syncer.sync_into(self._store(), limit=limit)
 
 
 class TaskSchedulerSurface:

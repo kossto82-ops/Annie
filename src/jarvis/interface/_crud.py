@@ -208,13 +208,14 @@ def _google_calendar(jarvis: Jarvis, payload: Reply) -> Reply:
 def _calendar(jarvis: Jarvis, payload: Reply) -> Reply:
     """Manage calendar events through the calendar capability (Odysseus #6).
 
-    Actions: ``list``, ``get``, ``create``, ``update``, ``delete``, ``range``.
+    Actions: ``list``, ``get``, ``create``, ``update``, ``delete``, ``range``,
+    ``sync`` (roadmap F6a: one-way CalDAV/ICS pull into the local store).
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
         return {
             "reply": "Use calendar with action 'list', 'get', 'create', "
-            "'update', 'delete', or 'range'.",
+            "'update', 'delete', 'range', or 'sync'.",
             "speak": False,
         }
     if jarvis.calendar_store is None:
@@ -319,6 +320,23 @@ def _calendar(jarvis: Jarvis, payload: Reply) -> Reply:
                 "reply": "Events in range:\n\n" + "\n\n".join(lines),
                 "speak": False,
                 "count": len(events),
+            }
+        if action == "sync":
+            if jarvis.calendar_sync is None:
+                return {
+                    "reply": "No calendar sync (CalDAV/ICS) is configured right now. "
+                    "Set JARVIS_CALDAV_URL to pull an upstream feed into the local agenda.",
+                    "speak": False,
+                }
+            result = jarvis.sync_calendar()
+            bits = [f"{result.added} added", f"{result.updated} updated",
+                    f"{result.unchanged} unchanged"]
+            if result.skipped:
+                bits.append(f"{result.skipped} skipped")
+            return {
+                "reply": "Calendar synced: " + ", ".join(bits) + ".",
+                "speak": False,
+                "count": result.total,
             }
     except Exception as error:  # noqa: BLE001 - the store boundary
         return {"reply": f"I couldn't do that ({type(error).__name__}).", "speak": False}

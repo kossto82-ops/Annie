@@ -467,14 +467,20 @@ def _calendar_block(jarvis: Jarvis) -> Reply:
 
     ``source`` derives from the wired store's kind (a Google store vs any
     other store vs no store); ``connected`` is whether events can be read
-    right now. The surface uses it for the connect/disconnect affordance.
+    right now; ``sync`` reports whether a CalDAV/ICS pull is reachable
+    (roadmap F6a) -- the UI never pretends sync exists. The surface uses
+    it for the connect/disconnect affordance.
     """
     store = jarvis.calendar_store
     if store is None:
-        return {"source": "none", "connected": False}
+        return {"source": "none", "connected": False, "sync": False}
     if isinstance(store, google_calendar.GoogleCalendarStore):
-        return {"source": "google", "connected": True}
-    return {"source": "local", "connected": True}
+        return {"source": "google", "connected": True, "sync": False}
+    return {
+        "source": "local",
+        "connected": True,
+        "sync": jarvis.calendar_sync is not None,
+    }
 
 
 def _notes_block(jarvis: Jarvis, limit: int = 5) -> Reply:

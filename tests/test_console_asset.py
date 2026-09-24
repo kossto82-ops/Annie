@@ -610,7 +610,17 @@ def test_f6_console_wires_task_runs_and_calendar_depth() -> None:
 
 def test_f6_snapshot_carries_calendar_source_and_task_runs() -> None:
     cal = _snapshot_block("calendar")
-    assert cal == {"source": "none", "connected": False}
+    assert cal == {"source": "none", "connected": False, "sync": False}
+
+
+def test_f6a_console_wires_the_caldav_sync_pull() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "calDavSyncPull",
+        'action: "sync"',
+        "JARVIS_CALDAV_URL",
+    ):
+        assert marker in html, f"F6a CalDAV sync lost its {marker!r}"
 
 
 def test_f7_console_wires_the_setup_guide() -> None:

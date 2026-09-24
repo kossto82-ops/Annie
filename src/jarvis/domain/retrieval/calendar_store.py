@@ -52,8 +52,15 @@ class CalendarStore(Protocol):
         description: str = "",
         location: str = "",
         all_day: bool = False,
+        event_id: str = "",
     ) -> CalendarEvent:
-        """Create and return an event; a reversible material action on request."""
+        """Create and return an event; a reversible material action on request.
+
+        ``event_id`` is optional and store-generated when omitted. When given, a
+        store that can honour a caller-chosen identity (e.g. one-way CalDAV/ICS
+        sync binding the remote ``UID``, roadmap F6a) must use it verbatim; a
+        store that cannot must raise, never silently re-key.
+        """
         ...
 
     def update_event(

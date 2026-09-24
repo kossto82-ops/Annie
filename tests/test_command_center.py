@@ -1530,9 +1530,17 @@ class TestTasksCommand:
         assert entries[0]["last_output"] == "ok"
 
     def test_snapshot_calendar_block_names_its_source(self) -> None:
-        assert snapshot(Jarvis())["calendar"] == {"source": "none", "connected": False}
+        assert snapshot(Jarvis())["calendar"] == {
+            "source": "none",
+            "connected": False,
+            "sync": False,
+        }
         jarvis = Jarvis(calendar_store=_FakeCalendarStore())  # type: ignore[arg-type]
-        assert snapshot(jarvis)["calendar"] == {"source": "local", "connected": True}
+        assert snapshot(jarvis)["calendar"] == {
+            "source": "local",
+            "connected": True,
+            "sync": False,
+        }
 
     def test_missing_action_is_guided(self) -> None:
         result = handle(_tasks_able_jarvis(), "tasks", {})
