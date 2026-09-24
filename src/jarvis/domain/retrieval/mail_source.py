@@ -26,11 +26,22 @@ from jarvis.domain.value_objects.email_message import EmailMessage
 class MailBox(Protocol):
     """Gives Jarvis read and outbound access to a mailbox on request."""
 
-    def list_messages(self, *, folder: str = "inbox", limit: int = 10) -> tuple[EmailMessage, ...]:
+    def list_messages(
+        self, *, folder: str = "inbox", limit: int = 10, unread: bool = False
+    ) -> tuple[EmailMessage, ...]:
         """Return the latest ``limit`` messages in ``folder``, as retrieval artifacts.
 
-        An empty tuple is an honest "no messages here", not an error. Each message
+        ``unread`` narrows to messages the server has not yet marked seen. An
+        empty tuple is an honest "no messages here", not an error. Each message
         carries provenance; Jarvis weighs them as candidate evidence (D6).
+        """
+        ...
+
+    def list_folders(self) -> tuple[str, ...]:
+        """Enumerate the mailbox's folders, for a folder-switch UI.
+
+        The names are exactly as the server reports them (``INBOX``, ``Archive``,
+        ...). An empty tuple is an honest "no folders known", never an error.
         """
         ...
 

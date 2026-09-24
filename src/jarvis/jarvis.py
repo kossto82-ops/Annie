@@ -1309,14 +1309,25 @@ knowledge_graph=knowledge_graph_store,
         if self._external_providers_auto:
             self._refresh_providers()
 
-    def list_emails(self, *, folder: str = "inbox", limit: int = 10) -> tuple[EmailMessage, ...]:
+    def list_emails(
+        self, *, folder: str = "inbox", limit: int = 10, unread: bool = False
+    ) -> tuple[EmailMessage, ...]:
         """List the latest messages in ``folder`` through the email capability.
 
-        Raises a clear error when no mailbox is wired. Each message carries
-        provenance and becomes candidate evidence for the core (D6) -- reading an
-        inbox is not adopting its claims as facts.
+        ``unread`` narrows to messages the server has not yet seen. Raises a
+        clear error when no mailbox is wired. Each message carries provenance and
+        becomes candidate evidence for the core (D6) -- reading an inbox is not
+        adopting its claims as facts.
         """
-        return self._edges_surface.list_emails(folder=folder, limit=limit)
+        return self._edges_surface.list_emails(folder=folder, limit=limit, unread=unread)
+
+    def list_mail_folders(self) -> tuple[str, ...]:
+        """Enumerate the mailbox's folders, for the folder-switch UI.
+
+        The names come from the server itself, so the user-facing mailbox panel
+        offers exactly what the account exposes (``INBOX``, ``Archive``, ...).
+        """
+        return self._edges_surface.list_mail_folders()
 
     def read_email(self, message_id: str, *, folder: str = "inbox") -> EmailMessage:
         """Read one message through the email capability, or raise when offline."""

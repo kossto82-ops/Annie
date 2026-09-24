@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import contextlib
 import imaplib
+import re
 import smtplib
 import ssl
 from collections.abc import Callable
@@ -40,6 +41,22 @@ _DEFAULT_IMAP_PORT = 993
 _DEFAULT_SMTP_PORT = 465
 
 _ACTUAL_MESSAGE = "_actual"
+
+_FOLDER_LINE_RE = re.compile(r'"((?:[^"\\]|\\.)*)"\s*$')
+
+
+def _parse_folder_line(line: bytes) -> str | None:
+    """Extract the folder name from one raw IMAP ``LIST`` response line.
+
+    Handles the common ``(\\Flags) "/" "Name"`` shape, including a quoted
+    delimiter and escaped quotes/backslashes inside the name. ``None`` means the
+    line carried no parseable folder name.
+    """
+    text = line.decode("utf-8", "replace")
+    match = _FOLDER_LINE_RE.search(text)
+    if match is None:
+        return None
+    return match.group(1).replace('\\"', '"').replace("\\\\", "\\")
 
 
 def _make_imap_connect(
@@ -114,12 +131,15 @@ class IMAPSMTPMailBox:
 
     # -- MailBox --------------------------------------------------------------
 
-    def list_messages(self, *, folder: str = "inbox", limit: int = 10) -> tuple[EmailMessage, ...]:
+    def list_messages(
+        self, *, folder: str = "inbox", limit: int = 10, unread: bool = False
+    ) -> tuple[EmailMessage, ...]:
         """Return the header-level view of the latest ``limit`` messages in ``folder``."""
         connection = self._imap_connect()
         try:
             self._select(connection, folder)
-            typ, data = connection.search(None, "ALL")
+            criterion = "UNSEEN" if unread else "ALL"
+            typ, data = connection.search(None, criterion)
             if typ != "OK" or not data or not data[0]:
                 return ()
             sequence = data[0].split()
@@ -130,6 +150,25 @@ class IMAPSMTPMailBox:
                 if message is not None:
                     messages.append(message)
             return tuple(messages)
+        finally:
+            with contextlib.suppress(Exception):
+                connection.logout()
+
+    def list_folders(self) -> tuple[str, ...]:
+        """Enumerate the mailbox folders as the server reports them."""
+        connection = self._imap_connect()
+        try:
+            typ, data = connection.list()
+            if typ != "OK" or not data:
+                return ()
+            folders: list[str] = []
+            for line in data:
+                if not isinstance(line, bytes):
+                    continue
+                name = _parse_folder_line(line)
+                if name is not None:
+                    folders.append(name)
+            return tuple(folders)
         finally:
             with contextlib.suppress(Exception):
                 connection.logout()

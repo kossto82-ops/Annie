@@ -696,6 +696,18 @@ def test_f8_snapshot_carries_notes_and_mail_blocks() -> None:
     assert _snapshot_block("mail") == {"configured": False}
 
 
+def test_f6b_console_wires_the_mailbox_folder_switch() -> None:
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        'id="mailFolderSelect"',
+        'id="mailUnread"',
+        "loadMailFolders(",
+        'action: "folders"',
+        "folder, limit: 10, unread",
+    ):
+        assert marker in html, f"mailbox folder-switch UI lost its {marker!r}"
+
+
 def test_f9_console_wires_config_edges() -> None:
     html = _CONSOLE.read_text(encoding="utf-8")
     for marker in (

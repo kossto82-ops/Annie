@@ -38,6 +38,7 @@ class _FakeIMAP:
     def __init__(self) -> None:
         self.logged_out = False
         self.limit = 10
+        self.search_criteria: str | None = None
 
     def login(self, email: str, password: str) -> None:
         pass
@@ -47,7 +48,18 @@ class _FakeIMAP:
         return ("OK", [folder])
 
     def search(self, charset: str | None, criteria: str) -> tuple[str, list[bytes]]:
+        self.search_criteria = criteria
         return ("OK", [b"1 2 3"])
+
+    def list(self) -> tuple[str, list[bytes]]:
+        return (
+            "OK",
+            [
+                br'(\HasNoChildren) "/" "inbox"',
+                br'(\HasNoChildren) "/" "Archive/2026"',
+                br'(\Noselect) "/" "Deleted"',
+            ],
+        )
 
     def fetch(
         self, number: str | bytes, parts: str
@@ -105,6 +117,19 @@ class TestListRead:
         assert len(messages) == 2
         assert {m.subject for m in messages} == {"Hello"}
         assert all(m.folder == "inbox" for m in messages)
+        assert imap.search_criteria == "ALL"
+        assert imap.logged_out
+
+    def test_unread_filters_to_unseen_search(self) -> None:
+        mailbox, imap, _ = _build()
+        messages = mailbox.list_messages(unread=True, limit=1)
+        assert imap.search_criteria == "UNSEEN"
+        assert len(messages) == 1
+
+    def test_list_folders_enumerates_folder_name_switch(self) -> None:
+        mailbox, imap, _ = _build()
+        folders = mailbox.list_folders()
+        assert folders == ("inbox", "Archive/2026", "Deleted")
         assert imap.logged_out
 
     def test_read_message_returns_body_and_content_type_parse(self) -> None:

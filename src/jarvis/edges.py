@@ -109,9 +109,12 @@ class EdgesSurface:
     # -- Email ----------------------------------------------------------------
 
     def list_emails(
-        self, *, folder: str = "inbox", limit: int = 10
+        self, *, folder: str = "inbox", limit: int = 10, unread: bool = False
     ) -> tuple[EmailMessage, ...]:
-        return self._mails().list_messages(folder=folder, limit=limit)
+        return self._mails().list_messages(folder=folder, limit=limit, unread=unread)
+
+    def list_mail_folders(self) -> tuple[str, ...]:
+        return self._mails().list_folders()
 
     def read_email(self, message_id: str, *, folder: str = "inbox") -> EmailMessage:
         return self._mails().read_message(message_id, folder=folder)

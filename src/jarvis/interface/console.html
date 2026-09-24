@@ -1681,7 +1681,11 @@
         <h3>Correo — buzón y envíos</h3>
         <div class="hint">Leer es recuperar contexto; enviar es un acto externo y pide confirmación explícita.</div>
         <div class="docsearch">
-          <label>carpeta <input type="text" id="mailFolder" value="inbox" autocomplete="off"></label>
+          <label>carpeta
+            <select id="mailFolderSelect"><option value="inbox">inbox</option></select>
+            <input type="text" id="mailFolder" value="inbox" autocomplete="off" size="10">
+          </label>
+          <label class="inline"><input type="checkbox" id="mailUnread"> solo sin leer</label>
           <button type="button" class="switch" id="mailRefresh">Leer</button>
         </div>
         <div id="mailbody"><div class="muted">cargando…</div></div>
@@ -3078,10 +3082,12 @@ async function searchNotes() {
 async function loadMails() {
   const box = $("mailbody");
   if (box && activePanel === "mail") box.innerHTML = "<div class=\"muted\">leyendo el buzón…</div>";
+  loadMailFolders();
   const folder = ($("mailFolder").value || "inbox").trim() || "inbox";
+  const unread = !!($("mailUnread") && $("mailUnread").checked);
   let data;
   try {
-    data = await api("mail", { action: "list", folder, limit: 10 });
+    data = await api("mail", { action: "list", folder, limit: 10, unread });
   } catch (e) {
     if (box) box.innerHTML = "<div class=\"muted\">No pude leer: " + e + "</div>";
     return;
@@ -3103,6 +3109,22 @@ async function loadMails() {
   }
   bubble("jarvis", data.reply);
   renderState(data.state);
+}
+async function loadMailFolders() {
+  const select = $("mailFolderSelect");
+  const input = $("mailFolder");
+  if (!select || !input) return;
+  let data;
+  try { data = await api("mail", { action: "folders" }); }
+  catch (e) { return; }
+  if (data.error || !Array.isArray(data.folders) || !data.folders.length) return;
+  const folders = data.folders.map(String);
+  const current = (input.value || "inbox").trim();
+  select.innerHTML = folders
+    .map(f => "<option value=\"" + f.replace(/&/g, "&amp;").replace(/"/g, "&quot;") + "\">" + f + "</option>")
+    .join("");
+  if (folders.indexOf(current) >= 0) select.value = current;
+  select.onchange = function () { input.value = select.value; loadMails(); };
 }
 async function sendMail(approved) {
   const out = $("mailOut");

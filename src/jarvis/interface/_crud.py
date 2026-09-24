@@ -662,8 +662,9 @@ def _format_email(message: object) -> str:
 def _mail(jarvis: Jarvis, payload: Reply) -> Reply:
     """Read and send email through the mailbox capability (Odysseus email).
 
-    Actions: ``list`` (``folder``, ``limit``), ``read`` (``message_id``,
-    ``folder``), ``send`` (``to``, ``subject``, ``body``). Reading is
+    Actions: ``folders``, ``list`` (``folder``, ``limit``, ``unread``), ``read``
+    (``message_id``, ``folder``), ``send`` (``to``, ``subject``, ``body``).
+    ``folders`` enumerates the mailbox for the folder-switch UI. Reading is
     retrieval -- candidate context, never adopted fact. Sending is an external
     material act: it needs the earned capability *and* an explicit
     ``approved: true`` per send, so nothing ever leaves the outbox by
@@ -672,7 +673,7 @@ def _mail(jarvis: Jarvis, payload: Reply) -> Reply:
     action = str(payload.get("action", "")).strip().lower()
     if not action:
         return {
-            "reply": "Use mail with action 'list', 'read', or 'send'.",
+            "reply": "Use mail with action 'folders', 'list', 'read', or 'send'.",
             "speak": False,
         }
     if jarvis.mail_source is None:
@@ -683,6 +684,15 @@ def _mail(jarvis: Jarvis, payload: Reply) -> Reply:
     if not jarvis.can_do("send and read email"):
         return capability_not_ready(jarvis, "send and read email")
     try:
+        if action == "folders":
+            folders = jarvis.list_mail_folders()
+            if not folders:
+                return {"reply": "The mailbox reports no folders.", "speak": False}
+            return {
+                "reply": "Mailbox folders:\n\n" + "\n".join(f"- {f}" for f in folders),
+                "speak": False,
+                "folders": list(folders),
+            }
         if action == "list":
             folder = str(payload.get("folder", "inbox")).strip() or "inbox"
             limit_raw = payload.get("limit", 10)
@@ -690,7 +700,10 @@ def _mail(jarvis: Jarvis, payload: Reply) -> Reply:
                 limit = int(limit_raw)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 limit = 10
-            messages = jarvis.list_emails(folder=folder, limit=limit)
+            unread = payload.get("unread", False)
+            if not isinstance(unread, bool):
+                unread = str(unread).strip().lower() in ("true", "1", "yes")
+            messages = jarvis.list_emails(folder=folder, limit=limit, unread=unread)
             if not messages:
                 return {"reply": f"No messages in {folder}.", "speak": False}
             lines = [_format_email(m) for m in messages]

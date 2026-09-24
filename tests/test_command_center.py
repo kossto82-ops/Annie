@@ -2147,13 +2147,22 @@ class _FakeMailBox:
             )
         }
         self.sent: list[EmailMessage] = []
+        self.unread_ids: set[str] = set()
+        self.last_unread: bool | None = None
 
     def list_messages(
-        self, *, folder: str = "inbox", limit: int = 10
+        self, *, folder: str = "inbox", limit: int = 10, unread: bool = False
     ) -> tuple[EmailMessage, ...]:
+        self.last_unread = unread
         if folder != "inbox":
             return ()
-        return tuple(list(self.inbox.values())[:limit])
+        messages = list(self.inbox.values())
+        if unread:
+            messages = [m for m in messages if m.message_id in self.unread_ids]
+        return tuple(messages[:limit])
+
+    def list_folders(self) -> tuple[str, ...]:
+        return ("inbox", "Archive")
 
     def read_message(self, message_id: str, *, folder: str = "inbox") -> EmailMessage:
         return self.inbox[message_id]
@@ -2241,6 +2250,23 @@ class TestMailCommand:
         assert "hello" in str(listed["reply"])
         read = handle(jarvis, "mail", {"action": "read", "message_id": "m1"})
         assert "hi there" in str(read["reply"])
+
+    def test_list_honors_the_unread_filter(self) -> None:
+        jarvis = _mail_able_jarvis()
+        jarvis.mail_source.unread_ids.add("m1")  # type: ignore[union-attr]
+        listed = handle(jarvis, "mail", {"action": "list", "unread": "true"})
+        assert listed["count"] == 1
+        assert "hello" in str(listed["reply"])
+        assert jarvis.mail_source.last_unread is True  # type: ignore[union-attr]
+        all_sorted = handle(jarvis, "mail", {"action": "list"})
+        assert all_sorted["count"] == 1
+        assert jarvis.mail_source.last_unread is False  # type: ignore[union-attr]
+
+    def test_folders_enumerates_the_mailbox_for_the_switch_ui(self) -> None:
+        jarvis = _mail_able_jarvis()
+        folders = handle(jarvis, "mail", {"action": "folders"})
+        assert folders["folders"] == ["inbox", "Archive"]
+        assert "inbox" in str(folders["reply"])
 
     def test_send_needs_explicit_approval(self) -> None:
         jarvis = _mail_able_jarvis()

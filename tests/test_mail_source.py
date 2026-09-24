@@ -25,18 +25,28 @@ class _FakeMailBox:
 
     def __init__(self) -> None:
         self.sent: list[EmailMessage] = []
+        self.last_unread: bool | None = None
 
-    def list_messages(self, *, folder: str = "inbox", limit: int = 10) -> tuple[EmailMessage, ...]:
-        return (
-            EmailMessage(
-                subject="Hello",
-                body="Read carefully.",
-                sender="alice@example.com",
-                recipients=("jarvis@example.com",),
-                message_id="msg-1",
-                folder=folder,
-            ),
-        )
+    def list_messages(
+        self, *, folder: str = "inbox", limit: int = 10, unread: bool = False
+    ) -> tuple[EmailMessage, ...]:
+        self.last_unread = unread
+        messages: list[EmailMessage] = []
+        if not unread:
+            messages.append(
+                EmailMessage(
+                    subject="Hello",
+                    body="Read carefully.",
+                    sender="alice@example.com",
+                    recipients=("jarvis@example.com",),
+                    message_id="msg-1",
+                    folder=folder,
+                )
+            )
+        return tuple(messages[:limit])
+
+    def list_folders(self) -> tuple[str, ...]:
+        return ("inbox", "Archive")
 
     def read_message(self, message_id: str, *, folder: str = "inbox") -> EmailMessage:
         if message_id != "msg-1":
@@ -117,6 +127,17 @@ class TestJarvisEmail:
         assert len(msgs) == 1
         assert msgs[0].subject == "Hello"
 
+    def test_list_emails_forwards_the_unread_filter(self) -> None:
+        mailbox = _FakeMailBox()
+        jarvis = Jarvis(mail_source=mailbox)  # type: ignore[arg-type]
+        msgs = jarvis.list_emails(unread=True)
+        assert mailbox.last_unread is True
+        assert msgs == ()
+
+    def test_list_mail_folders_delegates_for_the_switch_ui(self) -> None:
+        jarvis = Jarvis(mail_source=_FakeMailBox())  # type: ignore[arg-type]
+        assert jarvis.list_mail_folders() == ("inbox", "Archive")
+
     def test_read_email_delegates_to_the_mailbox(self) -> None:
         jarvis = Jarvis(mail_source=_FakeMailBox())  # type: ignore[arg-type]
         msg = jarvis.read_email("msg-1")
@@ -142,6 +163,7 @@ class TestJarvisEmail:
         jarvis = Jarvis()
         for call in (
             lambda: jarvis.list_emails(),
+            lambda: jarvis.list_mail_folders(),
             lambda: jarvis.read_email("msg-1"),
             lambda: jarvis.send_email(to=("a@b.c",), subject="s", body="b"),
         ):

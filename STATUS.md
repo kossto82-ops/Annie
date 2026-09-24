@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-24 (Increment 176 — live voice streaming + VAD, roadmap F5)
+Last updated: 2026-09-24 (Increment 178 — per-account mailbox UI: folders + unread, roadmap F6b)
 
 ---
 
@@ -3324,5 +3324,75 @@ Full suite: **2290 passed, 3 skipped** (+18); ruff clean; **pyright strict 0** (
 `streaming: true/false` honestly (snapshot tests on echo/Whisper-shaped ears), and the console's
 AnalyserNode segmenter auto-closes a segment on sustained silence (F5 tripwire + browser-verifiable
 hold flow): **all pass, not tests only**.
+
+### Increment 177 — CalDAV/ICS one-way calendar sync (roadmap F6a, 2026-09-24)
+
+First edge-deepening item of roadmap F6. Closes the calendar honest gap (this log, item 2577ff): events
+had SQLite and Google-API stores but **no way to pull an external calendar in**. The sync lands behind the
+calendar Protocol (D7) as a one-way import; it never deletes local events and never modifies the remote.
+
+- **Seam contract (D7, D8)**: `CalendarSyncer` domain Protocol + `CalendarSyncResult`
+  (`added`/`updated`/`unchanged`/`skipped`/`total`) in `src/jarvis/domain/retrieval/calendar_sync.py`;
+  `sync_into(store, *, limit=None)` upserts into any `CalendarStore`. Never deletes entries the store
+  already has: unknown server events are added, known UIDs updated, local-only events untouched
+  (`skipped`).
+- **Infra adapter**: `src/jarvis/infrastructure/caldav_sync.py` — a deterministic ICS reader
+  (`parse_ics`/`IcsEvent`: folded lines, `DURATION`, all-day `VALUE=DATE`, trailing-`Z` aware UTC vs
+  floating naive) plus `CalDavSync`, a transport that GETs a `.ics` URL with optional basic auth, upsex
+  one-way by UID. `build_caldav_sync(environ)` is the opt-in factory — `JARVIS_CALDAV_URL` required +
+  `JARVIS_CALDAV_USERNAME`/`JARVIS_CALDAV_PASSWORD` optional (same namespaced secret convention as every
+  other envelope). Transport injectable for offline tests.
+- **Store contract growth**: `CalendarStore.create_event` gained optional `event_id: str = ""` — Local,
+  SQLite and Google implementers honor a caller-supplied id verbatim (binds the remote UID so a second
+  sync updates instead of duplicating).
+- **Facade + surface**: `Jarvis(sync=calendar_sync)`, `set_calendar_sync`, `calendar_sync`, and
+  `sync_calendar`; `CalendarSurface.sync_calendar`; the `calendar` command learned action `sync`
+  (`interface/_crud.py`); `interface/server.py` wires `build_caldav_sync()`.
+- **Snapshot + console**: the `calendar` snapshot block gained an honest `sync` flag (True only when an
+  adapter is wired); a "CalDAV / ICS" card with a pull button posts a `calendar {action:"sync"}` tool
+  call (`console.html`). Unwired Jarvis answers honestly — "No calendar sync configured… JARVIS_CALDAV_URL".
+- **Tests** (+23): `tests/test_caldav_sync.py` — ICS parsing (folded/duration/all-day/floating),
+  one-way upsert over a fake store (added/updated/unchanged/skipped semantics), the honest unwired
+  command reply, and snapshot `sync` honesty; `tests/test_console_asset.py` adds the F6a tripwire
+  (CalDAV pull card + `runToolPanel("calendar", {action:"sync"})`); the offline snapshot guard and
+  `test_google_calendar` were updated for the new flag/id. Commit `03a523e`.
+- **Docs**: this entry; full close-out (honest-gap deletion + the other docs) lands at the end of F6.
+
+Full suite: **2313 passed, 3 skipped** (+23); ruff clean; **pyright strict 0**; decision-ref check clean.
+Acceptance F6a — `rg "CalendarSyncer"` hits `src/` (seam + factory), `calendar sync` is reachable via the
+command center (`sync_calendar` delegator + `_state` flag), and an unwired Jarvis answers "No calendar
+sync… JARVIS_CALDAV_URL" honestly, not a blank: **all pass, not tests only**.
+
+### Increment 178 — Per-account mailbox UI: folders + unread (roadmap F6b, 2026-09-24)
+
+Second edge-deepening item of roadmap F6. Closes the mail honest gap (this log, item 2593ff): email had a
+real IMAP/SMTP adapter but its console panel only offered a free-text folder box — no folder switch, no
+unread view. The mailbox UI deepens by growing the seam, not by bypassing it.
+
+- **Seam contract growth (D7, D8)**: `MailBox.list_messages` gained keyword `unread: bool = False` (an
+  IMAP `UNSEEN` search) and a new `list_folders() -> tuple[str, ...]` enumerating the account's folders as
+  the server reports them — the folder-switch basis for a per-account panel.
+- **Infra adapter**: `IMAPSMTPMailBox` implements both — criterion rolls to `UNSEEN`; folder enumeration
+  parses raw `LIST` lines incl. escaped quotes/backslashes (`_parse_folder_line`), honest empty when the
+  server reports none. Transport stays injectable; nothing new touches the wire in tests.
+- **Facade + edges**: `EdgesSurface.list_mail_folders()`; `Jarvis.list_mail_folders()` and
+  `list_emails(..., unread=...)` delegators.
+- **Command**: `mail` learned action `folders` (returns the list + a structured `folders` payload for the
+  UI) and `list` honors `unread`; the bare-command hint names all four actions.
+- **Console**: the mail panel replaced the bare folder input with a **folder `<select>`** populated from
+  `mail {action:"folders"}` (the free-text input stays as the custom-folder fallback), an **"solo sin
+  leer"** checkbox wired into the list call, and `loadMailFolders()` refreshes the switch on panel open;
+  wiring the mailbox keeps the honest "No mail capability" path.
+- **Tests** (+7): IMAP adapter — `UNSEEN` search routing + folder-name parsing over the fake connection;
+  `tests/test_mail_source.py` — `unread` forward + `list_mail_folders` delegator + offline raise;
+  `tests/test_command_center.py` — mailbox routing for `folders` and the `unread` list filter;
+  `tests/test_console_asset.py` — F6b tripwire (folder select, unread checkbox, `action: "folders"`).
+- **Docs**: this entry; full close-out (honest-gap deletion + the other docs) lands at the end of F6.
+
+Full suite: **2320 passed, 3 skipped** (+7); ruff clean; **pyright strict 0**; decision-ref check clean.
+Acceptance F6b — `rg "list_folders"` hits `src/` (protocol, `IMAPSMTPMailBox`, `EdgesSurface`,
+`Jarvis.list_mail_folders`), `mail folders` is reachable from the console and answers a real folder list
+when wired / an honest "No mail capability" when not, and the unread filter maps to an IMAP `UNSEEN`
+search: **all pass, not tests only**.
 
 ---
