@@ -194,7 +194,7 @@ Map of the honest gaps (STATUS 2537-2538, 2524-2526) with their phases:
   list, point "Next increment" at this roadmap, add new DECISIONS entries where F1–F7 changed policy
   (e.g. the single-authority registry decision).
 - Update `CLAUDE.md`/`README.md` counts touched by the new tests.
-- Commit and push (one commit per increment, English message + `Co-Authored-By: Claude Opus 4.8`).
+- Commit and push (one commit per increment, English message).
 - **Re-audit checklist** (this is the month-later script): run the F0–F7 acceptance gates verbatim;
   everything must be ✅ with the same commands, on a fresh clone, in <30 minutes.
 

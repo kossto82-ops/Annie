@@ -17,9 +17,8 @@ Last updated: 2026-09-22 (Increment 174 — open-question loop completion, roadm
 - Remote is the source of truth: `github.com/kossto82-ops/Annie` (branch `main`). Every increment
   ends with a commit **pushed** to that remote (local-only commits are not "done").
 - Identity for this repo (local config only): `ksst <kossto82@gmail.com>`.
-- Convention: **one commit per increment**, message in English, ending with the
-  `Co-Authored-By: Claude Opus 4.8` trailer. The foundation (increments 1–5) is a single commit
-  (`484fd49`); increments 6–103 are one commit each.
+- Convention: **one commit per increment**, message in English. The foundation (increments 1–5) is a
+  single commit (`484fd49`); increments 6–103 are one commit each.
 - **Numbering note (resolved 2026-09-04):** increments 104–110 (git, 2026-08-27/28 — memory
   recall, reasoning, embeddings, learning loop) were never logged here, and the calendar/tasks
   work was at first *misnumbered* as "Increment 104". This log now matches git for 104–110 and
