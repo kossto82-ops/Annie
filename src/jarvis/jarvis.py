@@ -234,6 +234,7 @@ from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.learned_state import LearnedState
 from jarvis.domain.value_objects.note import Note
+from jarvis.domain.value_objects.passage_hit import PassageHit
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
 from jarvis.domain.value_objects.reflection import Reflection
 from jarvis.domain.value_objects.reflective_cycle import ReflectiveCycle
@@ -1561,6 +1562,15 @@ knowledge_graph=knowledge_graph_store,
         companion's own files can answer before Jarvis reaches for explanation.
         """
         return self._docs_surface.search_documents(query, limit=limit)
+
+    def search_passages(self, query: str, *, limit: int = 5) -> tuple[PassageHit, ...]:
+        """The passages inside stored documents bearing on ``query``, best first.
+
+        Passage granularity of the document seam (F4): each hit carries the
+        passage snippet and the byte offsets that locate it in the stored bytes --
+        a candidate with a citation, never a verdict (Vision §3).
+        """
+        return self._docs_surface.search_passages(query, limit=limit)
 
     @property
     def document_editor(self) -> DocumentEditor | None:

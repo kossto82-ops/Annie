@@ -568,9 +568,17 @@ def _knowledge_reply(jarvis: Jarvis, text: str) -> Reply:
     else:
         reply = _engage_reply(text, None, [])
     if documents:
-        reply["documents"] = [
-            {"name": _document_name_from(r), "snippet": r.content} for r in documents
-        ]
+        reply["documents"] = []
+        for r in documents:
+            start, end = _document_offsets_from(r)
+            reply["documents"].append(
+                {
+                    "name": _document_name_from(r),
+                    "snippet": r.content,
+                    "start": start,
+                    "end": end,
+                }
+            )
     return reply
 
 
@@ -595,16 +603,31 @@ def _answer_candidates(recalled: tuple[RecalledMemory, ...]) -> tuple[RecalledMe
 
 
 def _document_name_from(memory: RecalledMemory) -> str:
-    """The document's name from its provenance (``document: <name>``)."""
-    return memory.provenance.removeprefix("document: ") or memory.content
+    """The document's name from its provenance (``document: <name>@start-end``)."""
+    provenance = memory.provenance.removeprefix("document: ")
+    return provenance.split("@", 1)[0] or memory.content
+
+
+_DOCUMENT_OFFSETS = re.compile(r"@(\d+)-(\d+)$")
+
+
+def _document_offsets_from(memory: RecalledMemory) -> tuple[int | None, int | None]:
+    """The passage's byte offsets carried in provenance, or None when absent."""
+    provenance = memory.provenance.removeprefix("document: ")
+    match = _DOCUMENT_OFFSETS.search(provenance)
+    if match is None:
+        return None, None
+    return int(match.group(1)), int(match.group(2))
 
 
 def _document_note(documents: tuple[RecalledMemory, ...]) -> Reply:
     """Honestly surface that Jarvis finds the answer in the companion's own file."""
     first = documents[0]
     name = _document_name_from(first)
+    start, end = _document_offsets_from(first)
+    locate = f" (bytes {start}-{end})" if start is not None and end is not None else ""
     return _plain(
-        f"I have a file that bears on that — {name}: \"{first.content}\". "
+        f"I have a file that bears on that — {name}{locate}: \"{first.content}\". "
         "Want me to read it?",
         "conversation",
     )

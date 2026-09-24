@@ -2099,7 +2099,9 @@ function addDocChips(el, docs) {
   chip.className = "docchip";
   docs.forEach((d) => {
     const btn = document.createElement("button");
-    btn.type = "button"; btn.className = "switch"; btn.textContent = "archivo: " + (d.name || "?");
+    btn.type = "button"; btn.className = "switch";
+    const span = (d.start !== undefined && d.start !== null) ? (" @" + d.start + "-" + d.end) : "";
+    btn.textContent = "archivo: " + (d.name || "?") + span;
     btn.title = d.snippet || d.name || "";
     btn.addEventListener("click", () => readDocument(d.name));
     chip.appendChild(btn);

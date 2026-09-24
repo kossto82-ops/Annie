@@ -54,6 +54,11 @@ def _documented_store(*docs: tuple[str, bytes]) -> LocalDocumentStore:
     return LocalDocumentStore("root", io=_memory_io(dict(docs)))
 
 
+def _document_provenance_prefixed(provenance: str) -> bool:
+    """True when provenance is ``document: <name>@start-end`` (F4 citation)."""
+    return provenance.startswith("document: ") and "@" in provenance and "-" in provenance
+
+
 class TestDocumentMemoryRetriever:
     def test_merges_document_hits_into_base_recall(self) -> None:
         base = _StubRetriever(
@@ -70,7 +75,8 @@ class TestDocumentMemoryRetriever:
         retriever = DocumentMemoryRetriever(base, lambda: store)
         memories = retriever.recall("jarvis api")
         assert memories[0].kind is MemoryKind.DOCUMENT
-        assert memories[0].provenance == "document: api.md"
+        assert _document_provenance_prefixed(memories[0].provenance)
+        assert memories[0].provenance.startswith("document: api.md")
         assert "api" in memories[0].content.lower()
         assert {m.kind for m in memories} == {MemoryKind.DOCUMENT, MemoryKind.WORLD_BELIEF}
 
@@ -115,7 +121,8 @@ class TestDocumentsInJarvisRecall:
         memories = jarvis.recall("jarvis api")
         documents = [m for m in memories if m.kind is MemoryKind.DOCUMENT]
         assert len(documents) == 1
-        assert documents[0].provenance == "document: api.md"
+        assert _document_provenance_prefixed(documents[0].provenance)
+        assert documents[0].provenance.startswith("document: api.md")
 
     def test_an_episode_recalls_a_matching_document(self) -> None:
         jarvis = Jarvis(
@@ -125,7 +132,8 @@ class TestDocumentsInJarvisRecall:
         episode = jarvis.think("jarvis api")
         assert any(
             memory.kind is MemoryKind.DOCUMENT
-            and memory.provenance == "document: api.md"
+            and memory.provenance.startswith("document: api.md")
+            and _document_provenance_prefixed(memory.provenance)
             for memory in episode.recalled_memories
         )
 

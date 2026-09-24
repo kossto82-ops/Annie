@@ -62,6 +62,9 @@ class _FakeStore:
     def search_documents(self, query: str, *, limit: int = 5) -> tuple[object, ...]:
         return ()
 
+    def search_passages(self, query: str, *, limit: int = 5) -> tuple[object, ...]:
+        return ()
+
 
 class _ScriptedEditor:
     """An editor that scripts what it proposes (no network, deterministic)."""

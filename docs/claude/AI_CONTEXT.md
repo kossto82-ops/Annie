@@ -222,6 +222,13 @@ Increments 111–112).
   (Increment 142), recorded ownership per file — `DocumentOwner` attribution + stored/updated timing in
   `DocumentMeta`, `documents info`, `[jarvis]` tags in list, `owner` on save (Increment 148) — and
   chat editing via `documents edit` behind a `DocumentEditor` proposal seam (Increment 149).
+- Passage-level search (Increment 175, roadmap F4): `search_passages` on the same `DocumentStore` seam
+  returns a small `PassageHit` VO (document + snippet + byte `start`/`end` rank) from deterministic
+  sliding-window chunking (fixed 32-word window, 8-word overlap, D18-faithful, no embeddings); passages
+  are ranked by the same `relatedness = max(surface_overlap, concept_relevance)` scorer as memory
+  (Increment 168), the recall provenance becomes `document: <name>@<start>-<end>`, chat chips cite the
+  passage + offsets, `documents search` answers with offending/offsets, and binaries are never chunked
+  (findable by name only).
 - Cognition thresholds are live-tunable: one `CognitiveKnobs` VO (grounded/insight/max_goal_reflections)
   injectable at `Jarvis(...)`, runtime-swappable, exposed as a `tunables` action + sliders (Increment 141).
 - The per-belief weighting policy is root-injectable: `Jarvis(default_belief_policy=...)` /

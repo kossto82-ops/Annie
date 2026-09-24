@@ -35,6 +35,7 @@ from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.email_message import EmailMessage
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.note import Note
+from jarvis.domain.value_objects.passage_hit import PassageHit
 from jarvis.domain.value_objects.research_report import ResearchReport
 from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
@@ -1211,6 +1212,26 @@ class _FakeDocumentStore:
             hits.append(
                 DocumentHit(
                     name=name, snippet=name, relevance=len(overlap) / len(words)
+                )
+            )
+        return tuple(hits)[:limit]
+
+    def search_passages(self, query: str, *, limit: int = 5) -> tuple[PassageHit, ...]:
+        words = {w for w in re.findall(r"\w+", query.lower()) if len(w) >= 2}
+        if not words:
+            return ()
+        hits: list[PassageHit] = []
+        for name in self.list_documents():
+            overlap = words & {w for w in re.findall(r"\w+", name.lower()) if len(w) >= 2}
+            if not overlap:
+                continue
+            hits.append(
+                PassageHit(
+                    name=name,
+                    snippet=name,
+                    start=0,
+                    end=0,
+                    relevance=len(overlap) / len(words),
                 )
             )
         return tuple(hits)[:limit]

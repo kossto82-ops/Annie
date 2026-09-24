@@ -17,6 +17,7 @@ from typing import Protocol
 from jarvis.domain.enums.document_owner import DocumentOwner
 from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.document_meta import DocumentMeta
+from jarvis.domain.value_objects.passage_hit import PassageHit
 
 
 class DocumentStore(Protocol):
@@ -74,5 +75,16 @@ class DocumentStore(Protocol):
         never a verdict (mirrors recall, Vision §3, §32). Binary documents can be
         found by the tokens in their name; what they *are* stays the surface's honest
         report. An empty tuple is an honest "no matching documents".
+        """
+        ...
+
+    def search_passages(self, query: str, *, limit: int = 5) -> tuple[PassageHit, ...]:
+        """The passages inside documents that match ``query``, most relevant first.
+
+        Passage granularity of the same seam (F4): text documents are chunked by a
+        deterministic sliding window, and each matching passage carries the byte
+        offsets that locate it in the stored bytes. Binary documents are never
+        chunked -- they surface, at most, a name-only passage with 0/0 offsets.
+        Candidates only, ranked by the offline ``relatedness`` scorer (D18).
         """
         ...

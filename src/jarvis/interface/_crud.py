@@ -735,8 +735,9 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
     §38) and Jarvis applies it, keeping the recorded attribution and reporting
     what actually changed; offline there is no grounded proposal to apply. ``read``
     returns the content as text (truncated for the surface) or base64. ``search``
-    takes ``query`` and returns the documents whose name or text match, each with a
-    snippet and match strength -- candidates, never a verdict.
+    takes ``query`` and returns the *passages* whose name or text match, each with
+    the passage snippet and its byte offsets -- candidates with a citation, never a
+    verdict (F4).
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
@@ -854,7 +855,7 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
                 limit = int(limit_raw)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 limit = 5
-            hits = jarvis.search_documents(query, limit=limit)
+            hits = jarvis.search_passages(query, limit=limit)
             if not hits:
                 return {
                     "reply": "Nothing in my documents matches that.",
@@ -862,7 +863,8 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
                     "count": 0,
                 }
             lines = "".join(
-                f"  - {hit.name} ({hit.relevance:.2f}): {hit.snippet}\n"
+                f"  - {hit.name} [{hit.start}-{hit.end}] "
+                f"({hit.relevance:.2f}): {hit.snippet}\n"
                 for hit in hits
             )
             return {
@@ -870,7 +872,12 @@ def _documents(jarvis: Jarvis, payload: Reply) -> Reply:
                 "speak": False,
                 "count": len(hits),
                 "hits": [
-                    {"name": hit.name, "snippet": hit.snippet}
+                    {
+                        "name": hit.name,
+                        "snippet": hit.snippet,
+                        "start": hit.start,
+                        "end": hit.end,
+                    }
                     for hit in hits
                 ],
             }

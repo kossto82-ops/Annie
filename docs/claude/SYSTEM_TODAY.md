@@ -1,6 +1,6 @@
 # How Jarvis Works Today
 
-**Source of truth for the running system** (currently Increment 174). Read this before
+**Source of truth for the running system** (currently Increment 175). Read this before
 touching memory/cognition/recall code; read `ARCHITECTURE.md` for the detailed layer map and
 `STATUS.md` only for history. Marked `[EXPERIMENTAL]` are implemented, tested, but not the
 runtime default.
@@ -64,6 +64,11 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
 - **Recall by meaning with no embeddings**: the offline lexical retriever ranks every durable candidate
   with `relatedness` (paraphrase + ES↔EN). Embedding recall is opt-in
   (`Jarvis.enable_embedding_recall`) `[EXPERIMENTAL]`.
+- **Document search is passage-level** (Inc 175, roadmap F4): `search_passages` on the `DocumentStore`
+  seam ranks deterministic word-window chunks (32 words, 8 overlap, byte offsets, no embeddings) with the
+  same `relatedness` scorer; recall provenance is `document: <name>@<start>-<end>`, chat chips cite the
+  passage + offsets, `documents search` returns the offending sentence + offsets, and binaries are never
+  chunked (findable by name only).
 - **Belief identity is canonical-topic-anchored** (Inc 163): `topic_resolution.py`, empty signatures
   never fuse, representative is display-only.
 - **Consolidation is COMPANION-only and neutral-evidence-only** (Inc 164): valence never invented.

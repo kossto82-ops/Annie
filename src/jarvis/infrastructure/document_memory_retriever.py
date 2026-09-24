@@ -60,10 +60,10 @@ class DocumentMemoryRetriever:
             RecalledMemory(
                 content=hit.snippet,
                 kind=MemoryKind.DOCUMENT,
-                provenance=f"document: {hit.name}",
+                provenance=f"document: {hit.name}@{hit.start}-{hit.end}",
                 relevance=hit.relevance,
             )
-            for hit in store.search_documents(query, limit=limit)
+            for hit in store.search_passages(query, limit=limit)
         ]
         merged = memories + documents
         merged.sort(

@@ -348,6 +348,17 @@ callable to the current store, so swapping `set_documents_store` at runtime is h
 `say` separates document hits from memory and renders them as chips; snippets never quote opaque binary
 bytes (binary findable by name only).
 
+**Passage search** (Increment 175, roadmap F4): beyond document-level ranks, the same `DocumentStore`
+seam exposes `search_passages(query, limit=5) -> tuple[PassageHit, ...]` — deterministic
+sliding-window chunking (fixed 32-word window, 8-word overlap, word-boundary, byte offsets computed
+over UTF-8) with **no embeddings** (D18-faithful, vocabulary-only). Each chunk is ranked by the same
+`relatedness` scorer the memory line uses (Increment 168), so a 3-letter query, a bilingual paraphrase,
+and a cross-window phrase all reach the *passage*, not just the file. Recall provenance becomes
+`document: <name>@<start>-<end>` (offsets parsed with a trailing-anchored regex, robust to `@` in a
+name); `say` document chips carry the passage snippet and its byte offsets; `documents search` returns
+passage + offsets + relevance in both the reply line and the `hits` payload. Binary files are never
+chunked — they keep the name-only `DocumentHit` path (byte offsets 0/0, no fake snippet).
+
 ## Cognition thresholds
 
 The grounded/insight attention gates and the goal-reflection cap are not module constants: one validated

@@ -17,6 +17,7 @@ from jarvis.domain.value_objects.document_edit import DocumentEdit
 from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.note import Note
+from jarvis.domain.value_objects.passage_hit import PassageHit
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
 from jarvis.domain.value_objects.task_result import TaskResult
 
@@ -137,6 +138,11 @@ class DocumentsSurface:
         self, query: str, *, limit: int = 5
     ) -> tuple[DocumentHit, ...]:
         return self._store().search_documents(query, limit=limit)
+
+    def search_passages(
+        self, query: str, *, limit: int = 5
+    ) -> tuple[PassageHit, ...]:
+        return self._store().search_passages(query, limit=limit)
 
     def edit_document(self, name: str, instruction: str) -> DocumentEdit | None:
         store = self._store()

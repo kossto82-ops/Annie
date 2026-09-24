@@ -26,6 +26,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.passage_hit import PassageHit
 from jarvis.infrastructure.capability_registry import (
     ExternalSourceCapability,
     ProjectFilesCapability,
@@ -633,6 +634,14 @@ class _FakeDocumentsStore:
         lowered = query.lower()
         return tuple(
             DocumentHit(name=name, snippet=name, relevance=1.0)
+            for name in self.list_documents()
+            if lowered in name.lower()
+        )[:limit]
+
+    def search_passages(self, query: str, *, limit: int = 5) -> tuple[PassageHit, ...]:
+        lowered = query.lower()
+        return tuple(
+            PassageHit(name=name, snippet=name, start=0, end=0, relevance=1.0)
             for name in self.list_documents()
             if lowered in name.lower()
         )[:limit]

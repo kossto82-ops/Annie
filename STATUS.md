@@ -2576,9 +2576,10 @@ capability-level (no new abstractions).*
 - `ReasoningSpan` is conversation-scoped (Increment 145); the *episode* path rides it too (Increment
   166 provenance commits: `think()` supplies the span to episode reasoning) but a live voice session
   extension stays open.
-- Documents are folder-aware (Increment 142), carry recorded ownership (Increment 148) and are
-  editable via the chat itself (Increment 149) — remaining gap: search ranks whole documents, not
-  passages.
+- Documents are folder-aware (Increment 142), carry recorded ownership (Increment 148), are
+  editable via the chat itself (Increment 149) and search at **passage level** (Increment 175:
+  `search_passages`, deterministic sliding-window chunking with byte offsets, ranked by the same
+  `relatedness` scorer — no embeddings, D18-faithful; binaries never chunked).
 - Speech has an opt-in live STT backer (`JARVIS_STT_*` → a Whisper-compatible ear, Increment 154) and
   the console mic *uses* it when wired (record → `POST /api/speech/transcribe`, Increment 159);
   streaming the mic while speaking and VAD/segmentation are still unwired (push-to-talk sends one
@@ -3224,6 +3225,51 @@ conversation flow in `src/` (`interface/_conversation.py` via `retirable_open_qu
 
 ---
 
-## Open blockers
+### Increment 175 — Passage-level document search (roadmap F4, 2026-09-24)
+
+Closes the last document-recall honest gap: `search_documents` ranked **whole documents** — recall said
+"this file matches", never "this sentence matches". Now the `DocumentStore` seam exposes
+`search_passages`, returning the offending passage with its byte offsets under the same relevance metric
+as memory.
+
+- **Chunking (deterministic, D18-faithful)**: `_passage_chunks` slides a fixed 32-word window with an
+  8-word overlap over readable text (`src/jarvis/infrastructure/document_store.py`); word boundaries only,
+  byte offsets measured on UTF-8 (`len(text[:boundary].encode("utf-8"))`), so a phrase that crosses a
+  window boundary is still found **whole** in a hit. No embeddings, no network — vocabulary-only, the same
+  seam that already ranks documents.
+- **Ranking**: each chunk is scored by the shared `relatedness(query, snippet) =
+  max(surface_overlap, concept_relevance)` scorer (Increment 168 pipeline), so a 3-letter query, a
+  bilingual paraphrase, and a cross-window phrase all reach the *passage*, not merely the file.
+  `_MIN_CONCEPT_LEN = 2` keeps short queries recallable.
+- **`PassageHit` VO** (`src/jarvis/domain/value_objects/passage_hit.py`): `name`, `snippet`, `start`,
+  `end`, `relevance` — distinct from `DocumentHit`, which stays for the document-level `search_documents`
+  path (unchanged compat).
+- **Recall provenance**: `DocumentMemoryRetriever` now emits `document: <name>@<start>-<end>`.
+  `_conversation._document_offsets_from` parses offsets with a trailing-anchored regex
+  (`@(\d+)-(\d+)$`), robust to `@` inside a name; chat document chips cite the passage + bytes
+  (`(bytes {start}-{end})`), so a click still reads through the exact region.
+- **Surfaces**: `documents search` (`interface/_crud.py`) answers through `search_passages` — the reply
+  line and the `hits` payload both carry `start`/`end`, format
+  `- {name} [{start}-{end}] ({relevance:.2f}): {snippet}`. Console `addDocChips` shows `@start-end`.
+- **Binary safety**: binary files are **never chunked** — they keep a name-only `PassageHit` (offsets
+  0/0), never a fake opaque snippet.
+- **Tests** (`tests/infrastructure/test_document_passages.py`, 10): window/overlap boundaries; a phrase
+  crossing a boundary is found whole with exact offsets; relevance ranking across several passage
+  matches; binary files skip chunking; the F4 acceptance path — `documents search "red dragon sleeps at
+  noon"` returns the passage sentence and its byte offsets (positionally verified against the raw bytes),
+  not just a document rank. Existing suites updated for the new provenance shape
+  (`tests/test_documents_recall.py` helper, fakes in `test_command_center.py` / `test_odysseus.py` /
+  `test_document_editing.py`). **+13 tests**.
+- **Docs**: `SYSTEM_TODAY.md` (document search is passage-level now); `AI_CONTEXT.md` (passage block in
+  the documents section); `ARCHITECTURE.md` (passage-search block in Files & documents); the documents
+  honest gap closed in this log; `CLAUDE.md` → Increment 175, 2272. REST → 2272.
+
+Full suite: **2272 passed, 3 skipped** (+13); ruff clean; **pyright strict 0** (whole tree);
+`scripts/check_decision_refs.py` clean. Acceptance gates F4 —— `rg "search_passages"` hits `src/`
+(`document_store.py` seam + `document_memory_retriever.py` + `jarvis.py` delegator), and the console
+`documents search` action answers with the passage sentence + offsets (`_crud.py`):
+**both pass, not tests only**.
+
+---
 
 None.

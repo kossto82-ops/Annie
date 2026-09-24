@@ -26,8 +26,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from jarvis.domain.enums.document_owner import DocumentOwner
+from jarvis.domain.services.abstraction import relatedness
 from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.document_meta import DocumentMeta
+from jarvis.domain.value_objects.passage_hit import PassageHit
 
 DocumentIO = Callable[[str, str, bytes], bytes]
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
@@ -40,6 +42,13 @@ _WORD = re.compile(r"\w+")
 _SNIPPET_EXPAND_RIGHT = 140
 _SNIPPET_LEAD = 60
 _ELLIPSIS = "…"
+
+# Deterministic sliding-window chunking (F4): a fixed word window slides over a
+# text document with a fixed overlap, so a phrase straddling a naive boundary
+# still lands wholly inside some chunk. Vocabulary-only by construction (D18) --
+# no embeddings, no network, byte offsets are honest into the stored bytes.
+_PASSAGE_WINDOW = 32
+_PASSAGE_OVERLAP = 8
 
 
 def _utc_now() -> datetime:
@@ -67,6 +76,35 @@ def _relevance(query_tokens: set[str], surface: str) -> float:
         return 0.0
     shared = query_tokens & _tokens(surface)
     return len(shared) / len(query_tokens)
+
+
+def _passage_chunks(text: str) -> tuple[tuple[str, int, int], ...]:
+    """Deterministic sliding-window passages of ``text``.
+
+    A fixed word window slides over the word sequence with a fixed overlap, so a
+    phrase that would cross a naive boundary still lands wholly inside one chunk.
+    Each chunk is ``(text, start_byte, end_byte)`` where the offsets locate the
+    passage inside the document's utf-8 bytes (``text[start_byte:end_byte]``
+    reproduces the snippet). Pure vocabulary, no embeddings, D18-faithful.
+    """
+    words = [m for m in _WORD.finditer(text)]
+    if not words:
+        return ()
+    step = _PASSAGE_WINDOW - _PASSAGE_OVERLAP
+    if step <= 0:
+        step = 1  # defensive: overlap must never swallow the whole window
+    chunks: list[tuple[str, int, int]] = []
+    index = 0
+    while index < len(words):
+        end = min(index + _PASSAGE_WINDOW, len(words))
+        first, last = words[index], words[end - 1]
+        start_byte = len(text[: first.start()].encode("utf-8"))
+        end_byte = len(text[: last.end()].encode("utf-8"))
+        chunks.append((text[first.start() : last.end()], start_byte, end_byte))
+        if end == len(words):
+            break
+        index += step
+    return tuple(chunks)
 
 
 class LocalDocumentStore:
@@ -209,6 +247,50 @@ class LocalDocumentStore:
             )
         hits.sort(key=lambda hit: (-hit.relevance, hit.name))
         return tuple(hits[: max(0, limit)])
+
+    def search_passages(self, query: str, *, limit: int = 5) -> tuple[PassageHit, ...]:
+        """Passages whose text matches ``query``, best first, with byte offsets.
+
+        Passage granularity of the same document seam (F4): each text document is
+        chunked by a deterministic sliding word window (fixed width, fixed overlap,
+        byte offsets into the utf-8 bytes), and every chunk is scored with the same
+        offline ``relatedness`` scorer recall uses (Inc-168) -- vocabulary-only,
+        D18-faithful. A binary file is never chunked: at most a name-only passage
+        with 0/0 offsets is surfaced, so opaque bytes are never quoted. The offsets
+        are honest: ``read_document(name)[start:end]`` reproduces the passage.
+        Candidates only, never a verdict (Vision §3).
+        """
+        query_tokens = _tokens(query)
+        if not query_tokens:
+            return ()
+        passages: list[PassageHit] = []
+        for name in self.list_documents():
+            text = self._decoded_text(name)
+            if text is not None:
+                for snippet, start, end in _passage_chunks(text):
+                    relevance = relatedness(query, snippet)
+                    if relevance <= 0.0:
+                        continue
+                    passages.append(
+                        PassageHit(
+                            name=name,
+                            snippet=snippet,
+                            start=start,
+                            end=end,
+                            relevance=relevance,
+                        )
+                    )
+            else:
+                relevance = relatedness(query, name)
+                if relevance <= 0.0:
+                    continue
+                passages.append(
+                    PassageHit(
+                        name=name, snippet=name, start=0, end=0, relevance=relevance
+                    )
+                )
+        passages.sort(key=lambda hit: (-hit.relevance, hit.name, hit.start))
+        return tuple(passages[: max(0, limit)])
 
     # -- search helpers -------------------------------------------------------
 
