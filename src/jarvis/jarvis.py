@@ -950,6 +950,22 @@ knowledge_graph=knowledge_graph_store,
             )
         return self._speech_perception.transcribe_audio(audio)
 
+    def transcribe_stream(self, chunks: Iterable[bytes]) -> Iterator[str]:
+        """Stream partial transcripts from the ear seam (roadmap F5).
+
+        Consumes ``chunks`` as a live utterance grows and yields each *new* partial
+        exactly once (``stream_transcribe([chunk1, chunk2])`` grows ``"hola"`` ->
+        ``"hola, mundo"``), so a surface can render words while the user still
+        speaks. An ear that reports ``can_stream_partials = False`` yields nothing --
+        the surface then falls back to silence segmentation instead. The output is
+        text-only observation, never a belief or a decision (D6, §38).
+        """
+        if self._speech_perception is None:
+            raise RuntimeError(
+                "no speech capability configured; set_speech_perception"
+            )
+        return self._speech_perception.stream_transcribe(chunks)
+
     @property
     def knowledge_source(self) -> KnowledgeSource | None:
         """The deliberate-consult seam (Vision §37, §38), or ``None`` when offline.

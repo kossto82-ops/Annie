@@ -164,6 +164,35 @@ def test_the_live_ear_recorder_path_is_wired_and_keeps_web_speech() -> None:
     assert "serverEar) return;" in html, "in-browser and server mic paths must not race"
 
 
+def test_f5_console_wires_voice_streaming_and_silence_segmentation() -> None:
+    """Tripwire: the voice input has both F5 paths -- live partials and VAD.
+
+    The snapshot's ``speech.streaming`` flag picks between them: a streaming ear
+    posts the growing segment to ``/api/speech/stream`` for a realtime preview, a
+    non-streaming live ear drives an AnalyserNode-based silence segmenter
+    (``VAD_SILENCE_HOLD_MS`` sustained silence auto-closes a segment) so one hold
+    covers long speech without press-hold-release. Both paths share the guarded
+    hold start; Web Speech stays the offline default.
+    """
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "serverStreaming",
+        "serverStreaming = !!sp.streaming;",
+        '/api/speech/stream?final=0',
+        '/api/speech/stream?final=1',
+        "STREAM_PARTIAL_MS",
+        "createAnalyser",
+        "getByteTimeDomainData",
+        "VAD_RMS",
+        "VAD_SILENCE_HOLD_MS",
+        "closeSegment(",
+    ):
+        assert marker in html, f"F5 voice streaming/VAD wiring lost its {marker!r}"
+    assert '"speech.streaming"' not in html, "the flag must be read, not hardcoded"
+    assert "if (held || serverEar) return;" in html, \
+        "in-browser and server mic paths must still not race"
+
+
 def test_the_cognition_thresholds_are_tunable_from_the_settings_panel() -> None:
     html = _CONSOLE.read_text(encoding="utf-8")
     # The thresholds card lives in the settings drawer and drives the tunables

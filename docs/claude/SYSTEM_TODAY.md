@@ -69,6 +69,13 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
   same `relatedness` scorer; recall provenance is `document: <name>@<start>-<end>`, chat chips cite the
   passage + offsets, `documents search` returns the offending sentence + offsets, and binaries are never
   chunked (findable by name only).
+- **Voice input is live, streaming, or VAD-segmented** (Inc 176, roadmap F5): the ear seam adds an
+  optional streaming contract — `can_stream_partials` feature-detect + `stream_transcribe(chunks)`
+  yielding each new growing partial once (Whisper backers `True`, echo ear `False`). The `speech`
+  snapshot block reports `streaming` honestly; a streaming ear gets a live preview
+  (`POST /api/speech/stream?final=0`, closed with `final=1`), a non-streaming ear is auto-segmented
+  in-browser (AnalyserNode silence ≥ `VAD_SILENCE_HOLD_MS` closes a segment and reopens) — long speech
+  needs no press-hold-release. Web Speech stays the offline default.
 - **Belief identity is canonical-topic-anchored** (Inc 163): `topic_resolution.py`, empty signatures
   never fuse, representative is display-only.
 - **Consolidation is COMPANION-only and neutral-evidence-only** (Inc 164): valence never invented.

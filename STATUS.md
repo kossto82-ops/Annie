@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-22 (Increment 174 — open-question loop completion, roadmap F3)
+Last updated: 2026-09-24 (Increment 176 — live voice streaming + VAD, roadmap F5)
 
 ---
 
@@ -2448,15 +2448,16 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (see `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`)
 
-**Increments 166–172 are committed and pushed** (statements-as-memory, recall by meaning,
-change-of-mind resolution, the evidence-request writer, the docs+roadmap close-out, and the
-decision-registry consolidation). Phase **F1 is done**: `DECISIONS.md` is the one numbering
-(D1–D32), live docs and `src/` resolve every D-token there, the legacy mapping is an appendix
-in this log, and an offline `scripts/check_decision_refs.py` + CI `doc-truth` job + the
-`tests/test_doc_decision_refs.py` gate hold it that way. Start at phase **F2** (schedule honest
-forgetting/decay), then **F3** (auto-retire answered open questions), **F4** (passage-level
-document search), **F5** (live voice streaming + VAD), **F6** (edge deepening), **F7** (lockfile,
-3-python CI matrix, broader broad-`except` audit), **F8** (final gates + re-audit checklist).
+**Increments 166–176 are committed and pushed.** Roadmap phases **F1–F5 are done**:
+F1 (single decision authority, Inc 172), F2 (scheduled honest forgetting/decay, Inc 173),
+F3 (open-question auto-retirement, Inc 174), F4 (passage-level document search, Inc 175), and
+F5 (**live voice streaming + VAD**, Inc 176: the `SpeechPerceptionSource` streaming contract —
+`can_stream_partials` + `stream_transcribe(chunks) -> partials`, served by `POST /api/speech/stream`
+with an honest `streaming` snapshot flag — plus two console paths: live partial preview when the ear
+streams, AnalyserNode silence auto-segmentation when it does not). Start at phase **F6** (edge
+deepening: CalDAV/ICS sync, per-account mailbox UI, decided-script executor, ReasoningSpan continuity
+across a live-voice session), then **F7** (lockfile, 3-python CI matrix, doc-truth job, broad-`except`
+audit), **F8** (final gates + re-audit checklist).
 
 Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable
 via constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in
@@ -2580,10 +2581,12 @@ capability-level (no new abstractions).*
   editable via the chat itself (Increment 149) and search at **passage level** (Increment 175:
   `search_passages`, deterministic sliding-window chunking with byte offsets, ranked by the same
   `relatedness` scorer — no embeddings, D18-faithful; binaries never chunked).
-- Speech has an opt-in live STT backer (`JARVIS_STT_*` → a Whisper-compatible ear, Increment 154) and
-  the console mic *uses* it when wired (record → `POST /api/speech/transcribe`, Increment 159);
-  streaming the mic while speaking and VAD/segmentation are still unwired (push-to-talk sends one
-  blob per hold). The browser Web Speech default stays for offline/unconfigured setups. A material
+- Speech has an opt-in live STT backer (`JARVIS_STT_*` → a Whisper-compatible ear, Increment 154) that
+  the console mic uses when wired (record → `POST /api/speech/transcribe`, Increment 159), and since
+  Increment 176 it is **streaming + VAD**: the seam declares `can_stream_partials` and
+  `stream_transcribe(chunks)` serves growing partials through `POST /api/speech/stream` (live preview
+  when the ear streams; AnalyserNode silence auto-segmentation when it does not — long speech needs no
+  press-hold-release). The browser Web Speech default stays for offline/unconfigured setups. A material
   instruction *executes* when an agent is wired and declines honestly otherwise (Increment 160:
   earned agency, protocol-level gate only); the offline charitable executor needs the decided-script
   format, so a live provider is what turns free text into a multi-step act.
@@ -3272,4 +3275,54 @@ Full suite: **2272 passed, 3 skipped** (+13); ruff clean; **pyright strict 0** (
 
 ---
 
-None.
+### Increment 176 — Live voice streaming + VAD (roadmap F5, 2026-09-24)
+
+Closes the voice-input honest gap listed in this log (items 2524-2526 / 2530-2533): push-to-talk sent
+**one blob per hold** with no live feedback and no silence segmentation. The ear seam grows an optional
+streaming contract; the console previews a streaming ear live and auto-segments a silent one.
+
+- **Seam contract (feature-detected, D8)**: `SpeechPerceptionSource` gains `can_stream_partials` (the
+  flag every ear now declares, like `can_hear_audio`) and `stream_transcribe(chunks)` — yields the
+  *new* growing partial exactly once per committed chunk and never repeats a flat segment
+  (`src/jarvis/domain/perception/speech_perception.py`). The echo ear (`infrastructure/speech_perception.py`)
+  reports `False` and yields nothing; the Whisper-compatible backer (`infrastructure/whisper_transcriber.py`)
+  reports `True` and re-transcribes the accumulated audio per chunk — the honest stream shape for the same
+  `/audio/transcriptions` endpoint family, no new network paths, transport stays injectable (a test
+  transport returns growing transcripts).
+- **Facade + endpoint**: `Jarvis.transcribe_stream(chunks)` routes the seam (`jarvis.py`); a new
+  `POST /api/speech/stream` exchange serves one live-partial tick — `?final=0` returns the growing
+  `partials`/`text`, `?final=1` closes a segment (`interface/command_center.py`), with the usual honest
+  400 (no ear / non-streaming ear) and structured 502 (provider failure).
+- **Snapshot honesty**: the `speech` snapshot block now reports `streaming` (`can_stream_partials`) and a
+  `stream_endpoint` (`/api/speech/stream`), and the `speech` command's status line distinguishes a
+  streaming ear from a per-segment ("silence auto-closes each one") ear (`interface/_state.py` /
+  `interface/_providers.py`).
+- **Console (both F5 paths, `console.html`)**: when `speech.streaming` is true the hold previews live —
+  every `STREAM_PARTIAL_MS` the growing segment posts to `/api/speech/stream?final=0` and the composer
+  placeholder shows "Escuchando: …", release finalizes with `final=1`. When realtime partials are
+  unavailable, an **AnalyserNode silence segmenter** reads the mic RMS every `VAD_TICK_MS`; silence
+  sustained past `VAD_SILENCE_HOLD_MS` auto-closes the segment (posted) and immediately reopens a fresh
+  one on the same mic stream, so a long spree of speech needs no press-hold-release; auto-closed
+  segments shorter than `VAD_MIN_SEGMENT_MS` are dropped as noise. The two mic paths still never race
+  (`serverEar` guard) and Web Speech stays the offline default.
+- **Tests** (+18): `tests/test_speech_stream.py` — seam contract + capability flag (echo vs Whisper,
+  `isinstance` feature-detect), fake-transcriber partial assembly over a scripted growing transport
+  (incremental growth, flat-partial dedup, loud provider errors), `Jarvis.transcribe_stream` routing /
+  no-ear raise, the `/api/speech/stream` endpoint (partial tick + final flush + no-ear 400 +
+  non-streaming 400 + failing 502), and snapshot `streaming` honesty (echo `False`, default Web Speech
+  preserved). `tests/test_console_asset.py` adds the F5 console tripwire (streaming flag read from the
+  snapshot, live-preview endpoint, AnalyserNode VAD thresholds); the existing recorder-path tripwire
+  still passes. Existing stubs gained the new protocol members for pyright strict.
+- **Docs**: `SYSTEM_TODAY.md` (voice input streams/auto-segments per the ear's flag); `AI_CONTEXT.md`
+  (F5 block, "streaming/VAD remain open" line closed); `ARCHITECTURE.md` (perceive-speech edge row shows
+  the streaming contract); `CLAUDE.md` → Increment 176, 2290. REST → 2290.
+
+Full suite: **2290 passed, 3 skipped** (+18); ruff clean; **pyright strict 0** (whole tree);
+`scripts/check_decision_refs.py` clean. Acceptance gates F5 —— `rg "can_stream_partials"` hits `src/`
+(the `speech_perception.py` seam plus both real implementers), `rg "stream_transcribe"` hits `src/`
+(seam, `jarvis.py` delegator, the endpoint), the `speech` snapshot block reports
+`streaming: true/false` honestly (snapshot tests on echo/Whisper-shaped ears), and the console's
+AnalyserNode segmenter auto-closes a segment on sustained silence (F5 tripwire + browser-verifiable
+hold flow): **all pass, not tests only**.
+
+---

@@ -139,7 +139,10 @@ def speech_block(jarvis: Jarvis) -> Reply:
     ``live`` is a promise, not a guess: an ear that turns raw audio into real text
     (a Whisper backer) reports ``can_hear_audio``; the browser's echo pass-through
     cannot, so it reports ``live: False`` and the console keeps its in-browser Web
-    Speech path. ``endpoint`` is where a live console records audio to.
+    Speech path. ``streaming`` reports the same ear's live-partial capability (F5):
+    when True the console posts growing audio to ``stream_endpoint`` for realtime
+    preview; when False it segments on silence with the browser's AnalyserNode.
+    ``endpoint`` is where a live console posts a finished recording.
     """
     source = jarvis.speech_perception
     if source is None:
@@ -147,13 +150,17 @@ def speech_block(jarvis: Jarvis) -> Reply:
             "provider": None,
             "model": None,
             "live": False,
+            "streaming": False,
             "endpoint": "/api/speech/transcribe",
+            "stream_endpoint": "/api/speech/stream",
         }
     return {
         "provider": source.provider,
         "model": source.model,
         "live": source.can_hear_audio,
+        "streaming": source.can_stream_partials,
         "endpoint": "/api/speech/transcribe",
+        "stream_endpoint": "/api/speech/stream",
     }
 
 

@@ -177,6 +177,44 @@ def _transcribe(jarvis: Jarvis, audio: bytes) -> Response:
     return Response(200, "application/json; charset=utf-8", _json({"text": text}))
 
 
+def _stream_transcribe(jarvis: Jarvis, audio: bytes, *, final: bool) -> Response:
+    """Serve one live-partial exchange for the streaming ear (roadmap F5).
+
+    A console live-preview tick posts the segment audio so far with ``final=0`` and
+    gets back the growing partial; closing a segment posts with ``final=1`` and gets
+    the definitive text. ``partials`` is the ear's incremental stream over the chunk
+    (deduped by the ear), ``text`` its last/definitive partial -- ``""`` when the
+    ear heard nothing yet. A missing ear or one that cannot stream partials is a
+    clean 400; a provider failure is a structured 502.
+    """
+    source = jarvis.speech_perception
+    if source is None:
+        return Response(
+            400,
+            "application/json; charset=utf-8",
+            _json({"error": "no speech capability configured; set_speech_perception"}),
+        )
+    if not source.can_stream_partials:
+        return Response(
+            400,
+            "application/json; charset=utf-8",
+            _json({"error": "the wired ear cannot stream partials"}),
+        )
+    try:
+        partials = list(jarvis.transcribe_stream([audio]))
+        text = partials[-1] if partials else ""
+        if final and audio and not text:
+            text = jarvis.transcribe(audio)
+    except Exception as error:  # noqa: BLE001 -- a loud, structured provider error
+        message = f"transcription failed: {error}"
+        return Response(502, "application/json; charset=utf-8", _json({"error": message}))
+    return Response(
+        200,
+        "application/json; charset=utf-8",
+        _json({"partials": partials, "final": final, "text": text}),
+    )
+
+
 def route(jarvis: Jarvis, method: str, path: str, body: bytes) -> Response:
     """Decide the response for one HTTP request — pure, no socket (Vision §30).
 
@@ -196,6 +234,11 @@ def route(jarvis: Jarvis, method: str, path: str, body: bytes) -> Response:
         return _google_oauth_callback(jarvis, path)
     if clean == "/api/speech/transcribe":
         return _transcribe(jarvis, body)  # raw audio in, JSON out (live STT ear)
+    if clean == "/api/speech/stream":
+        # F5: one live-partial exchange; ``?final=1`` closes a segment.
+        params = urllib.parse.parse_qs(path.partition("?")[2])
+        final = params.get("final", ["0"])[-1].strip().lower() in ("1", "true", "yes")
+        return _stream_transcribe(jarvis, body, final=final)
     if clean.startswith("/api/"):
         command = clean[len("/api/") :].strip("/") or "state"
         payload = _parse(body) if method == "POST" else {}

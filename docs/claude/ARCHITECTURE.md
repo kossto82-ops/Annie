@@ -318,7 +318,7 @@ send/read email                    MailBox                              IMAPSMTP
 manage calendar                    CalendarStore                        LocalCalendarStore + Google
 manage tasks                       TaskScheduler                        LocalTaskScheduler
 delegate to an agent               TaskAgent                            ToolRegistryTaskAgent / PydanticAiTaskAgent (opt-in)
-perceive speech                    SpeechPerceptionSource               browser STT (default) / Whisper-compatible ear (opt-in, JARVIS_STT_*)
+perceive speech                    SpeechPerceptionSource               browser STT (default) / Whisper-compatible ear (opt-in, JARVIS_STT_*; live streaming partials or VAD silence segmentation, F5)
 execute tools                      ToolRegistry + ToolPolicy            FileSystemTool / EchoTool
 work with files                    DocumentStore                        LocalDocumentStore
 edit project files                 ToolRegistry (project: roots)        FileSystemTool

@@ -16,6 +16,7 @@ into a decision, is the perceiver's job (Vision §38, D6).
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Iterator
 from typing import Protocol
 
 from jarvis.infrastructure.provider_settings import SttSettings
@@ -70,6 +71,8 @@ class WhisperTranscriber:
         self.model = settings.model
         # A live ear: raw audio becomes real text here, unlike the echo pass-through.
         self.can_hear_audio = True
+        # Incremental partials are the honest stream for this endpoint family.
+        self.can_stream_partials = True
         self._endpoint = settings.base_url.rstrip("/") + "/audio/transcriptions"
         self._transport: AudioTransport = transport or self._default_transport
 
@@ -99,3 +102,24 @@ class WhisperTranscriber:
         response = self._transport(self._endpoint, headers, body)
         parsed = json.loads(response)
         return str(parsed.get("text", ""))
+
+    def stream_transcribe(self, chunks: Iterable[bytes]) -> Iterator[str]:
+        """Stream partial transcripts as ``chunks`` arrive (roadmap F5).
+
+        The OpenAI-compatible endpoint family has no true realtime channel, so the
+        honest stream is incremental: each committed chunk extends the accumulated
+        audio and re-transcribes it, yielding the *new* growing partial exactly once
+        (consecutive repeats are suppressed so a flat segment never floods the
+        console with the same line). A console live-preview tick consumes this like
+        ``stream_transcribe([buffer_so_far])`` and renders the last partial.
+        """
+        accumulated = b""
+        last = ""
+        for chunk in chunks:
+            accumulated += chunk
+            if not accumulated:
+                continue
+            partial = self.transcribe_audio(accumulated).strip()
+            if partial and partial != last:
+                last = partial
+                yield partial

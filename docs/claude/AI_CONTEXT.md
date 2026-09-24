@@ -291,11 +291,19 @@ Increments 111–112).
   observed `ToolCall`. `JARVIS_MCP_CONFIG` adds the server's tools inside `build_sandboxed_registry`;
   absent `pydantic-ai` or a broken edge returns `()`/`None` (offline Jarvis untouched).
 - Live STT level 2 in the console (Increment 159): the `speech` snapshot block (`provider` / `model` /
-  `live`) is honest self-description — `SpeechPerceptionSource` now carries `provider`, `model`, and
-  `can_hear_audio` (echo `False`, Whisper backers `True`). When a live ear is wired the console mic
-  records (`getUserMedia` + `MediaRecorder`, webm) and POSTs one blob to `/api/speech/transcribe`
-  which feeds `converse()`; the two mic paths are mutually exclusive (`serverEar` guards), Web Speech
-  staying the offline default. Streaming/VAD remains unwired (one blob per hold).
+  `live` / `streaming`) is honest self-description — `SpeechPerceptionSource` now carries `provider`,
+  `model`, `can_hear_audio`, and `can_stream_partials` (echo `False` throughout, Whisper backers
+  `True`/`True`). When a live ear is wired the console mic records (`getUserMedia` + `MediaRecorder`,
+  webm) and POSTs one blob to `/api/speech/transcribe` which feeds `converse()`; the two mic paths are
+  mutually exclusive (`serverEar` guards), Web Speech staying the offline default.
+- Live voice streaming + VAD (Increment 176, roadmap F5): the ear seam grows an *optional* streaming
+  contract — `stream_transcribe(chunks) -> partials` yields each new growing partial exactly once
+  (feature-detected via `can_stream_partials`, same Whisper-compatible endpoint family, transport still
+  injectable): `Jarvis.transcribe_stream(chunks)` + `POST /api/speech/stream` serve one live-partial
+  tick (`?final=0` preview, `?final=1` segment close). The console previews a streaming ear live
+  (placeholder "Escuchando: …") and, when realtime partials are unavailable, runs an AnalyserNode
+  silence segmenter (`VAD_SILENCE_HOLD_MS` auto-closes a segment and reopens it on the same hold), so
+  long speech needs no press-hold-release.
 - Reasoning/provenance visualisation: implemented (Increment 91 panel).
 - Relation-aware graph recall & retrieval-strategy selection (Increment 166): the knowledge source can
   reach a belief connected to the query by traversing `GraphNode`s (relation-aware recall, `_recall_graph_into`
@@ -396,8 +404,9 @@ repair series merged it into the local line and closed the remediation plan A-E:
   center's composition root uses it; the JSON stores / `Jarvis.persistent()` remain as the file-backed twin;
   `TemporalStability` count/recency weighting beyond the opt-in decay policy. Decay/forgetting services
   exist and are tested but nothing schedules them in the running system.
-- Speech: a live STT backer (Increment 154) is wired and used in the console (Increment 159);
-  streaming/VAD mic delivery to the server ear remain open.
+- Speech: a live STT backer (Increment 154) is wired and used in the console (Increment 159), and the
+  mic is live-streamed + VAD-segmented since Increment 176 (`stream_transcribe` partials /
+  AnalyserNode auto-segmentation; see the F5 block above).
 - Real instruction execution (earned agency, Increment 160): a material directive in conversation is
   classified as `ConversationIntent.ACT` and performed through `Jarvis.execute` behind the same
   sandboxed ToolRegistry without approval — sandbox reads/writes run, external/destructive acts

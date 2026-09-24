@@ -10,6 +10,8 @@ transcriber that turns audio into text can replace it behind the same Protocol
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
+
 
 class EchoSpeechPerception:
     """Returns the already-transcribed utterance unchanged (browser STT path)."""
@@ -17,6 +19,7 @@ class EchoSpeechPerception:
     provider = "echo"
     model = ""
     can_hear_audio = False
+    can_stream_partials = False
 
     def transcribe(self, utterance: str) -> str:
         """The utterance is already text (the browser transcribed it)."""
@@ -25,3 +28,7 @@ class EchoSpeechPerception:
     def transcribe_audio(self, audio: bytes) -> str:
         """This ear cannot hear raw audio -- it stays silent rather than guessing."""
         return ""
+
+    def stream_transcribe(self, chunks: Iterable[bytes]) -> Iterator[str]:
+        """This ear cannot stream audio -- it yields no partials (honest silence)."""
+        return iter(())

@@ -267,7 +267,12 @@ def _speech_status(jarvis: Jarvis) -> str:
         return "No ear wired — voice input is off."
     if source.can_hear_audio:
         model = f" ({source.model})" if source.model else ""
-        return f"Live ear: {source.provider or 'server'}{model} — the mic records to it."
+        if source.can_stream_partials:
+            return f"Live ear: {source.provider or 'server'}{model} — streaming live partials."
+        return (
+            f"Live ear: {source.provider or 'server'}{model} — "
+            "recorded per segment; silence auto-closes each one."
+        )
     return "Browser ear (Web Speech) — transcription happens in the page."
 
 

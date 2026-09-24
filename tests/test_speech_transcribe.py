@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
+
 from jarvis import Jarvis
 from jarvis.interface.command_center import route
 
@@ -12,6 +14,7 @@ class _StubEar:
     provider = "stub"
     model = "fake-audio"
     can_hear_audio = True
+    can_stream_partials = True
 
     def transcribe(self, utterance: str) -> str:
         return utterance
@@ -19,16 +22,32 @@ class _StubEar:
     def transcribe_audio(self, audio: bytes) -> str:
         return "hola, mundo" if audio else ""
 
+    def stream_transcribe(self, chunks: Iterable[bytes]) -> Iterator[str]:
+        pending = b""
+        last = ""
+        for chunk in chunks:
+            pending += chunk
+            if not pending:
+                continue
+            partial = self.transcribe_audio(pending).strip()
+            if partial and partial != last:
+                last = partial
+                yield partial
+
 
 class _BrokenEar:
     provider = "stub"
     model = ""
     can_hear_audio = True
+    can_stream_partials = True
 
     def transcribe(self, utterance: str) -> str:
         return utterance
 
     def transcribe_audio(self, audio: bytes) -> str:
+        raise RuntimeError("401 unauthorized")
+
+    def stream_transcribe(self, chunks: Iterable[bytes]) -> Iterator[str]:
         raise RuntimeError("401 unauthorized")
 
 
@@ -65,6 +84,7 @@ class TestSpeechSnapshot:
 
         block = cast(dict[str, object], snapshot(Jarvis())["speech"])
         assert block["live"] is False
+        assert block["streaming"] is False
         assert block["provider"] is None
         assert block["endpoint"] == "/api/speech/transcribe"
 
@@ -76,6 +96,7 @@ class TestSpeechSnapshot:
         jarvis = Jarvis(speech_perception=_StubEar())
         block = cast(dict[str, object], snapshot(jarvis)["speech"])
         assert block["live"] is True
+        assert block["streaming"] is True
         assert block["provider"] == "stub"
         assert block["model"] == "fake-audio"
 
@@ -88,6 +109,7 @@ class TestSpeechSnapshot:
         jarvis = Jarvis(speech_perception=EchoSpeechPerception())
         block = cast(dict[str, object], snapshot(jarvis)["speech"])
         assert block["live"] is False
+        assert block["streaming"] is False
         assert block["provider"] == "echo"
         assert block["model"] == ""
 

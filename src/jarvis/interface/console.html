@@ -4483,16 +4483,18 @@ $("taskCancel").addEventListener("click", () => setTaskEditing(""));
 /* ---- voice input: server-side live ear, or in-browser Web Speech -------- */
 const mediaRecorderOK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 let serverEar = false;
+let serverStreaming = false;   // the wired ear streams realtime partials (F5)
 function renderSpeech(s) {
   const sp = (s && s.speech) || {};
   serverEar = !!sp.live;
+  serverStreaming = !!sp.streaming;
   const mic = $("mic");
   const earName = sp.provider || "browser";
   const modelTag = sp.model ? (" \u2014 " + sp.model) : "";
   if (serverEar) {
     mic.disabled = !mediaRecorderOK;
     mic.title = mediaRecorderOK
-      ? ("Hold to talk \u2014 " + earName + modelTag + " (server)")
+      ? ("Hold to talk \u2014 " + earName + modelTag + (serverStreaming ? " (streaming)" : " (auto-segmented)"))
       : "Server transcription not available in this browser";
   } else if (SR) {
     mic.disabled = false;
@@ -4531,13 +4533,31 @@ if (SR) {
   mic.addEventListener("pointerleave", endHold);
   mic.addEventListener("pointercancel", endHold);
 }
-/* Server-side live ear: record the mic and transcribe it through
-   POST /api/speech/transcribe (the configured Whisper-class backer). */
+/* Server-side live ear (roadmap F5): record the mic and transcribe it through
+   POST /api/speech/transcribe (the configured Whisper-class backer). An ear that
+   streams realtime partials previews the growing transcript live through
+   POST /api/speech/stream?final=0 and finalizes a released segment with final=1.
+   When the ear cannot stream, an AnalyserNode-based silence segmenter auto-closes
+   a segment on silence sustained past VAD_SILENCE_HOLD_MS and immediately reopens
+   a fresh one, so a long spree of speech needs no press-hold-release. */
+const STREAM_PARTIAL_MS = 1400;    // live-preview tick for a streaming ear
+const VAD_TICK_MS = 180;           // analyser readout interval for silent ears
+const VAD_SILENCE_HOLD_MS = 900;   // sustained silence that auto-closes a segment
+const VAD_RMS = 0.02;              // below this RMS the mic reads silent
+const VAD_MIN_SEGMENT_MS = 350;    // shorter auto-closed segments are dropped as noise
 if (mediaRecorderOK) {
   const mic = $("mic");
-  let mediaRec = null, chunks = [];
-  const stopRecorder = () => {
-    if (mediaRec) { try { mediaRec.stop(); } catch (e5) {} }
+  let active = false;              // a hold owns the mic right now
+  let stream = null;               // the mic's MediaStream while holding
+  let currentSeg = null;           // the recorder of the segment being captured
+  let analyserCtx = null;          // AudioContext behind the VAD analyser
+  let analyser = null;             // AnalyserNode (VAD path only)
+  let vadBuf = null;               // analyser time-domain readout
+  let silenceFrom = null;          // ms when the current silence began (VAD)
+  let tickTimer = null;            // shared VAD / live-preview clock
+  const flushText = (text) => {
+    if (text && text.trim()) { showChat(); converse(text.trim()); }
+    else bubble("jarvis", "Did not hear any words.");
   };
   const sendRecording = async (blob, type) => {
     try {
@@ -4547,38 +4567,138 @@ if (mediaRecorderOK) {
         body: blob,
       });
       const data = await res.json();
-      const text = (data && data.text) || "";
-      if (text && text.trim()) { showChat(); converse(text.trim()); }
-      else bubble("jarvis", "Did not hear any words.");
+      flushText((data && data.text) || "");
     } catch (e6) {
       bubble("jarvis", "Could not transcribe the audio: " + e6);
     }
   };
+  const sendFinal = async (blob, type) => {
+    try {
+      const res = await fetch("/api/speech/stream?final=1", {
+        method: "POST",
+        headers: { "Content-Type": type || "audio/webm" },
+        body: blob,
+      });
+      const data = await res.json();
+      flushText((data && data.text) || "");
+    } catch (e6) {
+      bubble("jarvis", "Could not finalize the audio: " + e6);
+    }
+  };
+  const previewPartial = (text) => {
+    const box = $("text");
+    if (box) box.placeholder = text ? ("Escuchando: " + text) : "Di algo a Jarvis…";
+  };
+  const openSegment = () => {
+    if (!stream) return;
+    const seg = {
+      rec: new MediaRecorder(stream),
+      chunks: [],
+      type: "audio/webm",
+      start: Date.now(),
+      transcribe: false,    // decided at close; onstop flushes only when set
+      reopen: false,        // decides whether the hold keeps a next segment
+    };
+    seg.type = seg.rec.mimeType || "audio/webm";
+    seg.rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) seg.chunks.push(ev.data); };
+    seg.rec.onstop = () => {
+      if (!seg.chunks.length) return;
+      const blob = new Blob(seg.chunks, { type: seg.type });
+      const lasted = Date.now() - seg.start;
+      if (seg.transcribe && blob.size && (lasted >= VAD_MIN_SEGMENT_MS || !seg.reopen)) {
+        if (serverStreaming) sendFinal(blob, seg.type);
+        else sendRecording(blob, seg.type);
+      }
+      if (seg.reopen && active) openSegment();
+    };
+    currentSeg = seg;
+    seg.rec.start();
+  };
+  const closeSegment = (transcribe, reopen) => {
+    if (!currentSeg) return;
+    const seg = currentSeg;
+    currentSeg = null;
+    seg.transcribe = transcribe;
+    seg.reopen = reopen;
+    try { seg.rec.stop(); } catch (e5) {}
+  };
+  const vadTick = () => {
+    if (!currentSeg || !analyser) return;
+    analyser.getByteTimeDomainData(vadBuf);
+    let sum = 0;
+    for (let i = 0; i < vadBuf.length; i++) {
+      const v = (vadBuf[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / vadBuf.length);
+    if (rms < VAD_RMS) {
+      if (silenceFrom === null) silenceFrom = Date.now();
+      else if (Date.now() - silenceFrom >= VAD_SILENCE_HOLD_MS) {
+        silenceFrom = null;
+        closeSegment(true, true);      // silence auto-closes this segment, keep holding
+      }
+    } else {
+      silenceFrom = null;
+    }
+  };
+  const previewTick = () => {
+    if (!currentSeg || !currentSeg.chunks.length) return;
+    const blob = new Blob(currentSeg.chunks, { type: currentSeg.type });
+    fetch("/api/speech/stream?final=0", {
+      method: "POST",
+      headers: { "Content-Type": currentSeg.type },
+      body: blob,
+    }).then((r) => r.json()).then((data) => {
+      const text = (data && data.text) || "";
+      if (text && text.trim()) previewPartial(text);
+    }).catch(() => {});
+  };
+  const cleanupStream = () => {
+    active = false;
+    if (tickTimer) { window.clearInterval(tickTimer); tickTimer = null; }
+    if (stream) { for (const t of stream.getTracks()) t.stop(); stream = null; }
+    if (analyserCtx) { try { analyserCtx.close(); } catch (e9) {} }
+    analyserCtx = null; analyser = null; vadBuf = null; silenceFrom = null;
+    mic.classList.remove("on");
+    previewPartial("");
+  };
   const startRecorder = async (ev) => {
     ev.preventDefault();
-    if (!serverEar || mediaRec) return;
+    if (active || !serverEar) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunks = [];
-      mediaRec = new MediaRecorder(stream);
-      mediaRec.ondataavailable = (e7) => { if (e7.data && e7.data.size) chunks.push(e7.data); };
-      mediaRec.onstop = () => {
-        const type = mediaRec.mimeType || "audio/webm";
-        const blob = new Blob(chunks, { type });
-        for (const t of stream.getTracks()) t.stop();
-        mediaRec = null;
-        mic.classList.remove("on");
-        sendRecording(blob, type);
-      };
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!serverStreaming) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) {
+          analyserCtx = new Ctx();
+          analyser = analyserCtx.createAnalyser();
+          analyser.fftSize = 1024;
+          const src = analyserCtx.createMediaStreamSource(stream);
+          src.connect(analyser);
+          vadBuf = new Uint8Array(analyser.fftSize);
+        }
+      }
+      active = true;
       mic.classList.add("on");
-      mediaRec.start();
+      openSegment();
+      tickTimer = window.setInterval(
+        serverStreaming ? previewTick : vadTick,
+        serverStreaming ? STREAM_PARTIAL_MS : VAD_TICK_MS
+      );
     } catch (e8) {
       bubble("jarvis", "The microphone is not available: " + e8);
     }
   };
+  const releaseRecorder = (ev) => {
+    if (ev) ev.preventDefault();
+    if (!active) return;
+    active = false;
+    if (currentSeg) closeSegment(true, false);   // the released segment is sent
+    window.setTimeout(cleanupStream, 250);       // let the final stop/flush land
+  };
   mic.addEventListener("pointerdown", startRecorder);
-  document.addEventListener("pointerup", stopRecorder);
-  document.addEventListener("pointercancel", stopRecorder);
+  document.addEventListener("pointerup", releaseRecorder);
+  document.addEventListener("pointercancel", releaseRecorder);
 }
 
 /* ---- the reactive point-cloud sphere ------------------------------------ */
