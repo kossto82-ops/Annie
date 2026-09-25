@@ -15,6 +15,13 @@
 | `docs/claude/INTEGRACION_ODYSSEUS.md` | Odysseus plan (HISTORICAL — implemented, see ARCHITECTURE.md §Odysseus) | Historical |
 | `docs/claude/INTERNET_AGENT_REACH.md` | Agent-Reach plan (HISTORICAL — implemented) | Historical |
 | `docs/claude/MEMORY_AND_REASONING_ANALYSIS.md` | Pre-162 memory diagnosis (HISTORICAL — superseded) | Historical |
+| `docs/claude/SEMANTIC_ATTENTION_AUDIT.md` | Attention-repair audit (HISTORICAL — implemented, Increments 163-165) | Historical |
+| `docs/claude/SEMANTIC_COGNITION_IMPLEMENTATION.md` | Semantic cognition implementation (HISTORICAL — implemented) | Historical |
+| `docs/claude/REMEDIATION_PLAN.md` | Memory-line remediation plan (HISTORICAL — implemented) | Historical |
+| `docs/claude/REMEDIATION_REPORT.md` | Post-165 remediation report (HISTORICAL) | Historical |
+| `docs/claude/ROADMAP_ARCHITECTURAL_AUDIT.md` | Architectural audit roadmap (HISTORICAL — completed Phases 0-5) | Historical |
+| `docs/claude/IMPLEMENTATION_PLAN.md` | Implementation plan (HISTORICAL — completed) | Historical |
+| `docs/claude/PLAN_COMMAND_CENTER.md` | Command-center plan (HISTORICAL — implemented) | Historical |
 
 ## Historical markers
 

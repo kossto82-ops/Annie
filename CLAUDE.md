@@ -81,7 +81,7 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-2290 tests passing (3 skipped), ruff clean, pyright strict 0.
+2362 tests passing (3 skipped), ruff clean, pyright strict 0.
 
 The current project is at Increment 176 (see `STATUS.md`; Increments 171–172 shipped the docs
 reconciliation, the zero-fallout roadmap, and the single decision authority — `DECISIONS.md` D1–D32 —
@@ -188,8 +188,17 @@ instructions run through the `approved=False` instruction agent deterministicall
 steps still refuse at the gate), and a **server-side spoken turn** (180: `POST /api/speech/turn` runs the
 live-ear final transcript through the same `say` pipeline in one call, so a live-voice session rides the
 session `ReasoningSpan` exactly like typing; the `speech` snapshot block advertises `turn_endpoint` and
-the console reads it). Roadmap phases **F1-F6 are done; the next phase is F7** (lockfile, 3-python CI
-matrix, doc-truth job, broad-`except` audit).
+the console reads it). The reproducibility thread is complete (roadmap F7, Increment 181, see
+`STATUS.md`): `uv.lock` now pins every dependency (113 packages) and CI consumes it frozen on a
+**3.11/3.12/3.13 matrix** matching `requires-python`; a new stdlib-only **doc-truth job**
+(`scripts/check_docs_truth.py`) enforces the counts house rule (docs never cite below the last published
+suite total), reuses the F1 decision-ref checker, spot-checks that every backticked name in
+`SYSTEM_TODAY.md` resolves in `src/`, and holds INDEX.md as the single HISTORICAL manifest; and
+`scripts/check_broad_excepts.py` audits the committed list of all **47 `except Exception` in `src/`** —
+every one non-silent, zero in domain/executive cognition — with the swallow-regression test proving the
+executive error path stays loud (`provider_error`, never an emptied reply) while the Increment-157
+refusal guardrail stays `""`. Roadmap phases **F1-F7 are done; the next phase is F8** (final gates +
+re-audit checklist).
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner

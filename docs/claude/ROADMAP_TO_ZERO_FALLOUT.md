@@ -5,12 +5,15 @@ half-wired service the audits found, so a fresh re-audit one month from now find
 same failures**. Each phase ends with a mechanically checkable acceptance gate. Nothing here removes
 an architectural decision — the D-boundaries below are provisions, not permissions to cross them.
 
-**Status (2026-09-24): phases F1–F6 are shipped** — F1 (Increment 172), F2 (173), F3 (174), F4 (175),
+**Status (2026-09-25): phases F1–F7 are shipped** — F1 (Increment 172), F2 (173), F3 (174), F4 (175),
 F5 (176), F6 (Increments 177–180: CalDAV/ICS one-way calendar sync, per-account mailbox UI with folders
 + unread, the offline decided-script charitable executor, and the server-side spoken turn riding the
-session `ReasoningSpan`). Remaining: **F7** (reproducibility: lockfile, 3-python CI matrix, doc-truth
-job, broad-`except` audit) and **F8** (final gates + re-audit checklist). Suite at the F6 close:
-**2352 passed, 3 skipped**; ruff clean; pyright strict 0; decision-ref check clean.
+session `ReasoningSpan`), and **F7** (Increment 181: `uv.lock` consumed frozen, the 3.11/3.12/3.13 CI
+matrix, the `check_docs_truth.py` doc-truth job — counts gate, F1 decision-refs, SYSTEM_TODAY symbols,
+HISTORICAL manifest — and the committed `check_broad_excepts.py` audit: all 47 `except Exception` in
+`src/` non-silent). Remaining: **F8** (final gates + re-audit checklist). Suite at the F7 close:
+**2362 passed, 3 skipped**; ruff clean; pyright strict 0; decision-ref check clean; doc-truth and
+broad-except checks clean.
 
 ## How this is written
 

@@ -68,7 +68,7 @@ def _make_imap_connect(
         connection = imaplib.IMAP4_SSL(host, port, timeout=timeout)
         try:
             connection.login(email, password)
-        except Exception:
+        except (OSError, imaplib.IMAP4.error):
             connection.logout()
             raise
         return connection
@@ -86,7 +86,7 @@ def _make_smtp_connect(
         connection = smtplib.SMTP_SSL(host, port, timeout=timeout, context=context)
         try:
             connection.login(email, password)
-        except Exception:
+        except OSError:
             connection.close()
             raise
         return connection

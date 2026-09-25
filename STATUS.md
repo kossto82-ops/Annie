@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-24 (Increment 180 — server-side spoken turn, roadmap F6d)
+Last updated: 2026-09-25 (Increment 181 — reproducibility: lockfile, 3-python CI, doc-truth, broad-except audit, roadmap F7)
 
 ---
 
@@ -2448,18 +2448,20 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (see `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`)
 
-**Increments 166–180 are committed and pushed.** Roadmap phases **F1–F6 are done**:
+**Increments 166–181 are committed and pushed.** Roadmap phases **F1–F7 are done**:
 F1 (single decision authority, Inc 172), F2 (scheduled honest forgetting/decay, Inc 173),
 F3 (open-question auto-retirement, Inc 174), F4 (passage-level document search, Inc 175),
 F5 (**live voice streaming + VAD**, Inc 176: the `SpeechPerceptionSource` streaming contract —
 `can_stream_partials` + `stream_transcribe(chunks) -> partials`, served by `POST /api/speech/stream`
 with an honest `streaming` snapshot flag — plus two console paths: live partial preview when the ear
-streams, AnalyserNode silence auto-segmentation when it does not), and **F6** (edge deepening,
+streams, AnalyserNode silence auto-segmentation when it does not), **F6** (edge deepening,
 Incs 177–180: CalDAV/ICS one-way calendar sync; the per-account mailbox UI with folders + unread; the
 decided-script charitable executor so the *offline* instruction agent runs scripted multi-step acts
-without a free-text LLM; and the server-side spoken turn riding the session ReasoningSpan). Start at
-phase **F7** (lockfile, 3-python CI matrix, doc-truth job, broad-`except` audit), then **F8** (final
-gates + re-audit checklist).
+without a free-text LLM; and the server-side spoken turn riding the session ReasoningSpan), and
+**F7** (reproducibility, Inc 181: `uv.lock` consumed frozen by a 3.11/3.12/3.13 CI matrix; the
+`check_docs_truth.py` doc-truth job — counts gate, F1 decision-refs, SYSTEM_TODAY symbol spot-checks,
+HISTORICAL manifest; and the committed `check_broad_excepts.py` audit — all 47 `except Exception` in
+`src/` non-silent). Start at phase **F8** (final gates + re-audit checklist).
 
 Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable
 via constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in
@@ -3473,5 +3475,63 @@ Acceptance F6d — `rg "speech/turn|turn_endpoint|speechTurn"` hits `src/` (hand
 console), a wired live-ear console runs one vocal prompt through `/api/speech/turn` and Jarvis carries
 the session ReasoningSpan across the spoken turns, and an unwired Jarvis answers the turn with a clean
 honest "no speech capability configured" 400 — **all pass, not tests only**.
+
+---
+
+### Increment 181 — Reproducibility, CI truth, broad-except audit (roadmap F7, 2026-09-25)
+
+F7 (zero-fallout roadmap lines 173-195) makes everything F0–F6 shipped machine-verifiable: a pinned
+lockfile consumed frozen by a three-Python CI matrix, an offline doc-truth CI job, and a committed
+classification of every `except Exception` in `src/` — so a re-audit finds none of the "floating deps,
+3.13-only CI, uncited doc numbers, silent-swallow" gaps it previously flagged.
+
+- **Lockfile + matrix** (`uv.lock`, `.github/workflows/test.yml`): `uv.lock` pins all 113 packages
+  exactly (`python -m uv lock`, uv 0.12.19 via pip; `.venv` is gitignored, `uv sync --frozen
+  --all-extras` verified locally before any change). `test.yml` becomes uv-based: lint on 3.13
+  (`uv run ruff check .`), a stdlib-only **doc-truth job on 3.11** (no uv sync — the three checkers
+  are pure `python scripts/…`, offline by D8), typecheck on 3.13, and the **test matrix
+  3.11/3.12/3.13** (`uv sync --frozen --all-extras` + `uv run pytest -q --tb=short`) matching
+  `requires-python = ">=3.11"` — it was 3.13-only.
+- **Doc-truth job** (`scripts/check_docs_truth.py`): four gates — a **counts gate** (every live doc's
+  best cited "tests passing" — README, CLAUDE, ROADMAP status marker, STATUS max-rule — is ≥ the last
+  published suite total, 2352 from Inc 180, so doc-vs-test drift can no longer silently fall below a
+  published number), **decision-ref integrity** (imports and runs the F1 checker, whitelists intact),
+  **SYSTEM_TODAY symbol spot-checks** (every inline backticked name resolves: a `…py`/`…md` ref exists
+  at its path, and each dotted word segment of an identifier is a whole-word hit in `src/`, including
+  the browser asset; multi-line fenced content is prose, not tokens — the doc backticks only what
+  exists), and the **HISTORICAL manifest** (INDEX.md is the single machine-readable list: marked rows
+  must exist and carry a HISTORICAL banner, banner files must be marked, and the manifest equals the
+  F1 whitelist; `audits/` is self-describing as in F1). `--selftest` covers the clean fixture plus a
+  dropped count, a dangling symbol, and an orphan banner.
+- **Broad-except audit** (`scripts/check_broad_excepts.py`): the tree had 49 `except Exception` + 8
+  `suppress(Exception)` (no bare `except:`, none `BaseException`). Classified every site; narrowed two
+  mail-source login-cleanup sites to typed catches (`except (OSError, imaplib.IMAP4.error)` for IMAP,
+  `except OSError` for SMTP, both re-raising) → **47 `except Exception` + 7 `suppress`, all
+  non-silent, zero in `executive/`, only three in `domain/`** (provider/tool protocol boundaries with
+  honest outcomes). The audit is **ordinal-keyed** (file + position, drift-safe against line shifts),
+  admits the policies `outcome`/`degrade`/`reraise`/`cleanup`/`report`, **rejects any silent site**, and
+  guards both directions (no unlisted source site, no stale audit entry). `rg "except Exception" src` is
+  now an audited count, not a drift.
+- **Swallow-regression test** (`tests/test_executive_swallow.py`): pins the boundary at
+  `_conversation.py:269` — a reasoner crash (Increment-153 seam, `jarvis.reason`) surfaces as a loud
+  `provider_error` (401 → "authorization failed", speak=True, never the calm default, never `""`); the
+  whole `_say_core` boundary does the same for any exception; a non-provider `RuntimeError` in the same
+  path is still reported ("…language model (RuntimeError)…"); the streamed boundary ends in exactly one
+  `done` event; and Increment 157's refusal guardrail stays `""` — crash is loud, refusal is silent,
+  both honest, distinct signals.
+- **INDEX.md HISTORICAL manifest**: now marks all 10 HISTORICAL files (was 3); the table, the file
+  banners, and the F1 whitelist are exactly consistent both ways.
+- **Tests** (+12): the six swallow tests above + `tests/test_f7_checkers.py` (F1-wrapper pattern)
+  running both Increment-181 checkers live and `--selftest`.
+- **Docs**: this entry; suite citations raised to the new total in README, CLAUDE, and the ROADMAP
+  status note; `SYSTEM_TODAY.md` header marker → Increment 181; the F7 paragraph in CLAUDE.md.
+
+Full suite: **2362 passed, 3 skipped** (+12); ruff clean; **pyright strict 0**; decision-ref check
+clean; doc-truth check clean; broad-except audit clean (54 audited sites — 47 `except Exception`, all
+non-silent, no drift).
+Acceptance F7 — `uv sync --frozen` green (verified here on 3.14; CI runs the 3.11/3.12/3.13 matrix),
+the doc-truth job checks counts / F1 decision-refs / SYSTEM_TODAY symbols / HISTORICAL manifest and both
+new checkers pass their `--selftest`, and the exception-audit list is committed with the `rg "except
+Exception" src` count exactly matching it — **all pass, not tests only**.
 
 ---
