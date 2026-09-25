@@ -89,8 +89,9 @@ the weakest `EvidenceSource.INFERENCE` (0.2) so an unconfirmed answer is held fa
 via `confirm()` (learning loop, Increment 110). Since Increment 138 the reasoner receives the short-term
 recent turns (`ConversationContext`) in **both** the conversational (`say`/`reason`) and episode
 (`think(…, conversation=…)` → `executive run` → `_reason_into`) paths; a session `ReasoningSpan`
-(Increment 145) carries the reasoning threads across turns with a deterministic lifecycle (model proposes
-content only). `Jarvis.reason_stream` records the span only on a completed stream.
+  (Increment 145) carries the reasoning threads across turns with a deterministic lifecycle (model proposes
+  content only). Since the server-side spoken turn (Increment 180) a live-voice session rides that same
+  span exactly like typing. `Jarvis.reason_stream` records the span only on a completed stream.
 
 **Conversation vs long-term memory**: `MemoryKind.CONVERSATION` turns are surface-only candidates —
 matched lexically, never recited as answers; long-term recall (beliefs, episodes, semantic patterns,
@@ -168,11 +169,16 @@ auto-scout in the reflective cycle.
 Edge seams (domain protocol → infrastructure adapter, injectable io/net, offline default):
 web internet (`ExternalSource`/Agent-Reach), deep research (`ResearchSource`/SearXNG), blind model
 comparison (`ModelComparator`), tool registry + policy (`ToolRegistry`), notes (`NotesStore`), mail
-(`MailBox`/real IMAP-SMTP), calendar (`CalendarStore`/local + Google), tasks (`TaskScheduler`),
-agent delegation (`TaskAgent`), speech perception (`SpeechPerceptionSource`), and files/documents
+(`MailBox`/real IMAP-SMTP, per-account folders + `unread:` list since Inc 178), calendar (`CalendarStore`/
+local + Google, plus a one-way CalDAV/ICS pull since Inc 177), tasks (`TaskScheduler`), agent delegation
+(`TaskAgent`), speech perception (`SpeechPerceptionSource`: opt-in live STT backer — F5/Increment 176
+streaming partials + VAD, and a one-call server-side spoken turn, Increment 180), and files/documents
 (`DocumentStore` over bytes + `LocalDocumentStore`, flat name-keyed; `JARVIS_PROJECT_ROOTS` feeds the
 `FileSystemTool` `project:` roots as a tool edge). Material actions can be
-delegated to an edge agent behind these seams, never cognition (revised D1).
+delegated to an edge agent behind these seams, never cognition (revised D1); since Increment 179 the
+offline instruction agent also runs named *decided-scripts* (`DecidedScript` +
+`compile_charitable_instruction`: `tool key="value"` lines, only local reversible acts compiled, zero
+free-text LLM needed — destructive/external steps still refuse at the gate).
 
 ### Command Center
 
@@ -183,7 +189,10 @@ face/sphere, and the capability/tool panels. Python remains the cognitive core.
 commands: `say` (with streaming + reasoning panel), `explain`, `reflect`, `wonder`, `introspect`,
 `perceiver` (switch provider/model/key), `capability` (notice/list/acquire/reject), `tool` (list/run),
 `external` (read/search web), `research`, `compare`, `documents` (list/read/save/remove/search), plus the
-notes/mail/calendar/tasks delegation.
+notes/mail/calendar/tasks delegation (`calendar sync` pulls a CalDAV/ICS feed; `mail folders` and `mail
+list unread` switch per-account mailboxes). The `speech` snapshot block self-describes the ear
+(`provider`/`model`/`live`/`streaming`/endpoints), so the console picks the right mic path — including
+the one-call spoken turn endpoint (`/api/speech/turn`, Increment 180).
 `_say` routes on intent first (Increment 114): questions never touch perception/beliefs; since
 Increment 167 a STATEMENT intent (an everyday ≥3-word non-question sentence) is stored as
 `USER_STATEMENT` evidence through `_remember_statement` and persisted (companion channel when

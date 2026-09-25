@@ -5,6 +5,13 @@ half-wired service the audits found, so a fresh re-audit one month from now find
 same failures**. Each phase ends with a mechanically checkable acceptance gate. Nothing here removes
 an architectural decision — the D-boundaries below are provisions, not permissions to cross them.
 
+**Status (2026-09-24): phases F1–F6 are shipped** — F1 (Increment 172), F2 (173), F3 (174), F4 (175),
+F5 (176), F6 (Increments 177–180: CalDAV/ICS one-way calendar sync, per-account mailbox UI with folders
++ unread, the offline decided-script charitable executor, and the server-side spoken turn riding the
+session `ReasoningSpan`). Remaining: **F7** (reproducibility: lockfile, 3-python CI matrix, doc-truth
+job, broad-`except` audit) and **F8** (final gates + re-audit checklist). Suite at the F6 close:
+**2352 passed, 3 skipped**; ruff clean; pyright strict 0; decision-ref check clean.
+
 ## How this is written
 
 - **Tiers.** F0–F8. F0–F3 fix correctness/consistency (what a re-audit flags first); F4–F6 deepen

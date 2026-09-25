@@ -314,11 +314,11 @@ compare language models            ModelComparator                      Registry
 reason with a language model       Reasoner                             LlmReasoner / SilentReasoner
 recall by meaning                  MemoryRetriever                      lexical `relatedness` scorer (Inc 168) + EmbeddingMemoryRetriever (opt-in)
 manage notes                       NotesStore                           LocalNotesStore
-send/read email                    MailBox                              IMAPSMTPMailBox
-manage calendar                    CalendarStore                        LocalCalendarStore + Google
+send/read email                    MailBox                              IMAPSMTPMailBox (per-account folders + unread, Inc 178)
+manage calendar                    CalendarStore                        LocalCalendarStore + Google + one-way CalDAV/ICS pull (Inc 177)
 manage tasks                       TaskScheduler                        LocalTaskScheduler
 delegate to an agent               TaskAgent                            ToolRegistryTaskAgent / PydanticAiTaskAgent (opt-in)
-perceive speech                    SpeechPerceptionSource               browser STT (default) / Whisper-compatible ear (opt-in, JARVIS_STT_*; live streaming partials or VAD silence segmentation, F5)
+perceive speech                    SpeechPerceptionSource               browser STT (default) / Whisper-compatible ear (opt-in, JARVIS_STT_*; live streaming partials or VAD silence segmentation, F5; server-side spoken turn `/api/speech/turn`, Inc 180)
 execute tools                      ToolRegistry + ToolPolicy            FileSystemTool / EchoTool
 work with files                    DocumentStore                        LocalDocumentStore
 edit project files                 ToolRegistry (project: roots)        FileSystemTool
@@ -498,6 +498,27 @@ executor behind the `TaskAgent` seam: it runs decided multi-step tool loops, bak
 pydantic's `prepare` hook, refuses blocking instructions, recovers from failed steps, and falls back to
 the tool registry on provider failure. `build_task_agent` only selects it when the agent root is set, the
 provider is configured as `pydantic` with a model, and the package is installed.
+
+### Edge depth behind the seams (roadmap F6, Increments 177-180)
+
+The general-purpose edges were deepened without new abstractions — each stays a domain Protocol with an
+offline-tested infra adapter:
+
+- **Calendar** (Inc 177): `CalendarSyncManager` / `parse_ics` is a one-way pull of a remote CalDAV/ICS
+  feed into SQLite behind `CalendarStore` (`calendar sync`); when unwired the state is honest ("no
+  calendar sync").
+- **Mail** (Inc 178): `IMAPSMTPMailBox.list_folders()` + `unread:` narrowing on `list_messages` give
+  per-account mailboxes (`mail folders`, `mail list unread` through a console folder selector).
+- **Instruction execution** (Inc 179): a named **decided-script** grammar — `tool key="value"` lines,
+  quote-aware (shlex), `#` comments — parsed by `split_script_line`/`script_arguments` into a
+  `DecidedScript`; `compile_charitable_instruction` compiles only locally reversible envelopes
+  (`filesystem` read/write, `echo`) with zero LLM, so a material ACT speaks at the `approved=False`
+  instruction agent deterministically (`ToolRegistryTaskAgent`) while destructive/external steps refuse
+  at the gate. Narration order preserved: lexer, then unknown tool, then malformed arguments.
+- **Speech turn** (Inc 180): `POST /api/speech/turn` runs a live ear's final transcript through the same
+  `say` pipeline server-side in one call, so a voice session rides the session `ReasoningSpan` exactly
+  like typing (honest 400 when no ear is configured; `turn_endpoint` advertised in the `speech` snapshot
+  block and consumed by the console).
 
 ## Recall / reasoning / consult boundary
 

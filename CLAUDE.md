@@ -177,6 +177,20 @@ curiosity can return to it; `is_question_shape` is a public alias and the write 
 The source of truth for how Jarvis works *today* is `docs/claude/SYSTEM_TODAY.md`; for detailed
 architecture, `docs/claude/ARCHITECTURE.md`.
 
+The edge deepening is complete (roadmap F6, Increments 177-180, see `STATUS.md`): CalDAV/ICS **one-way
+calendar sync** (177: `CalendarSyncer` seam + `parse_ics` pulls a remote calendar into SQLite behind the
+`CalendarStore` Protocol, `calendar sync` command, honest "no calendar sync" state when unwired),
+**per-account mailbox UI** (178: `MailBox.list_folders()` + `unread:` on `list_messages`, `mail folders`
+and `mail list unread` through a folder selector in the console), an **offline charitable executor**
+(179: `DecidedScript` — the named `tool key="value"` script grammar — plus `compile_charitable_instruction`
+compiling the small ES/EN write/read/echo envelopes into a decided-script with zero LLM, so material
+instructions run through the `approved=False` instruction agent deterministically; destructive/external
+steps still refuse at the gate), and a **server-side spoken turn** (180: `POST /api/speech/turn` runs the
+live-ear final transcript through the same `say` pipeline in one call, so a live-voice session rides the
+session `ReasoningSpan` exactly like typing; the `speech` snapshot block advertises `turn_endpoint` and
+the console reads it). Roadmap phases **F1-F6 are done; the next phase is F7** (lockfile, 3-python CI
+matrix, doc-truth job, broad-`except` audit).
+
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner
 seams shipped in Increment 153 and stays

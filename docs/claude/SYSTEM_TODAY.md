@@ -1,6 +1,6 @@
 # How Jarvis Works Today
 
-**Source of truth for the running system** (currently Increment 175). Read this before
+**Source of truth for the running system** (currently Increment 180 — roadmap F6 shipped). Read this before
 touching memory/cognition/recall code; read `ARCHITECTURE.md` for the detailed layer map and
 `STATUS.md` only for history. Marked `[EXPERIMENTAL]` are implemented, tested, but not the
 runtime default.
@@ -21,7 +21,9 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
    ├─ statement → _remember_statement: ≥3-word non-question     │
    │   → USER_STATEMENT evidence (weight 1.0) → jarvis.think    │  ← statements are MEMORY (Inc 167)
    ├─ revision cue → companion.revise_companion / Belief.revise │  ← a changed mind is first-class (Inc 169)
-   └─ directive  → ConversationIntent.ACT → Jarvis.execute      │  ← earned agency, sandboxed, approved=False (Inc 160)
+   └─ directive  → ConversationIntent.ACT → charitable compiler │  ← earned agency, sandboxed, approved=False (Inc 160);
+       │            → Jarvis.execute: decided-script when        │    a charitable envelope compiles first (Inc 179)
+       │              compilable, else the offline agent          │
                                                                ▼
    ┌──────────────────────────────────────────────────────────────────────────┐
    │ EXECUTIVE (ExecutiveController.run)  — the thin decider                   │
@@ -29,6 +31,7 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
    │            (bilingual CONCEPT_MAP; SEMANTIC is a tie-break; turns surface-only)
    │   consult  KnowledgeSource: one deliberate edge visit (research/web/graph)
    │   reason   ReasoningSpan across turns (Inc 145); Reasoner proposes, never decides
+   │            a live spoken turn rides the same span (Inc 180)
    │            strategy selected per query from live, revisable strategy_stats (Inc 166)
    │   graph    relation-aware traversal when a stored relation cue matches (Inc 166)
    │   topic    canonical identity: episodes group by concept signature, never raw trigger (Inc 163)
@@ -75,7 +78,17 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
   snapshot block reports `streaming` honestly; a streaming ear gets a live preview
   (`POST /api/speech/stream?final=0`, closed with `final=1`), a non-streaming ear is auto-segmented
   in-browser (AnalyserNode silence ≥ `VAD_SILENCE_HOLD_MS` closes a segment and reopens) — long speech
-  needs no press-hold-release. Web Speech stays the offline default.
+  needs no press-hold-release. Web Speech stays the offline default. A live ear's final transcript
+   is also a **server-side spoken turn** (`POST /api/speech/turn`, Inc 180): the CLI posts the
+   transcript once and it runs the same `say` pipeline, so the voice session rides the session
+   `ReasoningSpan` exactly like typing. The snapshot advertises `turn_endpoint` and the console uses it.
+- **Edge depth behind every seam** (roadmap F6, Inc 177-179): calendar draws a remote CalDAV/ICS feed
+  one-way into SQLite behind `CalendarStore` (`calendar sync`, honest "no calendar sync" state when
+  unwired); mail lists per-account folders and `unread:` messages (`mail folders` / `mail list unread`);
+  and a material ACT envelope compiles to a named **decided-script** (`tool key="value"` grammar) via
+  `compile_charitable_instruction` — write/read/echo envelopes run deterministically through the
+  `approved=False` instruction agent with zero LLM, while destructive/external steps still refuse at the
+  gate.
 - **Belief identity is canonical-topic-anchored** (Inc 163): `topic_resolution.py`, empty signatures
   never fuse, representative is display-only.
 - **Consolidation is COMPANION-only and neutral-evidence-only** (Inc 164): valence never invented.

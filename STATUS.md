@@ -2448,16 +2448,18 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (see `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`)
 
-**Increments 166–176 are committed and pushed.** Roadmap phases **F1–F5 are done**:
+**Increments 166–180 are committed and pushed.** Roadmap phases **F1–F6 are done**:
 F1 (single decision authority, Inc 172), F2 (scheduled honest forgetting/decay, Inc 173),
-F3 (open-question auto-retirement, Inc 174), F4 (passage-level document search, Inc 175), and
+F3 (open-question auto-retirement, Inc 174), F4 (passage-level document search, Inc 175),
 F5 (**live voice streaming + VAD**, Inc 176: the `SpeechPerceptionSource` streaming contract —
 `can_stream_partials` + `stream_transcribe(chunks) -> partials`, served by `POST /api/speech/stream`
 with an honest `streaming` snapshot flag — plus two console paths: live partial preview when the ear
-streams, AnalyserNode silence auto-segmentation when it does not). Start at phase **F6** (edge
-deepening: CalDAV/ICS sync, per-account mailbox UI, decided-script executor, ReasoningSpan continuity
-across a live-voice session), then **F7** (lockfile, 3-python CI matrix, doc-truth job, broad-`except`
-audit), **F8** (final gates + re-audit checklist).
+streams, AnalyserNode silence auto-segmentation when it does not), and **F6** (edge deepening,
+Incs 177–180: CalDAV/ICS one-way calendar sync; the per-account mailbox UI with folders + unread; the
+decided-script charitable executor so the *offline* instruction agent runs scripted multi-step acts
+without a free-text LLM; and the server-side spoken turn riding the session ReasoningSpan). Start at
+phase **F7** (lockfile, 3-python CI matrix, doc-truth job, broad-`except` audit), then **F8** (final
+gates + re-audit checklist).
 
 Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable
 via constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in
@@ -2474,16 +2476,19 @@ deliberations charging attention, Increment 155, + decay weighting, Increment 11
 directions:
 
 - **Capability depth beyond the seams:** the calendar/tasks/notes/mail/speech/agent edges exist as seams +
-  adapters; each can be deepened (CalDAV sync, scheduling execution, streaming/VAD STT, richer delegation
-  scopes). Each must stay behind its domain Protocol (D7), earned (D29), and offline-testable (D8).
+  adapters; F6 deepened the calendar (CalDAV/ICS pull), mail (per-account folders + unread), the offline
+  instruction executor (decided scripts, Inc 179) and speech (a one-call server-side spoken turn riding the
+  session `ReasoningSpan`, Inc 180); each seam can still deepen further (scheduling execution, richer
+  delegation scopes). Each must stay behind its domain Protocol (D7), earned (D29), and offline-testable (D8).
 - **Memory-line depth:** the semantic layer is deliberately bounded (COMPANION-only consolidation with
   neutral evidence, D23; vocabulary-driven meaning recall, D18) — extending it means *vocabulary + policy
-  decisions*, never an LLM shortcut. Decay/forgetting exist as services; wiring them into a running system
-  that stays honest under partial knowledge is a design task, not a code one. Evidence-request writes
-  (Increment 170) open an honest "return to the unanswered question" loop whose scheduling is still open.
+  decisions*, never an LLM shortcut. Decay/forgetting are scheduled in the running system now (Increment
+  173: `ForgettingCandidates` on the rest cadence + root-wired `DecayingWeightingPolicy`), and the
+  evidence-request writes (Increment 170) land in the unresolved store the open-question loop (Increment
+  174) returns to.
 - **Track C/D leftovers (opportunistic).** More §15 energy modelling (energy recovery
   over time); count/recency weighting in `TemporalStability`
-  beyond the opt-in decay policy; pin ruff/pyright in a lockfile.
+  beyond the opt-in decay policy; pin ruff/pyright in a lockfile (roadmap F7).
 
 *Recommendation: the correct-memory foundation is now deep (Increments 166-170). The highest-value
 remaining goals are the things that turn good memory into better companionship: a scheduled, honest
@@ -2572,26 +2577,10 @@ capability-level (no new abstractions).*
   mechanism.
 - Consolidation/abstraction is deliberately bound: COMPANION-origin episodes only, neutral evidence
   only (Increment 164) — the semantic layer cannot build valence out of nothing.
-- Decay/forgetting are implemented and tested but **nothing schedules them in the running system**
-  (`DecayingWeightingPolicy`, `forget()`, `identify_forgetting_candidates` are opt-in services).
-- `ReasoningSpan` is conversation-scoped (Increment 145); the *episode* path rides it too (Increment
-  166 provenance commits: `think()` supplies the span to episode reasoning) but a live voice session
-  extension stays open.
 - Documents are folder-aware (Increment 142), carry recorded ownership (Increment 148), are
   editable via the chat itself (Increment 149) and search at **passage level** (Increment 175:
   `search_passages`, deterministic sliding-window chunking with byte offsets, ranked by the same
   `relatedness` scorer — no embeddings, D18-faithful; binaries never chunked).
-- Speech has an opt-in live STT backer (`JARVIS_STT_*` → a Whisper-compatible ear, Increment 154) that
-  the console mic uses when wired (record → `POST /api/speech/transcribe`, Increment 159), and since
-  Increment 176 it is **streaming + VAD**: the seam declares `can_stream_partials` and
-  `stream_transcribe(chunks)` serves growing partials through `POST /api/speech/stream` (live preview
-  when the ear streams; AnalyserNode silence auto-segmentation when it does not — long speech needs no
-  press-hold-release). The browser Web Speech default stays for offline/unconfigured setups. A material
-  instruction *executes* when an agent is wired and declines honestly otherwise (Increment 160:
-  earned agency, protocol-level gate only); the offline charitable executor needs the decided-script
-  format, so a live provider is what turns free text into a multi-step act.
-- Notes/tasks/calendar local adapters now persist to SQLite in their own root (`jarvis.db`, Increment 151) but
-  have no CalDAV/ICS sync; email has a real IMAP/SMTP adapter but no per-account UI management.
 - NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
 
 > **Every bullet above now maps to a scheduled phase** in `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`
