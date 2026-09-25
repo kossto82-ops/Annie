@@ -14,6 +14,7 @@ from jarvis.domain.conversation.intent import (
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.enums.memory_kind import MemoryKind
 from jarvis.domain.services.abstraction import relatedness
+from jarvis.domain.services.charitable_instruction import compile_charitable_instruction
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
@@ -481,7 +482,11 @@ def _act_reply(jarvis: Jarvis, text: str) -> Reply:
     The companion's words authorize protocol-level acts only: the executor runs a
     sandboxed registry without approval, so locally reversible acts happen and
     external/destructive ones refuse through the gate. Whatever the outcome, the
-    reply narrates *what actually happened* -- never a fabricated success.
+    reply narrates *what actually happened* -- never a fabricated success. When
+    the instruction matches a charitable envelope, the core compiles it into a
+    decided-script first, so the *offline* executor can run scripted multi-step
+    acts without a free-text LLM (roadmap F6c); ambiguous free text keeps going
+    to the executor as-is (a live provider turns it into a script).
     """
     if jarvis.instruction_agent is None:
         unavailable = (
@@ -492,7 +497,8 @@ def _act_reply(jarvis: Jarvis, text: str) -> Reply:
             "to execute it right now (JARVIS_AGENT_ROOT)."
         )
         return _plain(unavailable, "act")
-    outcome = jarvis.execute(text)
+    script = compile_charitable_instruction(text)
+    outcome = jarvis.execute(script if script is not None else text)
     if outcome.success:
         told = (
             f"Listo — {outcome.summary}."

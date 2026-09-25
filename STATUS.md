@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-24 (Increment 178 — per-account mailbox UI: folders + unread, roadmap F6b)
+Last updated: 2026-09-24 (Increment 179 — decided-script runner + charitable compiler, roadmap F6c)
 
 ---
 
@@ -3394,5 +3394,53 @@ Acceptance F6b — `rg "list_folders"` hits `src/` (protocol, `IMAPSMTPMailBox`,
 `Jarvis.list_mail_folders`), `mail folders` is reachable from the console and answers a real folder list
 when wired / an honest "No mail capability" when not, and the unread filter maps to an IMAP `UNSEEN`
 search: **all pass, not tests only**.
+
+### Increment 179 — Decided-script runner + charitable compiler (roadmap F6c, 2026-09-24)
+
+Third edge-deepening item of roadmap F6. Closes the material-ACT honest gap (this log, item 2590-2592): a
+material instruction already executes when an agent is wired (Increment 160), but "the offline charitable
+executor needs the decided-script format, so a live provider is what turns free text into a multi-step
+act". The decided-script format is now **first-class and deterministic**: the offline executor's scripted
+multi-step acts no longer need a free-text LLM, and the grammar is a named, validated, offline-tested
+shape. Deciding *what* a charitable instruction means stays in the core; the edge only runs scripts (D6).
+
+- **Format (domain, D8)**: `src/jarvis/domain/value_objects/decided_script.py` — `DecidedScript` is the
+  documented grammar (`tool key="value"` per line, quote-aware, `#` comments and blanks skipped),
+  `DecidedStep` + `parse`/`as_call`/`unknown_tools` validate shape **without executing**; malformed lines
+  are skipped charitably and reported in `errors` (honest decline), never fabricated. `split_script_line`/
+  `script_arguments` are the grammar's single source of truth.
+- **Charitable compiler (deterministic, no LLM)**: `src/jarvis/domain/services/charitable_instruction.py`
+  — `compile_charitable_instruction(text)` compiles the small unambiguous instruction envelopes the core
+  already understands into a decided-script: write/create-a-file (`escribe un archivo X con Y` / `write a
+  file X with Y`, filename-like space-free path + optional content), read-a-file (`lee el archivo X` /
+  `read the file X`), echo (`dime X` / `say X`). Message shape is opaque: a filename-less or ambiguous
+  request compiles to `None` and honestly declines ("escribe un archivo que diga hola" and "escribe un
+  archivo con contenido X" stay raw). It **only ever emits locally reversible sandbox acts**
+  (`filesystem` read/write, `echo`) — destructive/external steps are never compiled; an explicit user
+  script containing one still hits the policy gate.
+- **Runner**: `ToolRegistryTaskAgent` now parses through the decided-script grammar (same observable
+  order — unknown tool before malformed args, `approved` gate unchanged) and, when the *offline* executor
+  (at `approved=False`) could not run anything, its failure narration honestly names the format (`'tool
+  key="value"'` lines, one per step) — closing the gap sentence that said the executor "needs the
+  decided-script format".
+- **Conversational wire** (`interface/_conversation.py`): the ACT reply compiles a charitable envelope to
+  a decided-script before executing, so "escribe un archivo notas.txt con Hola mundo" runs through the
+  offline executor as `filesystem operation=write path="notas.txt" content="Hola mundo"` (gate at
+  `approved=False`: sandbox reads/writes run, external/destructive refuse); unmatched free text still
+  reaches a live provider as-is.
+- **Tests** (+23): `tests/test_decided_script.py` — grammar round-trips (multi-line, quote-aware,
+  escaped quotes), honest malformed-line reporting, blank/comment handling, `unknown_tools`, the compiler
+  (ES/EN write/read/echo envelopes, opaque requests → `None`, destructive/external never compiled, and a
+  compile→parse round-trip); `tests/test_task_agent_source.py` — the offline executor runs a compiled
+  write over a real `FileSystemTool` in `tmp_path` and free-text failure names the format;
+  `tests/test_conversation.py` — the ACT path hands a charitable envelope to the executor as a
+  decided-script. Existing narration contracts (unknown-tool-before-malformed) preserved.
+- **Docs**: this entry; full close-out (honest-gap deletion + the other docs) lands at the end of F6.
+
+Full suite: **2343 passed, 3 skipped** (+23); ruff clean; **pyright strict 0**; decision-ref check clean.
+Acceptance F6c — `rg "compile_charitable_instruction"` hits `src/` (compiler + `_act_reply` usage),
+`rg "DecidedScript"` hits `src/` (the named format + its parser), the ACT path runs a compiled envelope
+through the offline `approved=False` executor while an explicit destructive/external script step refuses
+at the gate, and the offline decline names the format: **all pass, not tests only**.
 
 ---

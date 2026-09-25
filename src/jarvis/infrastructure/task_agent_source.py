@@ -37,11 +37,14 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
-import shlex
 from typing import Any
 
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.tools.tool_registry import ToolRegistry
+from jarvis.domain.value_objects.decided_script import (
+    script_arguments,
+    split_script_line,
+)
 from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.infrastructure.provider_settings import ProviderSettings
 
@@ -49,8 +52,9 @@ from jarvis.infrastructure.provider_settings import ProviderSettings
 class ToolRegistryTaskAgent:
     """Runs a decided multi-line task script through a :class:`ToolRegistry`.
 
-    Each non-empty line is a tool-call ``name key=value ...`` (quote-aware).
-    Unknown tool names, unparseable lines, or tools the policy refuses even under
+    Each non-empty line is a tool-call ``name key=value ...`` (quote-aware; see
+    :class:`~jarvis.domain.value_objects.decided_script.DecidedScript`). Unknown
+    tool names, unparseable lines, or tools the policy refuses even under
     approval yield a truthful failed :class:`TaskResult` -- never a fabricated
     success. A task that performs no successful tool call is not a success.
     """
@@ -67,9 +71,9 @@ class ToolRegistryTaskAgent:
         failures: list[str] = []
         for raw_line in task.splitlines():
             line = raw_line.strip()
-            if not line:
+            if not line or line.startswith("#"):
                 continue
-            tokens, error = self._split(line)
+            tokens, error = split_script_line(line)
             if error is not None:
                 failures.append(error)
                 continue
@@ -77,7 +81,7 @@ class ToolRegistryTaskAgent:
             if self._registry.spec(tool_name) is None:
                 failures.append(f"unknown tool: {tool_name}")
                 continue
-            arguments, error = self._arguments(tokens[1:], line)
+            arguments, error = script_arguments(tokens[1:], line)
             if error is not None:
                 failures.append(error)
                 continue
@@ -88,6 +92,11 @@ class ToolRegistryTaskAgent:
                 failures.append(f"{tool_name}: {result.error}")
         if failures:
             usage = "; ".join(summary_lines) if summary_lines else "no tool calls ran"
+            if self._approved is False and not summary_lines:
+                usage += (
+                    "; the offline executor runs only a decided-script of "
+                    "'tool key=\"value\"' lines, one per step"
+                )
             return TaskResult(
                 task=task,
                 summary=usage + " | failed: " + ", ".join(failures),
@@ -96,32 +105,6 @@ class ToolRegistryTaskAgent:
         if not summary_lines:
             return TaskResult(task=task, summary="no tool calls ran", success=False)
         return TaskResult(task=task, summary="; ".join(summary_lines), success=True)
-
-    # -- Parsing --------------------------------------------------------------
-
-    @staticmethod
-    def _split(line: str) -> tuple[list[str], str | None]:
-        """Split a line into quote-aware tokens; an error when it is unparseable."""
-        try:
-            tokens = shlex.split(line, posix=True)
-        except ValueError as exc:
-            return [], f"cannot parse {line!r}: {exc}"
-        if not tokens:
-            return [], "empty line"
-        return tokens, None
-
-    @staticmethod
-    def _arguments(tokens: list[str], line: str) -> tuple[dict[str, str], str | None]:
-        """Turn ``key=value`` tokens into an argument dict, one ``=`` per token."""
-        arguments: dict[str, str] = {}
-        for token in tokens:
-            if "=" not in token:
-                return {}, f"malformed argument {token!r} in {line!r}"
-            key, _, value = token.partition("=")
-            if not key:
-                return {}, f"malformed argument {token!r} in {line!r}"
-            arguments[key] = value
-        return arguments, None
 
 
 def build_sandboxed_registry() -> ToolRegistry | None:

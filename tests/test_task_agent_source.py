@@ -14,6 +14,7 @@ import pytest
 
 from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
+from jarvis.domain.services.charitable_instruction import compile_charitable_instruction
 from jarvis.domain.tools.tool_registry import ToolRegistry
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.domain.value_objects.task_result import TaskResult
@@ -24,6 +25,7 @@ from jarvis.infrastructure.capability_registry import (
     build_default_registry,
 )
 from jarvis.infrastructure.echo_tool import EchoTool
+from jarvis.infrastructure.filesystem_tool import FileSystemTool
 from jarvis.infrastructure.provider_settings import ProviderSettings
 from jarvis.infrastructure.task_agent_source import (
     ToolRegistryTaskAgent,
@@ -211,3 +213,31 @@ class TestBuildInstructionAgent:
         result = agent.run_task("external x=1")
         assert result.success
         assert "external ok" in result.summary
+
+    def test_offline_executor_runs_a_compiled_charitable_write(
+        self, tmp_path: Path
+    ) -> None:
+        registry = ToolRegistry()
+        registry.register(FileSystemTool(tmp_path))
+        agent = ToolRegistryTaskAgent(registry, approved=False)
+        script = compile_charitable_instruction(
+            "escribe un archivo notas.txt con Hola mundo"
+        )
+        assert script is not None
+        result = agent.run_task(script)
+        assert result.success
+        assert "filesystem ok" in result.summary
+        assert (tmp_path / "notas.txt").read_text(encoding="utf-8") == "Hola mundo"
+
+    def test_offline_free_text_failure_points_at_the_decided_script_format(
+        self,
+    ) -> None:
+        registry = ToolRegistry()
+        registry.register(EchoTool())
+        agent = ToolRegistryTaskAgent(registry, approved=False)
+        result = agent.run_task(
+            "escribe un archivo con el plan de hoy por favor"
+        )
+        assert not result.success
+        assert "decided-script" in result.summary
+        assert "'tool key=\"value\"'" in result.summary

@@ -150,6 +150,18 @@ class TestMaterialInstructions:
         assert "listo" in _reply_text(result)
         assert executor.runs == ["escribe un archivo que diga hola"]
 
+    def test_a_charitable_envelope_reaches_the_executor_as_a_decided_script(
+        self,
+    ) -> None:
+        executor = _FakeExecutor()
+        jarvis = Jarvis(instruction_agent=executor)  # type: ignore[arg-type]
+        result = _reply(jarvis, "escribe un archivo notas.txt con Hola mundo")
+        assert result["stance"] == "act"
+        assert "listo" in _reply_text(result)
+        assert executor.runs == [
+            'filesystem operation=write path="notas.txt" content="Hola mundo"'
+        ]
+
     def test_a_failed_act_is_reported_honestly(self) -> None:
         jarvis = Jarvis(instruction_agent=_FakeExecutor())  # type: ignore[arg-type]
         result = _reply(jarvis, "ejecuta la tarea que falla")
