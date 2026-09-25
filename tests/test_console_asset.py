@@ -193,6 +193,27 @@ def test_f5_console_wires_voice_streaming_and_silence_segmentation() -> None:
         "in-browser and server mic paths must still not race"
 
 
+def test_f6d_console_runs_spoken_turns_server_side() -> None:
+    """Tripwire: a live-ear final transcript becomes ONE server-side say turn.
+
+    The speech block advertises ``turn_endpoint`` (``/api/speech/turn``), and the
+    ear's final text is POSTed there as JSON instead of the browser doing a second
+    ``converse(text)`` round-trip -- so the live-voice session rides the session
+    ReasoningSpan server-side exactly like typing does (roadmap F6d).
+    """
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "speechTurn",
+        "/api/speech/turn",
+        "sp.turn_endpoint",
+        "JSON.stringify({ text })",
+        "renderReasoning(data.provenance, data.trace)",
+    ):
+        assert marker in html, f"F6d spoken-turn wiring lost its {marker!r}"
+    assert "converse(text.trim());" not in html, \
+        "the live ear must not do the old transcribe-then-converse round-trip"
+
+
 def test_the_cognition_thresholds_are_tunable_from_the_settings_panel() -> None:
     html = _CONSOLE.read_text(encoding="utf-8")
     # The thresholds card lives in the settings drawer and drives the tunables

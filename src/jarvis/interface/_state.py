@@ -142,7 +142,10 @@ def speech_block(jarvis: Jarvis) -> Reply:
     Speech path. ``streaming`` reports the same ear's live-partial capability (F5):
     when True the console posts growing audio to ``stream_endpoint`` for realtime
     preview; when False it segments on silence with the browser's AnalyserNode.
-    ``endpoint`` is where a live console posts a finished recording.
+    ``endpoint`` is where a live console posts a finished recording and
+    ``turn_endpoint`` the one-call spoken turn the console runs the final transcript
+    through (roadmap F6d): it rides the same say pipeline as typing, so a live-voice
+    session keeps the session ReasoningSpan server-side.
     """
     source = jarvis.speech_perception
     if source is None:
@@ -153,6 +156,7 @@ def speech_block(jarvis: Jarvis) -> Reply:
             "streaming": False,
             "endpoint": "/api/speech/transcribe",
             "stream_endpoint": "/api/speech/stream",
+            "turn_endpoint": "/api/speech/turn",
         }
     return {
         "provider": source.provider,
@@ -161,6 +165,7 @@ def speech_block(jarvis: Jarvis) -> Reply:
         "streaming": source.can_stream_partials,
         "endpoint": "/api/speech/transcribe",
         "stream_endpoint": "/api/speech/stream",
+        "turn_endpoint": "/api/speech/turn",
     }
 
 

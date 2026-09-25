@@ -215,14 +215,40 @@ def _stream_transcribe(jarvis: Jarvis, audio: bytes, *, final: bool) -> Response
     )
 
 
+def _speech_turn(jarvis: Jarvis, body: bytes) -> Response:
+    """Run one full spoken turn server-side: transcript text in, say-turn reply out.
+
+    The ear already turned audio into ``text`` (``/api/speech/transcribe`` or the
+    ``final=1`` close of ``/api/speech/stream``); this endpoint runs the *same*
+    conversation pipeline as a typed turn through :func:`handle` (``say``) in one
+    server call, so the live-voice session rides the session ReasoningSpan exactly
+    like typing does (roadmap F6d) and the one round-trip carries a fresh snapshot.
+    A missing ear is a clean 400 (configuration, not a crash); a provider failure
+    is an honest in-reply decline, never a broken request.
+    """
+    if jarvis.speech_perception is None:
+        return Response(
+            400,
+            "application/json; charset=utf-8",
+            _json({"error": "no speech capability configured; set_speech_perception"}),
+        )
+    payload = _parse(body)
+    text = str(payload.get("text", "")).strip()
+    result = handle(jarvis, "say", {"text": text})
+    return Response(200, "application/json; charset=utf-8", _json(result))
+
+
 def route(jarvis: Jarvis, method: str, path: str, body: bytes) -> Response:
     """Decide the response for one HTTP request — pure, no socket (Vision §30).
 
     Serves the console page at ``/``, the live snapshot at ``GET /api/state``, and a
     command at ``POST /api/<command>``. ``POST /api/speech/transcribe`` takes raw
-    audio bytes (not JSON) and returns the transcription. This is the whole HTTP
-    contract, testable without binding a port; :mod:`jarvis.interface.server` only
-    moves the bytes.
+    audio bytes (not JSON) and returns the transcription; ``POST /api/speech/stream``
+    serves one live-partial exchange (``?final=1`` closes a segment); and ``POST
+    /api/speech/turn`` runs the live-ear final transcript through the same conversation
+    pipeline as a typed turn, riding the session ReasoningSpan (roadmap F6d). This is
+    the whole HTTP contract, testable without binding a port;
+    :mod:`jarvis.interface.server` only moves the bytes.
     """
     clean = path.split("?", 1)[0]
     if method == "GET" and clean in ("/", "/index.html"):
@@ -232,6 +258,8 @@ def route(jarvis: Jarvis, method: str, path: str, body: bytes) -> Response:
     # console with a small page (this is a browser GET, not a JSON API call).
     if method == "GET" and clean == "/api/auth/google/callback":
         return _google_oauth_callback(jarvis, path)
+    if clean == "/api/speech/turn":
+        return _speech_turn(jarvis, body)  # live-ear final transcript -> say reply
     if clean == "/api/speech/transcribe":
         return _transcribe(jarvis, body)  # raw audio in, JSON out (live STT ear)
     if clean == "/api/speech/stream":

@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-24 (Increment 179 — decided-script runner + charitable compiler, roadmap F6c)
+Last updated: 2026-09-24 (Increment 180 — server-side spoken turn, roadmap F6d)
 
 ---
 
@@ -3442,5 +3442,47 @@ Acceptance F6c — `rg "compile_charitable_instruction"` hits `src/` (compiler +
 `rg "DecidedScript"` hits `src/` (the named format + its parser), the ACT path runs a compiled envelope
 through the offline `approved=False` executor while an explicit destructive/external script step refuses
 at the gate, and the offline decline names the format: **all pass, not tests only**.
+
+### Increment 180 — Server-side spoken turn: ReasoningSpan continuity across a live-voice session (roadmap F6d, 2026-09-24)
+
+Fourth edge-deepening item of roadmap F6, closing the reasoning honest gap (this log, item 2577-2579: "a
+live voice session extension stays open"). A live-ear console already had the seam's continuity in one
+sense — the ear's final transcript became a chat `converse(text)` — but only through *two browser
+round-trips* (transcribe, then converse), so the spoken turn was not a first-class server call and the
+"live voice session" had no server-side identity riding the session ReasoningSpan. F6d makes the spoken
+turn one server-side call through the *same* conversation pipeline as typing, so continuity is guaranteed
+inside the core, not stitched in the browser (D6).
+
+- **One-call spoken turn** (`interface/command_center.py`): `POST /api/speech/turn` takes the live-ear
+  final transcript (which `/api/speech/transcribe` or a `final=1` close of `/api/speech/stream` already
+  produced) and runs it — gated on a wired `SpeechPerceptionSource` (clean 400 with the same honest
+  "no speech capability configured; set_speech_perception" when none, and the pipeline provably never
+  runs) — through the public `handle(jarvis, "say", …)` command: the spoken turn *is* a say turn, so it
+  rides the session `ReasoningSpan` server-side exactly like typing and each reply carries a fresh
+  `state`/snapshot in the one round-trip. Empty text is a graceful ack (no span step); a failing reasoner
+  is a graceful reply, never a 500.
+- **Honest advertised contract**: the `speech` snapshot block now also publishes `turn_endpoint`
+  (`_state.py`, both the live-ear and closed-ear shapes), and the console reads it (`renderSpeech` →
+  `sp.turn_endpoint`) instead of hardcoding — matching how `endpoint`/`stream_endpoint` are advertised.
+- **Console** (`console.html`): the live-ear final text now goes through a `speechTurn(text)` that POSTs
+  the transcript to `turn_endpoint` in one call and renders the reply (bubble, doc chips, live state,
+  reasoning panel, articulated + spoken); the old transcribe-then-`converse` round-trip for live-ear
+  finals is gone. In-browser Web Speech still calls `converse` directly (it was already one path).
+- **Tests** (+9): `tests/test_speech_turn.py` — a spoken turn is a say turn server-side (reply + `state`,
+  one ACTIVE span thread at its trigger), the span carries across two spoken turns (newest ACTIVE, older
+  MOVED_ON), the span rides the *actual STT transcript* (audio → ear text → turn → thread trigger), a
+  missing ear is a clean 400 whose pipeline provably never advanced span or conversation, empty text is
+  a graceful ack without a span step, a failing reasoner never 500s, and the snapshot advertises
+  `turn_endpoint` honestly in both ear states; `tests/test_console_asset.py` — tripwire that the live ear
+  POSTs to `turn_endpoint` with JSON text and reads `sp.turn_endpoint`, and that the old
+  `converse(text.trim())` round-trip is gone. Existing speech-snapshot/stream/transcribe contracts
+  unchanged (fresh key only).
+- **Docs**: this entry; the full F6 close-out (honest-gap deletion + the other docs) is the next commit.
+
+Full suite: **2352 passed, 3 skipped** (+9); ruff clean; **pyright strict 0**; decision-ref check clean.
+Acceptance F6d — `rg "speech/turn|turn_endpoint|speechTurn"` hits `src/` (handler + snapshot +
+console), a wired live-ear console runs one vocal prompt through `/api/speech/turn` and Jarvis carries
+the session ReasoningSpan across the spoken turns, and an unwired Jarvis answers the turn with a clean
+honest "no speech capability configured" 400 — **all pass, not tests only**.
 
 ---

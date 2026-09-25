@@ -4513,10 +4513,12 @@ $("taskCancel").addEventListener("click", () => setTaskEditing(""));
 const mediaRecorderOK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 let serverEar = false;
 let serverStreaming = false;   // the wired ear streams realtime partials (F5)
+let turnEndpoint = "/api/speech/turn";  // one-call spoken turn (F6d), advertised
 function renderSpeech(s) {
   const sp = (s && s.speech) || {};
   serverEar = !!sp.live;
   serverStreaming = !!sp.streaming;
+  turnEndpoint = sp.turn_endpoint || "/api/speech/turn";
   const mic = $("mic");
   const earName = sp.provider || "browser";
   const modelTag = sp.model ? (" \u2014 " + sp.model) : "";
@@ -4585,8 +4587,40 @@ if (mediaRecorderOK) {
   let silenceFrom = null;          // ms when the current silence began (VAD)
   let tickTimer = null;            // shared VAD / live-preview clock
   const flushText = (text) => {
-    if (text && text.trim()) { showChat(); converse(text.trim()); }
+    if (text && text.trim()) { showChat(); speechTurn(text.trim()); }
     else bubble("jarvis", "Did not hear any words.");
+  };
+  /* A spoken turn is one server call: the live-ear final transcript goes through
+     /api/speech/turn, which runs the SAME conversation pipeline as a typed turn
+     (roadmap F6d), so the live-voice session rides the session ReasoningSpan
+     exactly like typing does -- one round-trip, reply + live state included. */
+  const speechTurn = async (text) => {
+    bubble("you", text);
+    thinking = true; setMood("thinking"); markNav();
+    try {
+      const res = await fetch(turnEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = (data && data.error) || "Could not finish that spoken turn.";
+        thinking = false; setMood("idle");
+        bubble("jarvis", msg);
+        return;
+      }
+      const el = bubble("jarvis", data.reply, data.confidence);
+      addDocChips(el, data.documents);
+      renderState(data.state);
+      renderReasoning(data.provenance, data.trace);
+      thinking = false; setMood("idle");
+      if (data.reply) articulate(data.reply);
+      if (data.speak) speak(data.reply);
+    } catch (e6) {
+      thinking = false; setMood("idle");
+      bubble("jarvis", "Could not finish that spoken turn: " + e6);
+    }
   };
   const sendRecording = async (blob, type) => {
     try {
