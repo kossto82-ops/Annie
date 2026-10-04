@@ -84,7 +84,7 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 2362 tests passing (3 skipped), ruff clean, pyright strict 0.
 
 The current project is at Increment 176 (see `STATUS.md`; Increments 171–172 shipped the docs
-reconciliation, the zero-fallout roadmap, and the single decision authority — `DECISIONS.md` D1–D32 —
+reconciliation, the zero-fallout roadmap, and the single decision authority — `DECISIONS.md` D1–D34 —
 guarded by the offline `doc-truth` check `scripts/check_decision_refs.py`, Increment 173 shipped the
 scheduled honest forgetting — `ForgettingCandidates` on the rest cadence, the `forgetting` command, and
 root-wired `DecayingWeightingPolicy` recall bias — Increment 174 shipped the open-question loop
@@ -197,8 +197,11 @@ suite total), reuses the F1 decision-ref checker, spot-checks that every backtic
 `scripts/check_broad_excepts.py` audits the committed list of all **47 `except Exception` in `src/`** —
 every one non-silent, zero in domain/executive cognition — with the swallow-regression test proving the
 executive error path stays loud (`provider_error`, never an emptied reply) while the Increment-157
-refusal guardrail stays `""`. Roadmap phases **F1-F7 are done; the next phase is F8** (final gates +
-re-audit checklist).
+refusal guardrail stays `""`. Roadmap phases **F1-F8 are complete** (F8, Increment 182: the final
+gates re-run verbatim on a fresh clone in under 30 minutes — the committed re-audit checklist
+`docs/claude/audits/2026-09-25_f8_closeout.md` — plus the F0 baseline
+`docs/claude/audits/2026-09-21_baseline.md` and DECISIONS.md extended to D34; the zero-fallout
+roadmap is closed).
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner

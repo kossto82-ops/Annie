@@ -220,3 +220,27 @@ env-gated root, `build_*() -> None` when unconfigured, D7/D8) + delegated `Jarvi
 different axes. Stability is span-based (`span / (span + reference)`, `STABILITY_REFERENCE = 30d`,
 `LOW_STABILITY_THRESHOLD = 0.2`, tunable); count/recency weighting is deferred to the opt-in decay
 policy. (Consolidated from the legacy STATUS log.)
+
+## D33 — The decision registry is the single decision authority
+
+`DECISIONS.md` is the only authoritative registry of load-bearing constraints. The legacy `STATUS.md`
+adr-lite log is superseded — it stays as a mapping appendix with the obsolete numbering, never a
+parallel registry. (Roadmap F1.) `scripts/check_decision_refs.py` enforces the corollary offline: every
+`D\d+` token in live docs and `src/` resolves to an entry here; only `STATUS.md`, `INDEX.md` and the
+self-describing `audits/` are exempt. New policy decisions land here, never in a second log.
+
+## D34 — Documentation truth is machine-checked
+
+Live docs must stay truthful and a machine must be able to verify it (roadmap F7):
+
+- **Counts house rule** — no live doc may cite a suite total below the last published one
+  (`scripts/check_docs_truth.py`, floor = last published total). The total is re-published on every
+  increment; docs never sink it.
+- **Symbols must exist** — every backticked name in `SYSTEM_TODAY.md` resolves in `src/`.
+- **One HISTORICAL manifest** — `INDEX.md` lists historical docs; the manifest is machine-checked.
+- **The broad-`except` audit is committed** — `scripts/check_broad_excepts.py` admits only honest,
+  non-silent `except Exception` sites in `src/` (zero in domain/executive cognition); the swallow
+  regression pins the two faces of honesty: a provider *failure* is loud on purpose (`provider_error`,
+  never an emptied reply), a provider *refusal* is honest silence (`""`, Increment 157 guardrail).
+
+Each gate runs offline in CI without a single third-party dependency (stdlib only).

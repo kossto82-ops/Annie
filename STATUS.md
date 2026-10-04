@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-25 (Increment 181 — reproducibility: lockfile, 3-python CI, doc-truth, broad-except audit, roadmap F7)
+Last updated: 2026-09-25 (Increment 182 — final gates, re-audit checklist, doc close, roadmap F8)
 
 ---
 
@@ -2154,7 +2154,7 @@ The architectural audit is complete. Post-audit implementation wired existing sy
 ## Decisions log (ADR-lite — settled, do not revisit)
 
 > **Legacy numbering.** This log uses its own D1–D40 sequence. The current, non-negotiable
-> constraints live in `docs/claude/DECISIONS.md` (D1–D32), which is the **single authority**;
+> constraints live in `docs/claude/DECISIONS.md` (D1–D34), which is the **single authority**;
 > cross-references in live docs and `src/` must resolve there. The mapping from these legacy numbers
 > to `DECISIONS.md` is in the appendix below (roadmap phase F1, Increment 172). Entries below are
 > history.
@@ -2448,7 +2448,7 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (see `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`)
 
-**Increments 166–181 are committed and pushed.** Roadmap phases **F1–F7 are done**:
+**Increments 166–182 are committed and pushed.** Roadmap phases **F1–F8 are done**:
 F1 (single decision authority, Inc 172), F2 (scheduled honest forgetting/decay, Inc 173),
 F3 (open-question auto-retirement, Inc 174), F4 (passage-level document search, Inc 175),
 F5 (**live voice streaming + VAD**, Inc 176: the `SpeechPerceptionSource` streaming contract —
@@ -2490,7 +2490,7 @@ directions:
   174) returns to.
 - **Track C/D leftovers (opportunistic).** More §15 energy modelling (energy recovery
   over time); count/recency weighting in `TemporalStability`
-  beyond the opt-in decay policy; pin ruff/pyright in a lockfile (roadmap F7).
+  beyond the opt-in decay policy.
 
 *Recommendation: the correct-memory foundation is now deep (Increments 166-170). The highest-value
 remaining goals are the things that turn good memory into better companionship: a scheduled, honest
@@ -2499,7 +2499,7 @@ capability-level (no new abstractions).*
 
 ---
 
-## Known limitations / not built yet  (refreshed 2026-09-07, Increment 149)
+## Known limitations / not built yet  (refreshed 2026-09-25, Increment 182)
 
 **Landed since the last refresh (do not re-plan):**
 - The reflective cycle is **complete end to end** (Increments 74–82) and its `reflect_cycle()` runs all
@@ -2583,11 +2583,12 @@ capability-level (no new abstractions).*
   editable via the chat itself (Increment 149) and search at **passage level** (Increment 175:
   `search_passages`, deterministic sliding-window chunking with byte offsets, ranked by the same
   `relatedness` scorer — no embeddings, D18-faithful; binaries never chunked).
-- NervousSystem is single-threaded synchronous drain only; ruff/pyright not pinned in a lockfile.
+- NervousSystem is single-threaded synchronous drain only.
 
-> **Every bullet above now maps to a scheduled phase** in `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`
-> (F2–F7), each with an acceptance gate, written as part of Increment 171. The list stays here as the
-> honest snapshot until each phase lands and its bullets are deleted.
+> Every roadmap phase has now landed with a machine-checked gate (F1–F8, see
+> `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md` and the re-audit checklist in
+> `docs/claude/audits/2026-09-25_f8_closeout.md`). Remaining development is opportunistic —
+> see "After that — remaining directions" below.
 
 **Already built (do not list as missing):** goals & decomposition, curiosity (incl. give-up/ask-for-help),
 episodic + belief + companion + action memory, self-model (3 tendencies), graded autonomy, attention,
@@ -3533,5 +3534,37 @@ Acceptance F7 — `uv sync --frozen` green (verified here on 3.14; CI runs the 3
 the doc-truth job checks counts / F1 decision-refs / SYSTEM_TODAY symbols / HISTORICAL manifest and both
 new checkers pass their `--selftest`, and the exception-audit list is committed with the `rg "except
 Exception" src` count exactly matching it — **all pass, not tests only**.
+
+---
+
+## Increment 182 — Final gates, re-audit checklist, doc close (2026-09-25, roadmap **F8**)
+
+- **Re-audit script, hermetic**: fresh `git clone` of the repo of record + `git clean -fdx`, then
+  `uv sync --frozen --all-extras` (107 packages from the committed `uv.lock`), `pytest -q`, `ruff
+  check .`, `pyright`, and the three offline checkers (`check_decision_refs.py`,
+  `check_broad_excepts.py`, `check_docs_truth.py`) — all green on the fresh clone in **well under
+  30 minutes** (suite 46.87s), recorded in the committed re-audit checklist
+  `docs/claude/audits/2026-09-25_f8_closeout.md`. The F0–F7 acceptance gates are re-run verbatim;
+  the F2/F3 production-caller spot-greps hit `src/` (`forgetting.py` cadence, `server.py` root
+  `DecayingWeightingPolicy`, `_conversation.py`/`_unresolved.py` auto-retire). The 3.11/3.12/3.13
+  matrix is machine-produced by CI on every push; 3.14 is the local hermetic re-run.
+- **F0 acceptance completed**: the baseline artifact `docs/claude/audits/2026-09-21_baseline.md`
+  was missing; this increment writes it (HEAD `1a03e13`, 2220 passed/3 skipped, pre-F7 floating dev
+  deps + 3.13-only CI) with the three-python table and an honest note that F0's requested
+  per-interpreter timings were never captured — F7's frozen matrix is what makes them reproducible.
+- **DECISIONS.md extended to D34** (roadmap F1/F7 policy codified): **D33** — the decision registry
+  is the single decision authority (the STATUS adr-lite log is a superseded mapping appendix);
+  **D34** — documentation truth is machine-checked (counts house rule, symbols-must-exist,
+  HISTORICAL manifest, committed non-silent broad-except audit with the swallow regression pinning
+  loud-on-failure / silent-on-refusal). `D1–D32` range markers updated to `D1–D34` in CLAUDE.md and
+  INDEX.md; the doc-truth counts floor raised to 2362 in `scripts/check_docs_truth.py`.
+- **Docs**: this entry; "Next increment" → F1–F8 done, remaining work is the opportunistic
+  directions; the known-limitations list deletes the fixed "not pinned in a lockfile" clause and is
+  refreshed to Increment 182; ROADMAP status note closed; SYSTEM_TODAY marker → Increment 182.
+  No behavioral code changed, so no new tests: the suite total is unchanged at 2362.
+
+Full suite: **2362 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
+doc-truth check clean; broad-except audit clean (54 audited sites — 47 `except Exception`, all
+non-silent, no drift). The zero-fallout roadmap is complete and its month-later script is committed.
 
 ---
