@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-10-04 (Increment 183 — scheduled execution)
+Last updated: 2026-10-04 (Increment 184 — energy recovery over time)
 
 ---
 
@@ -2448,7 +2448,7 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (see `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`)
 
-**Increments 166–183 are committed and pushed.** Roadmap phases **F1–F8 are done**:
+**Increments 166–184 are committed and pushed.** Roadmap phases **F1–F8 are done**:
 F1 (single decision authority, Inc 172), F2 (scheduled honest forgetting/decay, Inc 173),
 F3 (open-question auto-retirement, Inc 174), F4 (passage-level document search, Inc 175),
 F5 (**live voice streaming + VAD**, Inc 176: the `SpeechPerceptionSource` streaming contract —
@@ -2466,7 +2466,11 @@ HISTORICAL manifest; and the committed `check_broad_excepts.py` audit — all 48
 `run_due_tasks` driver sweeps every currently-due enabled task once through the same `approved=False`
 executor `tasks run` uses, `record_run` on both adapters (file + SQLite, clock-injectable) advances a
 cron task's `next_run` so no occurrence ever re-fires (D35), and a `tasks fire` command + console
-button drive it on demand — still no background thread.
+button drive it on demand — still no background thread. **Increment 184** shipped *energy recovery
+over time* (the §15 leftover): an `EnergyRecovery` profile + injectable clock refill the budget
+linearly over quiet time (`EnergyLedger._reconcile`, capped at the budget, cumulative spent never
+rewinds), conserving turns off on its own, and the `energy recovery <minutes>|off` command, a
+`recovery` field in the snapshot's `energy` block and a "Refills in" console metric surface it.
 
 Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable
 via constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in
@@ -2494,9 +2498,8 @@ directions:
   173: `ForgettingCandidates` on the rest cadence + root-wired `DecayingWeightingPolicy`), and the
   evidence-request writes (Increment 170) land in the unresolved store the open-question loop (Increment
   174) returns to.
-- **Track C/D leftovers (opportunistic).** More §15 energy modelling (energy recovery
-  over time); count/recency weighting in `TemporalStability`
-  beyond the opt-in decay policy.
+- **Track C/D leftovers (opportunistic).** Count/recency weighting in `TemporalStability`
+  beyond the opt-in decay policy (energy recovery over time landed as Increment 184).
 
 *Recommendation: the correct-memory foundation is now deep (Increments 166-170). The highest-value
 remaining goals are the things that turn good memory into better companionship: a scheduled, honest
@@ -3618,3 +3621,39 @@ doc-truth check clean; broad-except audit clean (55 audited sites — 48 `except
 non-silent, no drift).
 
 ---
+
+## Increment 184 — Energy recovery over time (2026-10-04)
+
+Energy had a budget and a price list (Increments 84–85), a deliberation value everyone reads
+(Increment 155) and a decay bias (Increment 113) — but fatigue itself was still a hard edge: an
+exhausted Jarvis could only recover by an explicit `rest()`. This increment closes the §15 leftover
+named in "After that": **the budget refills over wall-clock time by itself**, so a tired Jarvis
+quietly recovers during down time.
+
+- **`EnergyRecovery`** — a frozen value object (`domain/value_objects/energy_recovery.py`,
+  `full_recovery_minutes: int = 60`): the full-refill window. Opt-in, never a buried constant.
+- **`EnergyLedger` gains a wall-clock refill** (`cognitive.py`): an injectable `clock`
+  (default module `_utc_now()`) plus an optional `recovery` profile (all five numbers now owned by
+  one object). A lazy `_reconcile()` applies the elapsed-time refill — linear, capped at the budget,
+  fractional points carried so a slow trickle is never truncated — on every `charge()` /
+  `remaining()` / `should_conserve()`, so conserving turns off on its own once enough quiet time has
+  passed. `None` profile (the default) keeps the historical behaviour exactly: energy only comes back
+  on `rest()`; `spent` history never rewinds; with no budget the whole mechanism is inert.
+- **Runtime path** — `Jarvis(energy_recovery=..., energy_clock=...)` constructor injection,
+  `energy_recovery()` / `set_energy_recovery()` accessors (public-surface guarded), the
+  `energy recovery <minutes>|off` command (mirrors `energy_budget`, guidance on bad input), the
+  snapshot's `energy` block reports `recovery` (`{"full_recovery_minutes": N}` or `None`), and a
+  "Refills in" console metric revealed only when a profile is set (asset-tripwire guarded).
+- **Tests** — 15 new: refills the budget over time, never exceeds the budget, ends conserving on its
+  own, spent history never rewinds, no double-counting on a charge after a reconcile, fractional
+  accumulation, `rest()`/budget resets, inert without a budget or without a profile, runtime on/off,
+  the command handler + guidance, the snapshot reporting, and the console wiring tripwire. 2393
+  passed/3 skipped at close, no flaky/network.
+
+Discipline: the refill is deterministic (clock-injectable), opt-in (default `None` — zero change to
+existing Jarvis instances), read-only (it only ever refills the recoverable budget, never rewinds
+spend) and tunable at runtime like every other §40 knob.
+
+Full suite: **2393 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
+doc-truth check clean; broad-except audit clean (55 audited sites — 48 `except Exception`, all
+non-silent, no drift).

@@ -63,6 +63,7 @@ def snapshot(jarvis: Jarvis) -> Reply:
     the live model the control center renders after every turn.
     """
     summary = jarvis.state_summary()
+    recovery = jarvis.energy_recovery()
     return {
         "episodes": summary.episode_count,
         "perceiver": {
@@ -75,6 +76,11 @@ def snapshot(jarvis: Jarvis) -> Reply:
             "remaining": jarvis.energy_remaining(),
             "conserving": jarvis.is_conserving(),
             "deliberation_value": jarvis.deliberation_value().value,
+            "recovery": (
+                {"full_recovery_minutes": recovery.full_recovery_minutes}
+                if recovery is not None
+                else None
+            ),
         },
         "provider": _provider_stats(jarvis),
         "speech": speech_block(jarvis),

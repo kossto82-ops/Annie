@@ -79,6 +79,9 @@ from jarvis.cognitive import (
     set_energy_budget as _set_energy_budget_fn,
 )
 from jarvis.cognitive import (
+    set_energy_recovery as _set_energy_recovery_fn,
+)
+from jarvis.cognitive import (
     think as _think_fn,
 )
 from jarvis.companion import (
@@ -231,6 +234,7 @@ from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.email_message import EmailMessage
 from jarvis.domain.value_objects.energy_costs import EnergyCosts
+from jarvis.domain.value_objects.energy_recovery import EnergyRecovery
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.inference import Inference
@@ -407,6 +411,8 @@ class Jarvis:
         refutations_store: RefutationRepository | None = None,
         energy_costs: EnergyCosts | None = None,
         energy_budget: int | None = None,
+        energy_recovery: EnergyRecovery | None = None,
+        energy_clock: Callable[[], datetime] | None = None,
         deliberation_value: DeliberationValue = DeliberationValue.NORMAL,
         enable_recall: bool = False,
         reasoner: Reasoner | None = None,
@@ -612,9 +618,16 @@ class Jarvis:
         # An optional current-capacity budget (Vision §15): when it runs low Jarvis
         # conserves -- answering briefly rather than running the full lifecycle --
         # and recovers on `rest()`. Config-driven (Track E). None = no budget, so
-        # behaviour is identical to before. One ledger owns all four numbers so
-        # cognition, adaptation and the surface always read the same state.
-        self._energy_ledger = EnergyLedger(costs=energy_costs, budget=energy_budget)
+        # behaviour is identical to before. One ledger owns all five numbers so
+        # cognition, adaptation and the surface always read the same state. An
+        # optional recovery profile (and its test-injectable clock) makes the
+        # budget also refill over time on its own (a §15 leftover, Increment 184).
+        self._energy_ledger = EnergyLedger(
+            costs=energy_costs,
+            budget=energy_budget,
+            recovery=energy_recovery,
+            clock=energy_clock,
+        )
         # How much a deliberation is *worth* by default (Vision §15): if nothing
         # else is said, Jarvis charges every episode this value. A caller can still
         # override per-call with `think(..., value=...)`.
@@ -2349,6 +2362,24 @@ knowledge_graph=knowledge_graph_store,
     def set_energy_budget(self, budget: int | None) -> None:
         """Set (or clear) the recoverable energy budget at runtime (Vision §15, §40)."""
         return _set_energy_budget_fn(self, budget)
+
+    def energy_recovery(self) -> EnergyRecovery | None:
+        """The wall-clock energy recovery profile (Vision §15), or None.
+
+        When a profile is set the budget refills linearly back to full over
+        ``full_recovery_minutes`` minutes of quiet time -- a tired Jarvis
+        recovers on its own (a §15 leftover, Increment 184). Without one,
+        energy only comes back on an explicit :meth:`rest`.
+        """
+        return self.energy.recovery
+
+    def set_energy_recovery(self, recovery: EnergyRecovery | None) -> None:
+        """Set (or clear) the wall-clock energy recovery profile (Vision §15, §40).
+
+        ``None`` restores the historical behaviour: energy only refills on
+        :meth:`rest`.
+        """
+        return _set_energy_recovery_fn(self, recovery)
 
     def deliberation_value(self) -> DeliberationValue:
         """The value Jarvis charges deliberations by default (Vision §15).

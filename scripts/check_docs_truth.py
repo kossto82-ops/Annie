@@ -43,7 +43,7 @@ import tempfile
 
 import check_decision_refs as decision_refs
 
-LAST_PUBLISHED_SUITE_TOTAL = 2378  # Increment 183 (scheduled execution) published total.
+LAST_PUBLISHED_SUITE_TOTAL = 2393  # Increment 184 (energy recovery over time) published total.
 
 COUNTS_FILES = (
     pathlib.Path("README.md"),

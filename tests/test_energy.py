@@ -10,6 +10,7 @@ from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.enums.evidence_source import EvidenceSource
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.energy_costs import EnergyCosts
+from jarvis.domain.value_objects.energy_recovery import EnergyRecovery
 from jarvis.domain.value_objects.evidence import Evidence
 
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
@@ -111,6 +112,95 @@ class TestEnergyBudget:
     def test_conserving_is_announced_in_introspection(self) -> None:
         jarvis = Jarvis(energy_budget=1)
         assert "thinking briefly to conserve" in jarvis.introspect()
+
+
+class TestEnergyRecovery:
+    """Wall-clock energy recovery closes a §15 leftover (Increment 184).
+
+    With an ``EnergyRecovery`` profile and an injected clock, the budget refills
+    linearly over quiet time, so conserving turns off on its own -- rest becomes
+    optional, never automatic, and past spend is never forgiven.
+    """
+
+    def _wired(self, budget: int = 10, minutes: int = 120) -> tuple[Jarvis, dict[str, datetime]]:
+        probe = {"current": _EPOCH}
+        jarvis = Jarvis(
+            energy_budget=budget,
+            energy_recovery=EnergyRecovery(full_recovery_minutes=minutes),
+            energy_clock=lambda: probe["current"],
+        )
+        return jarvis, probe
+
+    def test_default_jarvis_has_no_recovery_profile(self) -> None:
+        assert Jarvis().energy_recovery() is None
+
+    def test_without_a_budget_recovery_is_inert(self) -> None:
+        jarvis = Jarvis(energy_recovery=EnergyRecovery())
+        assert jarvis.energy_remaining() is None
+        assert jarvis.is_conserving() is False
+
+    def test_recovery_refills_the_budget_over_time(self) -> None:
+        jarvis, probe = self._wired()  # 10 budget over 120 minutes
+        jarvis.think("a")  # a FULL episode spends 3
+        assert jarvis.energy_remaining() == 7
+        probe["current"] = _EPOCH + timedelta(minutes=30)  # 25% of the window
+        assert jarvis.energy_remaining() == 9
+        probe["current"] = _EPOCH + timedelta(minutes=60)  # enough to refill fully
+        assert jarvis.energy_remaining() == 10
+
+    def test_recovery_never_exceeds_the_budget(self) -> None:
+        jarvis, probe = self._wired()
+        jarvis.think("a")
+        probe["current"] = _EPOCH + timedelta(hours=12)
+        assert jarvis.energy_remaining() == 10
+
+    def test_recovery_turns_off_conserving_on_its_own(self) -> None:
+        jarvis, probe = self._wired(budget=6, minutes=2)
+        jarvis.think("a")
+        jarvis.think("b")  # two FULL episodes drain below the cost of one more
+        assert jarvis.is_conserving() is True  # 0 < full cost 3
+        probe["current"] = _EPOCH + timedelta(minutes=1)  # half the window back -> 3
+        assert jarvis.is_conserving() is False
+
+    def test_spent_history_never_rewinds_while_the_budget_recovers(self) -> None:
+        jarvis, probe = self._wired()
+        jarvis.think("a")
+        before = jarvis.energy_spent()
+        probe["current"] = _EPOCH + timedelta(hours=12)
+        assert jarvis.energy_remaining() == 10  # budget fully back
+        assert jarvis.energy_spent() == before  # cumulative spend is untouched
+
+    def test_charge_after_recovery_does_not_double_count(self) -> None:
+        jarvis, probe = self._wired()
+        jarvis.think("a")  # 7 left
+        probe["current"] = _EPOCH + timedelta(minutes=30)  # reading reconciles first
+        assert jarvis.energy_remaining() == 9
+        jarvis.think("b")  # charges from the reconciled 9 -> 6
+        assert jarvis.energy_remaining() == 6
+
+    def test_fractional_recovery_accumulates(self) -> None:
+        jarvis, probe = self._wired(budget=10, minutes=60)  # 1 point per 6 minutes
+        jarvis.think("a")  # 7 left
+        probe["current"] = _EPOCH + timedelta(minutes=1)  # 1/6 of a point: held
+        assert jarvis.energy_remaining() == 7
+        probe["current"] = _EPOCH + timedelta(minutes=7)  # a whole point lands
+        assert jarvis.energy_remaining() == 8
+
+    def test_rest_resets_the_recovery_baseline(self) -> None:
+        jarvis, probe = self._wired()
+        jarvis.think("a")  # 7 left
+        jarvis.rest()  # already full, so the refill must not keep growing or re-tick
+        assert jarvis.energy_remaining() == 10
+        probe["current"] = _EPOCH + timedelta(minutes=30)
+        assert jarvis.energy_remaining() == 10
+
+    def test_set_energy_recovery_swaps_the_profile_at_runtime(self) -> None:
+        jarvis = Jarvis(energy_budget=10)
+        assert jarvis.energy_recovery() is None
+        jarvis.set_energy_recovery(EnergyRecovery(full_recovery_minutes=5))
+        assert jarvis.energy_recovery() is not None
+        jarvis.set_energy_recovery(None)
+        assert jarvis.energy_recovery() is None
 
 
 class TestDeliberationValue:

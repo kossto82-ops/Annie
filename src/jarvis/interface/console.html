@@ -1527,6 +1527,8 @@
             <div class="metric" id="remwrap"><div class="k">Energy left</div>
               <div class="v" id="remaining">∞</div>
               <div class="bar"><i id="rembar"></i></div></div>
+            <div class="metric hidden" id="refillwrap"><div class="k">Refills in</div>
+              <div class="v" id="refills">—</div></div>
             <div class="metric" id="goalwrap" style="cursor:pointer" title="Ver detalle de metas y acciones">
               <div class="k">Recurring goals</div><div class="v"><span id="goals">0</span></div>
               <div id="goalsDrop" style="display:none"></div>
@@ -2182,6 +2184,13 @@ function renderState(s) {
       rembar.style.width = Math.round(100 * rem / max) + "%";
       wrap.classList.toggle("conserving", !!e.conserving);
     }
+  }
+  const refillwrap = $("refillwrap");
+  const refills = $("refills");
+  if (refillwrap && refills) {
+    const recovery = e.recovery || null;
+    refillwrap.classList.toggle("hidden", !recovery);
+    if (recovery) refills.textContent = recovery.full_recovery_minutes + " min";
   }
   renderCapabilityCards(s);
   renderList("self", s.self);

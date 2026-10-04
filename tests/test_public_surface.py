@@ -55,6 +55,8 @@ _PUBLIC_METHODS = (
     "is_conserving",
     "rest",
     "set_energy_budget",
+    "energy_recovery",
+    "set_energy_recovery",
     "deliberation_value",
     "set_deliberation_value",
     "provider_stats",

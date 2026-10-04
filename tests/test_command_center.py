@@ -33,6 +33,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.document_hit import DocumentHit
 from jarvis.domain.value_objects.document_meta import DocumentMeta
 from jarvis.domain.value_objects.email_message import EmailMessage
+from jarvis.domain.value_objects.energy_recovery import EnergyRecovery
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.note import Note
 from jarvis.domain.value_objects.passage_hit import PassageHit
@@ -402,6 +403,36 @@ class TestTuning:
         jarvis.think("spend some energy")
         handle(jarvis, "rest", {})
         assert jarvis.energy_remaining() == 6
+
+    def test_setting_recovery_wires_a_profile(self) -> None:
+        jarvis = Jarvis(energy_budget=10)
+        result = handle(jarvis, "energy_recovery", {"minutes": 30})
+        assert "recovers to full over 30" in str(result["reply"])
+        recovery = jarvis.energy_recovery()
+        assert recovery is not None
+        assert recovery.full_recovery_minutes == 30
+
+    def test_clearing_recovery_returns_energy_to_rest_only(self) -> None:
+        jarvis = Jarvis(energy_budget=10, energy_recovery=EnergyRecovery(full_recovery_minutes=60))
+        result = handle(jarvis, "energy_recovery", {"minutes": "off"})
+        assert "Energy recovery off" in str(result["reply"])
+        assert jarvis.energy_recovery() is None
+
+    def test_recovery_guidance_for_bad_input(self) -> None:
+        jarvis = Jarvis(energy_budget=10)
+        result = handle(jarvis, "energy_recovery", {"minutes": "soon"})
+        assert "energy recovery" in str(result["error"])
+        negative = handle(jarvis, "energy_recovery", {"minutes": "-5"})
+        assert "positive" in str(negative["reply"])
+        assert jarvis.energy_recovery() is None
+
+    def test_the_snapshot_reports_the_recovery_profile(self) -> None:
+        jarvis = Jarvis(energy_budget=10, energy_recovery=EnergyRecovery(full_recovery_minutes=30))
+        state = snapshot(jarvis)
+        energy = cast("dict[str, object]", state["energy"])
+        assert energy["recovery"] == {"full_recovery_minutes": 30}
+        plain = cast("dict[str, object]", snapshot(Jarvis())["energy"])
+        assert plain["recovery"] is None
 
     def test_the_snapshot_reports_the_deliberation_stance(self) -> None:
         result = handle(Jarvis(), "state", {})

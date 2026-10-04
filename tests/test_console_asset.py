@@ -100,6 +100,18 @@ def test_calendar_and_tasks_panels_are_wired() -> None:
         assert marker in html, f"calendar/tasks panels lost their {marker!r} wiring"
 
 
+def test_energy_recovery_metric_is_wired_to_the_snapshot() -> None:
+    """Tripwire (Increment 184): the refill metric must track the energy block."""
+    html = _CONSOLE.read_text(encoding="utf-8")
+    for marker in (
+        "id=\"refillwrap\"",
+        "id=\"refills\"",
+        "refillwrap.classList.toggle",
+        "full_recovery_minutes",
+    ):
+        assert marker in html, f"energy-recovery metric lost its {marker!r} wiring"
+
+
 def test_the_sphere_stays_visible_while_chatting() -> None:
     """Tripwire: chatting must never hide the sphere/dashboard behind a swap.
 

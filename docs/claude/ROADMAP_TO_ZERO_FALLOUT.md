@@ -19,7 +19,9 @@ lockfile gap deleted from STATUS, the roadmap pointer in "Next increment" retire
 close: **2362 passed, 3 skipped**; ruff clean; pyright strict 0; decision-ref check clean; doc-truth and
 broad-except checks clean; the task seam deepens beyond the roadmap (Increment 183: scheduled
 execution — `tasks fire` sweeps due tasks through the earned-agency executor, D35), suite then at
-**2378 passed, 3 skipped**.
+**2378 passed, 3 skipped**; the §15 energy-recovery leftover then closes (Increment 184: an
+`EnergyRecovery` profile + injectable clock refill the budget over quiet time), suite at
+**2393 passed, 3 skipped**.
 
 ## How this is written
 

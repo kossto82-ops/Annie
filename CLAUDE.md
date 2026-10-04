@@ -81,7 +81,7 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-2378 tests passing (3 skipped), ruff clean, pyright strict 0.
+2393 tests passing (3 skipped), ruff clean, pyright strict 0.
 
 The current project is at Increment 176 (see `STATUS.md`; Increments 171–172 shipped the docs
 reconciliation, the zero-fallout roadmap, and the single decision
@@ -208,7 +208,12 @@ enabled task exactly once through the same `approved=False` executor `tasks run`
 both adapters (file + SQLite, clock-injectable) advances a cron task's `next_run` so no occurrence ever
 re-fires and a one-shot fires exactly once (an impossible schedule stops honestly, `enabled=False`),
 via the `tasks fire` command and a console "Fire due" button — on demand, still no background thread,
-with DECISIONS.md extended to D35.
+with DECISIONS.md extended to D35. Energy recovery landed beyond the roadmap (Increment 184):
+the §15 leftover closes — with an `EnergyRecovery` profile and an injectable clock the energy
+budget refills linearly over quiet time (`EnergyLedger._reconcile`, fractional points carried,
+capped at the budget, cumulative spent never rewinds), conserving turns off on its own, and the
+`energy recovery <minutes>|off` command, a `recovery` field in the snapshot's `energy` block and a
+"Refills in" console metric surface it — opt-in, so a plain Jarvis behaves exactly as before.
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner

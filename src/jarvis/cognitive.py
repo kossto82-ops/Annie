@@ -6,7 +6,8 @@ cycle (Connect → Reflect → Hypothesise → Challenge → Learn → Act).
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from jarvis.domain.aggregates.cognitive_episode import CognitiveEpisode
@@ -24,6 +25,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.energy_costs import EnergyCosts
+from jarvis.domain.value_objects.energy_recovery import EnergyRecovery
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.reflection import Reflection
@@ -43,50 +45,107 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
+def _utc_now() -> datetime:
+    """The ledger's default "now" — real UTC, swap-injectable for determinism."""
+    return datetime.now(tz=UTC)
+
+
 class EnergyLedger:
     """Session-scoped cognitive-energy accounting (Vision §15).
 
-    One object owns the four numbers -- price list, cumulative spend, optional
-    budget and what is left of it -- so cognition, the surface and any future
-    adaptation all read and mutate the same state instead of four loose
-    attributes on the composition root. Behaviour is identical to the former
-    inline accounting: charging accumulates spend and drains the available
-    budget, ``rest()`` refills it without forgiving past spend, and ``None``
-    budget means unconstrained (``remaining()`` is ``None``).
+    One object owns the five numbers -- price list, cumulative spend, optional
+    budget, what is left of it and how fast it comes back -- so cognition, the
+    surface and any future adaptation all read and mutate the same state
+    instead of five loose attributes on the composition root. Behaviour is
+    identical to the former inline accounting: charging accumulates spend and
+    drains the available budget, ``rest()`` refills it without forgiving past
+    spend, and ``None`` budget means unconstrained (``remaining()`` is
+    ``None``). With an ``EnergyRecovery`` profile and an injectable ``clock``,
+    the budget also refills linearly over wall-clock time (a §15 leftover): a
+    tired Jarvis quietly recovers during down time, without needing an
+    explicit rest (Increment 184).
     """
 
     def __init__(
-        self, costs: EnergyCosts | None = None, budget: int | None = None
+        self,
+        costs: EnergyCosts | None = None,
+        budget: int | None = None,
+        recovery: EnergyRecovery | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.costs = costs or EnergyCosts()
         self.budget = budget
         self.spent = 0
         self.available = budget if budget is not None else 0
+        self.recovery = recovery
+        self.clock: Callable[[], datetime] = clock or _utc_now
+        self._last_reconciled_at = self.clock()
+        self._fraction = 0.0
+
+    def _reconcile(self) -> None:
+        """Apply the wall-clock recovery that elapsed since the last charge/read.
+
+        Fatigue fades with time (Vision §15): when a recovery profile is set,
+        the budget refills linearly back to full over its window, so after
+        enough quiet time ``remaining()`` climbs and conserving turns off on
+        its own. Deterministic with an injected clock; a no-op when there is
+        no budget or no recovery profile. Fractional points are carried so a
+        slow trickle is never lost to truncation.
+        """
+        if self.budget is None or self.recovery is None:
+            return
+        now = self.clock()
+        elapsed = max(0.0, (now - self._last_reconciled_at).total_seconds())
+        if elapsed <= 0:
+            return
+        self._last_reconciled_at = now
+        window = float(self.recovery.full_recovery_minutes * 60)
+        recovered = (elapsed / window) * float(self.budget)
+        whole = int(recovered)
+        self._fraction += recovered - whole
+        if self._fraction >= 1.0:
+            whole += int(self._fraction)
+            self._fraction -= float(int(self._fraction))
+        if whole > 0:
+            self.available = min(self.budget, self.available + whole)
 
     def charge(self, attention: Attention) -> None:
         """Charge one episode's cognitive cost and update the budget."""
         cost = self.costs.for_attention(attention)
+        self._reconcile()
         self.spent += cost
         if self.budget is not None:
             self.available = max(0, self.available - cost)
 
     def should_conserve(self) -> bool:
         """True when the budget is low enough that a full episode should be avoided."""
+        self._reconcile()
         return self.budget is not None and self.available < self.costs.full
 
     def remaining(self) -> int | None:
         """Current energy left in the recoverable budget, or None when unbudgeted."""
+        self._reconcile()
         return self.available if self.budget is not None else None
 
     def rest(self) -> None:
         """Restore energy to full (Vision §15)."""
         if self.budget is not None:
             self.available = self.budget
+        self._fraction = 0.0
+        self._last_reconciled_at = self.clock()
 
     def set_budget(self, budget: int | None) -> None:
         """Set (or clear) the recoverable energy budget at runtime."""
         self.budget = budget
         self.available = budget if budget is not None else 0
+        self._fraction = 0.0
+        self._last_reconciled_at = self.clock()
+
+    def set_recovery(self, recovery: EnergyRecovery | None) -> None:
+        """Set (or clear) the wall-clock recovery profile at runtime."""
+        self.recovery = recovery
+        self._fraction = 0.0
+        self._last_reconciled_at = self.clock()
 
 
 def charge(jarvis: Jarvis, attention: Attention) -> None:
@@ -122,6 +181,15 @@ def rest(jarvis: Jarvis) -> None:
 def set_energy_budget(jarvis: Jarvis, budget: int | None) -> None:
     """Set (or clear) the recoverable energy budget at runtime (Vision §15, §40)."""
     jarvis.energy.set_budget(budget)
+
+
+def set_energy_recovery(jarvis: Jarvis, recovery: EnergyRecovery | None) -> None:
+    """Set (or clear) the wall-clock recovery profile at runtime (Vision §15, §40).
+
+    Closes a §15 leftover: with a profile set, a tired Jarvis recovers energy
+    over time on its own, without needing an explicit rest (Increment 184).
+    """
+    jarvis.energy.set_recovery(recovery)
 
 
 # ---------------------------------------------------------------------------

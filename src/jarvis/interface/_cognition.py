@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from jarvis.domain.enums.action_stance import ActionStance
 from jarvis.domain.enums.deliberation_value import DeliberationValue
 from jarvis.domain.repositories.belief_repository import resolve_belief_for
+from jarvis.domain.value_objects.energy_recovery import EnergyRecovery
 from jarvis.executive.executive_controller import subject_of
 from jarvis.infrastructure.env_settings import settings_from_env
 from jarvis.infrastructure.language_model_registry import build_language_model
@@ -119,6 +120,32 @@ def _energy_budget(jarvis: Jarvis, payload: Reply) -> Reply:
     budget = int(raw) if isinstance(raw, int | float | str) else 0
     jarvis.set_energy_budget(budget)
     return {"reply": f"Energy budget set to {budget}.", "speak": False}
+
+
+def _energy_recovery(jarvis: Jarvis, payload: Reply) -> Reply:
+    """Tune how fast fatigue fades, at runtime (Vision §15, §40).
+
+    ``minutes`` is the full-refill window: with a budget set, the recoverable
+    energy refills linearly back to full over that many minutes of quiet time
+    (an injectable clock keeps it deterministic). ``off`` stops the refill --
+    energy only comes back on ``rest()``. Closes a §15 leftover (Increment 184).
+    """
+    raw = str(payload.get("minutes", "")).strip().lower()
+    if not raw or raw in {"off", "none"}:
+        jarvis.set_energy_recovery(None)
+        return {"reply": "Energy recovery off — energy only refills on rest.", "speak": False}
+    try:
+        minutes = int(raw)
+    except ValueError:
+        message = (
+            "Use 'energy recovery <minutes>' (the full-refill window) or 'energy recovery off'."
+        )
+        return {"error": message, "speak": False}
+    if minutes <= 0:
+        return {"reply": "Recovery needs a positive number of minutes.", "speak": False}
+    jarvis.set_energy_recovery(EnergyRecovery(full_recovery_minutes=minutes))
+    reply = f"Energy now recovers to full over {minutes} minute(s) of quiet time."
+    return {"reply": reply, "speak": False}
 
 
 def _deliberation(jarvis: Jarvis, payload: Reply) -> Reply:
@@ -332,6 +359,7 @@ COMMANDS: dict[str, Command] = {
     "belief": _belief,
     "deliberation": _deliberation,
     "energy_budget": _energy_budget,
+    "energy_recovery": _energy_recovery,
     "explain": _explain,
     "greeting": _greeting,
     "introspect": _introspect,
