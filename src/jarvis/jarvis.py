@@ -188,6 +188,7 @@ from jarvis.domain.services.forgetting import (
 )
 from jarvis.domain.services.knowledge_source import KnowledgeSource
 from jarvis.domain.services.model_compare import ModelComparator, ModelRun
+from jarvis.domain.services.scheduled_execution import ScheduledRun
 from jarvis.domain.services.temporal_applicability import (
     QueryTemporalContext,
     TemporalApplicability,
@@ -1899,6 +1900,20 @@ knowledge_graph=knowledge_graph_store,
         is configured -- in those cases nothing ran, so nothing is recorded.
         """
         return self._task_surface.run_scheduled_task(task_id)
+
+    def fire_due_tasks(self) -> tuple[ScheduledRun, ...]:
+        """Fire every currently-due enabled task once through the executor.
+
+        A sweep over the due set, like :meth:`run_scheduled_task` but for all
+        of it at once: each command runs through the same ``approved=False``
+        executor, and every outcome is recorded on the task while the store
+        advances the recurrence (D35) -- so the same occurrence never re-fires
+        on a later sweep. One task failing never aborts the sweep; the
+        returned report carries every honest outcome. Raises a clear error
+        when no scheduler or no executor is wired -- then nothing runs and
+        nothing is recorded.
+        """
+        return self._task_surface.fire_due_tasks()
 
     def deep_research(self, query: str, *, depth: int = 1) -> ResearchReport:
         """Investigate ``query`` in depth through the research capability.

@@ -347,16 +347,19 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
     """Manage scheduled tasks through the task-scheduler capability (Odysseus #7).
 
     Actions: ``list``, ``get``, ``create``, ``update``, ``delete``,
-    ``enable``, ``disable``, ``due``, ``run``. ``run`` executes the task's
-    command right now through the earned-agency executor and records the
+    ``enable``, ``disable``, ``due``, ``run``, ``fire``. ``run`` executes the
+    task's command right now through the earned-agency executor and records the
     outcome on the task (last run, status, output); it needs an enabled task
     and a wired executor, else it declines honestly and records nothing.
+    ``fire`` sweeps every currently-due enabled task exactly once through the
+    same executor (each outcome recorded, the recurrence advanced), declaring
+    honestly when nothing is due or no executor is wired.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
         return {
             "reply": "Use tasks with action 'list', 'get', 'create', 'update', "
-            "'delete', 'enable', 'disable', 'due', or 'run'.",
+            "'delete', 'enable', 'disable', 'due', 'run', or 'fire'.",
             "speak": False,
         }
     if jarvis.task_scheduler is None:
@@ -481,6 +484,25 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
                 "reply": f"It ran but failed honestly: {outcome.summary} (recorded on the task).",
                 "speak": False,
                 "ok": False,
+            }
+        if action == "fire":
+            try:
+                runs = jarvis.fire_due_tasks()
+            except RuntimeError as error:
+                return {"reply": f"I couldn't fire due tasks: {error}", "speak": False}
+            if not runs:
+                return {"reply": "No tasks were due to run.", "speak": False}
+            lines = [
+                f"- {r.name}: {r.output if r.ok else 'failed — ' + r.output}"
+                for r in runs
+            ]
+            succeeded = sum(1 for r in runs if r.ok)
+            return {
+                "reply": f"Fired {len(runs)} due task(s); {succeeded} succeeded.\n\n"
+                + "\n".join(lines),
+                "speak": False,
+                "ok": succeeded == len(runs),
+                "count": len(runs),
             }
     except ValueError as error:  # noqa: BLE001 - a bad cron/schedule is guidance, not a crash
         return {"reply": f"No pude hacerlo: {error}", "speak": False}

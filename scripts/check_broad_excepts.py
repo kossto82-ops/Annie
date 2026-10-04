@@ -63,6 +63,10 @@ AUDIT: dict[str, tuple[tuple[str, str, str], ...]] = {
         ("boundary", "degrade",
          "report-only channel probe; a bare False lets the search decide"),
     ),
+    "src/jarvis/domain/services/scheduled_execution.py": (
+        ("boundary", "outcome",
+         "executor boundary; the per-task run report carries the honest failure"),
+    ),
     "src/jarvis/domain/tools/tool_registry.py": (
         ("boundary", "outcome",
          "Tool boundary at the gate; honest ToolCallResult(ok=False)"),

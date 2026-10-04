@@ -17,7 +17,9 @@ fresh clone in under 30 minutes — see `docs/claude/audits/2026-09-25_f8_closeo
 F0 baseline `2026-09-21_baseline.md`, and the doc close: DECISIONS.md extended to D34, the fixed
 lockfile gap deleted from STATUS, the roadmap pointer in "Next increment" retired). Suite at the F8
 close: **2362 passed, 3 skipped**; ruff clean; pyright strict 0; decision-ref check clean; doc-truth and
-broad-except checks clean.
+broad-except checks clean; the task seam deepens beyond the roadmap (Increment 183: scheduled
+execution — `tasks fire` sweeps due tasks through the earned-agency executor, D35), suite then at
+**2378 passed, 3 skipped**.
 
 ## How this is written
 

@@ -1733,6 +1733,7 @@
         <h3>Crear / consultar tareas</h3>
         <button type="button" id="taskList" class="switch">List tasks</button>
         <button type="button" id="taskDue" class="switch">Due tasks</button>
+        <button type="button" id="taskFire" class="switch">Fire due</button>
         <input type="hidden" id="taskEditId" value="">
         <label>name <input type="text" id="taskName" placeholder="e.g. daily backup" /></label>
         <label>command <input type="text" id="taskCommand" placeholder="e.g. scripts/report.py" /></label>
@@ -4487,6 +4488,10 @@ $("mailRefresh").addEventListener("click", loadMails);
 $("mailSend").addEventListener("click", sendMailFlow);
 $("taskList").addEventListener("click", () => runToolPanel("tasks", { action: "list" }, "taskOut"));
 $("taskDue").addEventListener("click", () => runToolPanel("tasks", { action: "due" }, "taskOut"));
+$("taskFire").addEventListener("click", () => {
+  if (!window.confirm("Ejecutar ahora todas las tareas cuya hora ya llegó? Cada una queda registrada.")) return;
+  runToolPanel("tasks", { action: "fire" }, "taskOut");
+});
 $("taskCreate").addEventListener("click", () => {
   runToolPanel("tasks", {
     action: "create",

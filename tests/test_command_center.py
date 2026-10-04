@@ -1521,6 +1521,76 @@ class TestTasksCommand:
         result = handle(_tasks_able_jarvis(), "tasks", {"action": "run"})
         assert "id" in str(result["reply"]).lower()
 
+    def test_fire_runs_each_due_task_and_reports(self) -> None:
+        from jarvis.domain.value_objects.task_result import TaskResult
+
+        class _Agent:
+            def run_task(self, task: str) -> TaskResult:
+                return TaskResult(task=task, summary="done " + task, success=True)
+
+        scheduler = _FakeTaskScheduler()
+        jarvis = Jarvis(task_scheduler=scheduler)  # type: ignore[arg-type]
+        jarvis.remember_capability(
+            Capability(
+                name="manage tasks",
+                description="schedule and manage recurring tasks",
+                requirement="a wired task scheduler at the edge (TaskScheduler)",
+                provenance="test harness",
+                status=CapabilityStatus.ACQUIRED,
+            )
+        )
+        jarvis.set_instruction_agent(_Agent())  # type: ignore[arg-type]
+        task = scheduler.create_task(name="daily", command="report", cron="0 9 * * *")
+        overdue = ScheduledTask(
+            id=task.id, name=task.name, command=task.command, cron=task.cron,
+            next_run=datetime.now(UTC) - timedelta(hours=1),
+        )
+        scheduler.tasks[task.id] = overdue
+        result = handle(jarvis, "tasks", {"action": "fire"})
+        assert result["ok"] is True
+        assert result["count"] == 1
+        assert "daily" in str(result["reply"])
+        assert "Fired 1 due task(s)" in str(result["reply"])
+        stored = jarvis.get_scheduled_task(task.id)
+        assert stored.last_status == "ok"
+        assert stored.last_output == "done report"
+
+    def test_fire_with_nothing_due_is_honest(self) -> None:
+        class _Agent:
+            def run_task(self, task: str) -> TaskResult:
+                return TaskResult(task=task, summary="ok", success=True)
+
+        jarvis = _tasks_able_jarvis()
+        jarvis.set_instruction_agent(_Agent())  # type: ignore[arg-type]
+        jarvis.create_scheduled_task(name="daily", command="report", cron="0 9 * * *")
+        result = handle(jarvis, "tasks", {"action": "fire"})
+        assert "No tasks were due" in str(result["reply"])
+        assert result.get("count") is None
+
+    def test_fire_without_an_executor_declines_clearly(self) -> None:
+        scheduler = _FakeTaskScheduler()
+        jarvis = Jarvis(task_scheduler=scheduler)  # type: ignore[arg-type]
+        jarvis.remember_capability(
+            Capability(
+                name="manage tasks",
+                description="schedule and manage recurring tasks",
+                requirement="a wired task scheduler at the edge (TaskScheduler)",
+                provenance="test harness",
+                status=CapabilityStatus.ACQUIRED,
+            )
+        )
+        task = scheduler.create_task(name="daily", command="report", cron="0 9 * * *")
+        overdue = ScheduledTask(
+            id=task.id, name=task.name, command=task.command, cron=task.cron,
+            next_run=datetime.now(UTC) - timedelta(hours=1),
+        )
+        scheduler.tasks[task.id] = overdue
+        result = handle(jarvis, "tasks", {"action": "fire"})
+        assert "couldn't fire" in str(result["reply"])
+        assert result.get("count") is None
+        stored = jarvis.get_scheduled_task(task.id)
+        assert stored.last_run is None  # nothing ran, nothing was recorded
+
     def test_snapshot_task_entries_carry_last_runs(self) -> None:
         jarvis = _tasks_able_jarvis()
         task = jarvis.create_scheduled_task(name="job", command="do it")

@@ -257,6 +257,52 @@ class TestSqliteTaskScheduler:
         assert ran.last_status == "error"
         assert len(ran.last_output) == 2000
 
+    def _clocked_store(self, start: datetime) -> tuple[SqliteTaskScheduler, dict[str, datetime]]:
+        probe = {"current": start}
+
+        def now() -> datetime:
+            return probe["current"]
+
+        store = SqliteTaskScheduler(
+            sqlite3.connect(":memory:"), id_factory=_ids(), clock=now
+        )
+        return store, probe
+
+    def test_record_run_advances_a_cron_task_and_it_is_never_due_again(self) -> None:
+        store, probe = self._clocked_store(datetime(2026, 9, 25, 8, 0, tzinfo=UTC))
+        task = store.create_task(name="daily", command="echo x", cron="0 9 * * *")
+        assert task.next_run == datetime(2026, 9, 25, 9, 0, tzinfo=UTC)
+        probe["current"] = datetime(2026, 9, 25, 9, 5, tzinfo=UTC)  # fire time
+        ran = store.record_run(task.id, ok=True, output="done")
+        assert ran.last_run == probe["current"]
+        # the fired occurrence must never re-fire: next run is strictly later
+        assert ran.next_run == datetime(2026, 9, 26, 9, 0, tzinfo=UTC)
+        assert store.due_tasks() == ()
+
+    def test_record_run_one_shot_fires_once_and_is_never_due_again(self) -> None:
+        store, _ = self._clocked_store(datetime(2026, 9, 25, 8, 0, tzinfo=UTC))
+        task = store.create_task(name="once", command="echo x", cron="")
+        assert task.next_run is None
+        ran = store.record_run(task.id, ok=False, output="nope")
+        assert ran.next_run is None
+        assert ran.enabled is True  # honest: can be re-armed, just never auto-due
+
+    def test_record_run_with_an_impossible_cron_stops_honestly(self) -> None:
+        store, _ = self._clocked_store(datetime(2026, 9, 25, 8, 0, tzinfo=UTC))
+        task = store.create_task(name="never", command="echo x", cron="0 0 31 2 *")
+        assert task.next_run is None  # Feb 31: no possible next occurrence
+        ran = store.record_run(task.id, ok=True, output="done")
+        assert ran.next_run is None
+        assert ran.enabled is False  # honest stop, never a fake due
+
+    def test_record_run_uses_the_injected_clock(self) -> None:
+        store, probe = self._clocked_store(datetime(2026, 9, 25, 8, 0, tzinfo=UTC))
+        task = store.create_task(name="job", command="echo x")
+        probe["current"] = datetime(2026, 9, 25, 10, 0, tzinfo=UTC)
+        ran = store.record_run(task.id, ok=True, output="done")
+        assert ran.last_run == datetime(2026, 9, 25, 10, 0, tzinfo=UTC)
+        assert ran.updated_at == datetime(2026, 9, 25, 10, 0, tzinfo=UTC)
+
     def test_legacy_payloads_without_runs_read_honestly(self, tmp_path: Path) -> None:
         import json
 
@@ -295,6 +341,22 @@ class TestLocalTaskSchedulerRuns:
         assert (ran.last_status, ran.last_output) == ("ok", "done")
         reloaded = LocalTaskScheduler(tmp_path).get_task(task.id)
         assert reloaded.last_status == "ok"
+
+    def test_record_run_advances_cron_next_run_with_injected_clock(
+        self, tmp_path: Path
+    ) -> None:
+        from jarvis.infrastructure.task_scheduler import LocalTaskScheduler
+
+        probe = {"current": datetime(2026, 9, 25, 8, 0, tzinfo=UTC)}
+        store = LocalTaskScheduler(tmp_path, clock=lambda: probe["current"])
+        task = store.create_task(name="daily", command="echo x", cron="0 9 * * *")
+        assert task.next_run is not None
+        probe["current"] = datetime(2026, 9, 25, 9, 5, tzinfo=UTC)
+        ran = store.record_run(task.id, ok=True, output="done")
+        assert ran.next_run == datetime(2026, 9, 26, 9, 0, tzinfo=UTC)
+        assert store.due_tasks() == ()  # the fired occurrence never re-fires
+        reloaded = LocalTaskScheduler(tmp_path).get_task(task.id)
+        assert reloaded.next_run == datetime(2026, 9, 26, 9, 0, tzinfo=UTC)
 
     def test_legacy_json_without_runs_reads_honestly(self, tmp_path: Path) -> None:
         import json

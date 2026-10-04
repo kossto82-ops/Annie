@@ -93,6 +93,7 @@ def test_calendar_and_tasks_panels_are_wired() -> None:
         "id=\"calCreate\"",
         "id=\"taskList\"",
         "id=\"taskDue\"",
+        "id=\"taskFire\"",
         "id=\"taskCreate\"",
         "runToolPanel",
     ):

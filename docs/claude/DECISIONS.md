@@ -244,3 +244,29 @@ Live docs must stay truthful and a machine must be able to verify it (roadmap F7
   never an emptied reply), a provider *refusal* is honest silence (`""`, Increment 157 guardrail).
 
 Each gate runs offline in CI without a single third-party dependency (stdlib only).
+
+## D35 — A fired task occurrence advances once, never re-fires
+
+Decided tasks execute *by occurrence*: the `TaskScheduler` stores *what* to run
+and *when*, and `run_due_tasks` (the `scheduled_execution` driver) sweeps every
+currently-due enabled task exactly once through the same `approved=False`
+earned-agency executor `tasks run` uses (D31 boundary). The store owns the
+recurrence and the driver never sleeps or loops on its own:
+
+- **Advance on record** — `record_run` (both the file and SQLite adapters) moves
+  a cron task's `next_run` with `next_run_after(cron, run_at)`: strictly after
+  the fire time, missed windows skipped, no catch-up backfill. After `tasks fire`
+  a task is *not* due again until its next real window.
+- **A one-shot fires exactly once** — a task without a cron never auto-due's after
+  its fire; it stays enabled (re-armable via `update`/`enable`) but its
+  `next_run` is cleared so the same occurrence can never be picked up twice.
+- **An impossible schedule stops honestly** — if `next_run_after` finds no next
+  occurrence (e.g. Feb 31), `record_run` clears `next_run` *and* disables the
+  task, rather than fabricating a due window forever.
+- **Snapshots, not streams** — the sweep captures `due_tasks()` once at the start,
+  so each task runs at most once per call; one task failing (an `ok=False` result
+  or a raised executor error) is recorded on that task and the sweep keeps going,
+  with every honest outcome in the returned `ScheduledRun` report.
+- **On-demand cadence** — the sweep is invoked (`tasks fire`) whenever a sweep is
+  wanted; there is still no background thread or proactive wake loop (D8,
+  AI_CONTEXT.md deferral).

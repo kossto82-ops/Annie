@@ -81,10 +81,11 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-2362 tests passing (3 skipped), ruff clean, pyright strict 0.
+2378 tests passing (3 skipped), ruff clean, pyright strict 0.
 
 The current project is at Increment 176 (see `STATUS.md`; Increments 171–172 shipped the docs
-reconciliation, the zero-fallout roadmap, and the single decision authority — `DECISIONS.md` D1–D34 —
+reconciliation, the zero-fallout roadmap, and the single decision
+authority — `DECISIONS.md` D1–D35 —
 guarded by the offline `doc-truth` check `scripts/check_decision_refs.py`, Increment 173 shipped the
 scheduled honest forgetting — `ForgettingCandidates` on the rest cadence, the `forgetting` command, and
 root-wired `DecayingWeightingPolicy` recall bias — Increment 174 shipped the open-question loop
@@ -194,14 +195,20 @@ the console reads it). The reproducibility thread is complete (roadmap F7, Incre
 (`scripts/check_docs_truth.py`) enforces the counts house rule (docs never cite below the last published
 suite total), reuses the F1 decision-ref checker, spot-checks that every backticked name in
 `SYSTEM_TODAY.md` resolves in `src/`, and holds INDEX.md as the single HISTORICAL manifest; and
-`scripts/check_broad_excepts.py` audits the committed list of all **47 `except Exception` in `src/`** —
+`scripts/check_broad_excepts.py` audits the committed list of all **48 `except Exception` in `src/`** —
 every one non-silent, zero in domain/executive cognition — with the swallow-regression test proving the
 executive error path stays loud (`provider_error`, never an emptied reply) while the Increment-157
 refusal guardrail stays `""`. Roadmap phases **F1-F8 are complete** (F8, Increment 182: the final
 gates re-run verbatim on a fresh clone in under 30 minutes — the committed re-audit checklist
 `docs/claude/audits/2026-09-25_f8_closeout.md` — plus the F0 baseline
 `docs/claude/audits/2026-09-21_baseline.md` and DECISIONS.md extended to D34; the zero-fallout
-roadmap is closed).
+roadmap is closed). Scheduled execution landed beyond the roadmap (Increment 183): decided tasks
+actually fire — the pure `run_due_tasks` driver (`scheduled_execution.py`) sweeps every currently-due
+enabled task exactly once through the same `approved=False` executor `tasks run` uses, `record_run` on
+both adapters (file + SQLite, clock-injectable) advances a cron task's `next_run` so no occurrence ever
+re-fires and a one-shot fires exactly once (an impossible schedule stops honestly, `enabled=False`),
+via the `tasks fire` command and a console "Fire due" button — on demand, still no background thread,
+with DECISIONS.md extended to D35.
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner

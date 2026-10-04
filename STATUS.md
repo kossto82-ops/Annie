@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-09-25 (Increment 182 — final gates, re-audit checklist, doc close, roadmap F8)
+Last updated: 2026-10-04 (Increment 183 — scheduled execution)
 
 ---
 
@@ -2154,7 +2154,7 @@ The architectural audit is complete. Post-audit implementation wired existing sy
 ## Decisions log (ADR-lite — settled, do not revisit)
 
 > **Legacy numbering.** This log uses its own D1–D40 sequence. The current, non-negotiable
-> constraints live in `docs/claude/DECISIONS.md` (D1–D34), which is the **single authority**;
+> constraints live in `docs/claude/DECISIONS.md` (D1–D35), which is the **single authority**;
 > cross-references in live docs and `src/` must resolve there. The mapping from these legacy numbers
 > to `DECISIONS.md` is in the appendix below (roadmap phase F1, Increment 172). Entries below are
 > history.
@@ -2448,7 +2448,7 @@ design decision, so it waits for an explicit go. Tracks C/D are opportunistic.
 
 ## Next increment (see `docs/claude/ROADMAP_TO_ZERO_FALLOUT.md`)
 
-**Increments 166–182 are committed and pushed.** Roadmap phases **F1–F8 are done**:
+**Increments 166–183 are committed and pushed.** Roadmap phases **F1–F8 are done**:
 F1 (single decision authority, Inc 172), F2 (scheduled honest forgetting/decay, Inc 173),
 F3 (open-question auto-retirement, Inc 174), F4 (passage-level document search, Inc 175),
 F5 (**live voice streaming + VAD**, Inc 176: the `SpeechPerceptionSource` streaming contract —
@@ -2457,11 +2457,16 @@ with an honest `streaming` snapshot flag — plus two console paths: live partia
 streams, AnalyserNode silence auto-segmentation when it does not), **F6** (edge deepening,
 Incs 177–180: CalDAV/ICS one-way calendar sync; the per-account mailbox UI with folders + unread; the
 decided-script charitable executor so the *offline* instruction agent runs scripted multi-step acts
-without a free-text LLM; and the server-side spoken turn riding the session ReasoningSpan), and
+without a free-text LLM; and the server-side spoken turn riding the session ReasoningSpan),
 **F7** (reproducibility, Inc 181: `uv.lock` consumed frozen by a 3.11/3.12/3.13 CI matrix; the
 `check_docs_truth.py` doc-truth job — counts gate, F1 decision-refs, SYSTEM_TODAY symbol spot-checks,
-HISTORICAL manifest; and the committed `check_broad_excepts.py` audit — all 47 `except Exception` in
-`src/` non-silent). Start at phase **F8** (final gates + re-audit checklist).
+HISTORICAL manifest; and the committed `check_broad_excepts.py` audit — all 48 `except Exception` in
+`src/` non-silent), and **F8** (final gates + re-audit checklist, Inc 182). Beyond the roadmap,
+**Increment 183** shipped *scheduled execution*: the task-scheduler seam now actually fires — a pure
+`run_due_tasks` driver sweeps every currently-due enabled task once through the same `approved=False`
+executor `tasks run` uses, `record_run` on both adapters (file + SQLite, clock-injectable) advances a
+cron task's `next_run` so no occurrence ever re-fires (D35), and a `tasks fire` command + console
+button drive it on demand — still no background thread.
 
 Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable
 via constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in
@@ -2480,8 +2485,9 @@ directions:
 - **Capability depth beyond the seams:** the calendar/tasks/notes/mail/speech/agent edges exist as seams +
   adapters; F6 deepened the calendar (CalDAV/ICS pull), mail (per-account folders + unread), the offline
   instruction executor (decided scripts, Inc 179) and speech (a one-call server-side spoken turn riding the
-  session `ReasoningSpan`, Inc 180); each seam can still deepen further (scheduling execution, richer
-  delegation scopes). Each must stay behind its domain Protocol (D7), earned (D29), and offline-testable (D8).
+  session `ReasoningSpan`, Inc 180); the task seam now *executes* on schedule (Inc 183: `tasks fire` sweeps
+  due tasks through the earned-agency executor, D35). Each seam can still deepen further (richer delegation
+  scopes). Each must stay behind its domain Protocol (D7), earned (D29), and offline-testable (D8).
 - **Memory-line depth:** the semantic layer is deliberately bounded (COMPANION-only consolidation with
   neutral evidence, D23; vocabulary-driven meaning recall, D18) — extending it means *vocabulary + policy
   decisions*, never an LLM shortcut. Decay/forgetting are scheduled in the running system now (Increment
@@ -3566,5 +3572,49 @@ Exception" src` count exactly matching it — **all pass, not tests only**.
 Full suite: **2362 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
 doc-truth check clean; broad-except audit clean (54 audited sites — 47 `except Exception`, all
 non-silent, no drift). The zero-fallout roadmap is complete and its month-later script is committed.
+
+---
+
+## Increment 183 — Scheduled execution (2026-10-04)
+
+Decided tasks now actually fire on schedule, through the same earned-agency executor `tasks run` uses,
+with no background thread:
+
+- **A pure driver** — `src/jarvis/domain/services/scheduled_execution.py`:
+  `run_due_tasks(scheduler, executor)` snapshots `due_tasks()` once and runs every currently-due
+  enabled task exactly once through the executor, recording each outcome via `record_run` and returning
+  a `ScheduledRun(task_id, name, ok, output)` report. A failing task (an `ok=False` result or a raised
+  executor error) is recorded on that task and the sweep keeps going — nothing is swallowed into a fake
+  success (broad-except audit: boundary/outcome).
+- **The recurrence bug fixed** — both adapters (`LocalTaskScheduler` file + `SqliteTaskScheduler`,
+  `Jarvis.database()` family, D10) were `record_run`-only bookkeeping: next_run never advanced. Now
+  `record_run` derives the fire time from the injectable `clock`, advances a cron task's `next_run`
+  with `next_run_after(cron, run_at)` (strictly after the fire time, missed windows skipped, no
+  catch-up backfill), clears a one-shot's `next_run` so it fires exactly once, and — for an impossible
+  schedule (e.g. Feb 31) — stops *honestly*: `next_run=None` *and* `enabled=False`. After a fire a task
+  is never due again until its next real window (D35).
+- **Adapters are clock-injectable** — both stores accept `clock: Callable[[], datetime] | None`
+  (default module `_now()`), so the whole timing model is deterministic offline.
+- **Surfaces** — `TaskSchedulerSurface.fire_due_tasks()` (clear `RuntimeError` when no scheduler or no
+  executor is wired — nothing runs, nothing is recorded); `Jarvis.fire_due_tasks()` facade; the `tasks
+  fire` command action ("Fired N due task(s); M succeeded", "No tasks were due to run."); and a "Fire
+  due" console button beside "Due tasks" (asset-tripwire guarded).
+- **DECISIONS.md extended to D35** — a fired task occurrence advances once, never re-fires (advance on
+  record / one-shot fires once / impossible schedule stops honestly / snapshots not streams / on-demand
+  cadence, no background thread, AI_CONTEXT wake-loop deferral intact). `D1–D34` range markers updated
+  to `D1–D35` in CLAUDE.md, INDEX.md, and this log.
+- **Tests** — 16 new: the driver (fires each due once, ignores future/unscheduled, records honest
+  failures and executor crashes while sweeping on), the real stores (cron advancement + never-due-again
+  for file and SQLite, one-shot clearing, impossible-cron honest stop, injected-clock timestamps),
+  the facade (offline raise, no-executor raise with nothing recorded), and the `tasks fire` command
+  (report, nothing-due honesty, unwired-executor decline that records nothing). 2378 passed/3 skipped
+  at close, no flaky/network.
+
+Discipline: the sweep is on-demand (`tasks fire`), composed behind the `TaskScheduler` Protocol (D7)
+through the same `approved=False` instruction executor; there is still no proactive background loop.
+
+Full suite: **2378 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
+doc-truth check clean; broad-except audit clean (55 audited sites — 48 `except Exception`, all
+non-silent, no drift).
 
 ---

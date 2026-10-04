@@ -79,9 +79,11 @@ class SqliteTaskScheduler:
         connection: sqlite3.Connection,
         *,
         id_factory: Callable[[], str] | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._conn = connection
         self._id_factory = id_factory or (lambda: str(uuid4()))
+        self._clock = clock or _now
         self._tasks: dict[str, ScheduledTask] = {}
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS tasks ("
@@ -114,7 +116,7 @@ class SqliteTaskScheduler:
         enabled: bool = True,
     ) -> ScheduledTask:
         task_id = self._id_factory()
-        now = _now()
+        now = self._clock()
         validate_cron(cron)
         task = ScheduledTask(
             id=task_id,
@@ -151,12 +153,12 @@ class SqliteTaskScheduler:
             cron=new_cron,
             description=description if description else current.description,
             enabled=enabled,
-            next_run=next_run_after(new_cron, _now()) if cron else current.next_run,
+            next_run=next_run_after(new_cron, self._clock()) if cron else current.next_run,
             last_run=current.last_run,
             last_status=current.last_status,
             last_output=current.last_output,
             created_at=current.created_at,
-            updated_at=_now(),
+            updated_at=self._clock(),
         )
         self._upsert(constructed)
         return constructed
@@ -175,7 +177,7 @@ class SqliteTaskScheduler:
         return self._set_enabled(task_id, False)
 
     def due_tasks(self) -> tuple[ScheduledTask, ...]:
-        now = _now()
+        now = self._clock()
         return tuple(
             t
             for t in self._tasks.values()
@@ -184,19 +186,29 @@ class SqliteTaskScheduler:
 
     def record_run(self, task_id: str, *, ok: bool, output: str) -> ScheduledTask:
         current = self.get_task(task_id)
+        run_at = self._clock()
+        if current.cron:
+            next_run = next_run_after(current.cron, run_at)
+            enabled = current.enabled
+            if next_run is None:  # an impossible schedule: honest stop, never a fake due
+                next_run = None
+                enabled = False
+        else:
+            next_run = None  # a one-shot fired exactly once; stays enabled, never due again
+            enabled = current.enabled
         ran = ScheduledTask(
             id=current.id,
             name=current.name,
             command=current.command,
             cron=current.cron,
             description=current.description,
-            enabled=current.enabled,
-            next_run=current.next_run,
-            last_run=_now(),
+            enabled=enabled,
+            next_run=next_run,
+            last_run=run_at,
             last_status="ok" if ok else "error",
             last_output=output[:_MAX_RUN_OUTPUT],
             created_at=current.created_at,
-            updated_at=_now(),
+            updated_at=run_at,
         )
         self._upsert(ran)
         return ran
@@ -212,12 +224,12 @@ class SqliteTaskScheduler:
             cron=current.cron,
             description=current.description,
             enabled=enabled,
-            next_run=next_run_after(current.cron, _now()) if enabled else current.next_run,
+            next_run=next_run_after(current.cron, self._clock()) if enabled else current.next_run,
             last_run=current.last_run,
             last_status=current.last_status,
             last_output=current.last_output,
             created_at=current.created_at,
-            updated_at=_now(),
+            updated_at=self._clock(),
         )
         self._upsert(flipped)
         return flipped

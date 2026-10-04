@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from jarvis.domain.enums.document_owner import DocumentOwner
+from jarvis.domain.services.scheduled_execution import ScheduledRun, run_due_tasks
 from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.document_edit import DocumentEdit
 from jarvis.domain.value_objects.document_hit import DocumentHit
@@ -341,3 +342,17 @@ class TaskSchedulerSurface:
             raise
         store.record_run(task_id, ok=outcome.success, output=outcome.summary)
         return outcome
+
+    def fire_due_tasks(self) -> tuple[ScheduledRun, ...]:
+        """Fire every currently-due enabled task once through the executor.
+
+        A sweep over ``due_tasks()``: each command runs through the same
+        ``approved=False`` executor ``tasks run`` uses and the outcome is
+        recorded on the task (the store advances the recurrence, D35). A
+        failing task never aborts the sweep; the returned report carries every
+        honest outcome. Raises a clear error when no executor is wired --
+        then nothing runs and nothing is recorded.
+        """
+        store = self._store()
+        agent = self._agent()
+        return run_due_tasks(store, agent.run_task)
