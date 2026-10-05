@@ -81,11 +81,11 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-2435 tests passing (3 skipped), ruff clean, pyright strict 0.
+2456 tests passing (3 skipped), ruff clean, pyright strict 0.
 
 The current project is at Increment 176 (see `STATUS.md`; Increments 171–172 shipped the docs
 reconciliation, the zero-fallout roadmap, and the single decision
-authority — `DECISIONS.md` D1–D37 —
+authority — `DECISIONS.md` D1–D38 —
 guarded by the offline `doc-truth` check `scripts/check_decision_refs.py`, Increment 173 shipped the
 scheduled honest forgetting — `ForgettingCandidates` on the rest cadence, the `forgetting` command, and
 root-wired `DecayingWeightingPolicy` recall bias — Increment 174 shipped the open-question loop
@@ -226,7 +226,14 @@ permission-ceiling factories `scope_at_most`/`registered_scope_at_most`, `run_sc
 per-call argument the registry-backed executors honour: the decided-script agent refuses an
 out-of-scope line, the model-driven agent simply never sees an out-of-scope tool), threaded through
 `Jarvis.delegate`/`execute` (D37) — opt-in and `None`-defaulted, so plain delegation is byte-identical
-to before and `approved=False` earned agency is untouched.
+to before and `approved=False` earned agency is untouched. Memory vocabulary deepened beyond the
+roadmap (Increment 187): the D18 bilingual recall layer gained **depth without width** — a Spanish
+morphological fold (accent folding plus an explicit inflected-form lexicon whose values are lemmas
+CONCEPT_MAP already carries, so the layer stays ontology-neutral), daily Spanish lemmas across every
+concept, and a **same-language synonym channel** (curated clusters — "glad" meets "happy"; cross-
+language meeting stays at the concept level only) so `relatedness` is now
+`max(surface, concept, synonym)` — all curated by hand per **D38** (never LLM-generated), with the
+matter-preservation exclusions and the `creo` ("I believe") false-positive guard pinned by tests.
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner

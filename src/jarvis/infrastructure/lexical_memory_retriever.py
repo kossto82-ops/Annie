@@ -9,9 +9,14 @@ tokens simply do not match (honest silence, Vision §37), rather than a forced g
 The one deliberate, still-deterministic exception is the *concept* channel: every
 durable candidate (beliefs, episodes, traits, goals, semantic patterns) is also
 scored against the query's canonical concepts. The concept vocabulary is bilingual
-(``CONCEPT_MAP``), so a paraphrase or a Spanish memory for an English question --
-different surface words, same idea -- surfaces the memory instead of honest silence.
-The query and a memory that share neither words nor concepts still do not match.
+(``CONCEPT_MAP``) and, since Increment 187, *morphologically deep* on the Spanish
+side (accent folding plus an inflected-form lexicon resolve "entregaron" to the
+same DELIVER as "delivered"), so a paraphrase or a Spanish memory for an English
+question -- different surface words, same idea -- surfaces the memory instead of
+honest silence. A *same-language synonym* channel (curated clusters: "glad" meets
+"happy") closes the last common paraphrase gap on the surface side; cross-language
+matching happens only at the concept level. The query and a memory that share
+neither words, nor concepts, nor a synonym cluster still do not match.
 Short-term ``CONVERSATION`` turns stay surface-only: reciting a recent turn by
 meaning would echo the topic back even when the wording differs.
 

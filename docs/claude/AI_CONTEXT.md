@@ -74,8 +74,10 @@ for all stores (incl. capabilities, refutations, trace).
 **Recall seam** (`MemoryRetriever` + `RecalledMemory`): a deterministic lexical adapter is the offline
 default; an embedding-backed retriever (recall by meaning, Increment 108) is opt-in via
 `Jarvis.enable_embedding_recall(embedder)`. Since Increment 168 the lexical adapter itself ranks every
-durable candidate by meaning: one domain scorer `relatedness = max(surface_overlap, concept_relevance)`
-(bilingual `CONCEPT_MAP`, paraphrase and ES↔EN), so the meaning channel works with no embeddings at all.
+durable candidate by meaning: one domain scorer `relatedness = max(surface_overlap, concept_relevance, synonym_overlap)`
+(a bilingual `CONCEPT_MAP` that is morphologically deep on the Spanish side — accent folding + an
+inflected-form lexicon, so "entregaron" and "delivered" meet on DELIVER — plus curated same-language
+synonym clusters, D38), so the meaning channel works with no embeddings at all.
 `SEMANTIC` is no longer a special case — it is just another durable candidate, winning only as a tie-break
 at exact relevance (the distilled pattern outranks the concrete copies it generalizes over). Short-term
 conversation turns stay surface-only: matched lexically, never echoed as answers. Recall supplies *stance*
@@ -326,6 +328,12 @@ Increments 111–112).
 - Recall by meaning (Increment 168): one scorer `relatedness = max(surface_overlap, concept_relevance)`
   ranks every durable candidate; the bilingual `CONCEPT_MAP` bridges paraphrase and ES↔EN; the SEMANTIC
   special case in retrieval is gone (tie-break only).
+- Vocabulary depth (Increment 187/D38): the Spanish side of that scorer is morphological (accent
+  folding plus an inflected-form lexicon that resolves "entregaron" to the same DELIVER as
+  "delivered"), `relatedness` is now `max(surface, concept, synonym)` with curated same-language
+  synonym clusters — cross-language stays at the concept level, clusters never touch
+  signatures/topic identity, and every addition is a hand-written policy decision, never
+  LLM-generated.
 - Change-of-mind resolution (Increment 169): see "Change of mind" above; superseded statements are never
   recalled as current on any store family.
 - Episode evidence-request writer (Increment 170): see "Evidence-request writer" above; a

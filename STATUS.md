@@ -2154,7 +2154,7 @@ The architectural audit is complete. Post-audit implementation wired existing sy
 ## Decisions log (ADR-lite — settled, do not revisit)
 
 > **Legacy numbering.** This log uses its own D1–D40 sequence. The current, non-negotiable
-> constraints live in `docs/claude/DECISIONS.md` (D1–D37), which is the **single authority**;
+> constraints live in `docs/claude/DECISIONS.md` (D1–D38), which is the **single authority**;
 > cross-references in live docs and `src/` must resolve there. The mapping from these legacy numbers
 > to `DECISIONS.md` is in the appendix below (roadmap phase F1, Increment 172). Entries below are
 > history.
@@ -3748,3 +3748,42 @@ scope-aware executor honours).
 
 Full suite: **2435 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
 doc-truth check clean (floor 2413 → 2435); broad-except audit clean (no drift).
+
+## Increment 187 — Memory vocabulary + policy depth (2026-10-05)
+
+The memory direction named in "After that" (vocabulary + policy) lands, under new decision **D38**:
+the D18 bilingual concept vocabulary grows in *depth* — Spanish morphology and a same-language synonym
+channel — without an LLM, a new abstraction, or a widening of the matter-preservation surface.
+
+- **Spanish morphological fold** — `abstraction.py` now accent-folds first (one stored entry covers
+  "decisión"/"decision" and "decidió"/"decidio"), then consults `_ES_INFLECTED`, an explicit
+  inflected-form lexicon (1sg/2sg/3sg, plural, gerund, participle, preterite) whose *values are all
+  lemmas CONCEPT_MAP already carries*: "entregaron" → DELIVER, "aprendo" → LEARN, "consigo" →
+  SUCCEED, "cuesta" → COST, "elijo" → DECIDE. Every derivation still resolves *through* CONCEPT_MAP,
+  so the layer stays ontology-neutral (D38 deliberately avoids a Spanish stemmer: its ar/er/ir
+  ambiguity and stem-vowel yield would reopen the matter-preservation surface).
+- **Bilingual coverage** — daily Spanish lemmas added per concept (pedir/solicitar → REQUEST,
+  entregar/enviar → DELIVER, lograr/conseguir → SUCCEED, fracasar/fallar → FAIL, subir/aumentar/
+  mejorar → INCREASE, bajar/disminuir → DECREASE, costar/precio → COST, seguro → SAFE, eleccion/
+  elegir → DECIDE, evitar/bloquear/impedir → PREVENT, meta/finalidad → PURPOSE, desafio → CHALLENGE,
+  memoria → REMEMBER, pasado → HISTORY, plazo/horario → TIME, mal → WRONG, estudiar → LEARN), with
+  stem-changing roots written out exactly (pido/pide, consigo/consigue, elijo/elige, cuesta/cuestan).
+  A demonstrable false positive is deliberately excluded on sight: `creo` ("I believe") never maps to
+  BUILD even though `crear` does.
+- **Synonym channel** — `relatedness` is now `max(surface, concept, synonym)`; `synonym_overlap` scores
+  curated *same-language* clusters ("glad" meets "happy"; "cansado" meets "agotado"). Cross-language
+  meeting stays at the concept level only, clusters never touch signatures/topic identity, and each
+  channel stays in `[0, 1]` — unrelated pairs remain honestly silent (Vision §37).
+- **Tests** — 22 new (`tests/semantic_attention/test_vocabulary_depth.py`): accent fold, inflection
+  lexicon + family consistency, stem-changes, the `creo` guard, cross-language meet (unit + an
+  end-to-end bilingual recall through `LexicalMemoryRetriever`), synonym channel (positive / zero /
+  silence), and the English anchors (matter-preservation exclusions and pinned dimension signatures
+  unchanged; synonym channel never touches signatures). 2456 passed/3 skipped at close.
+
+Discipline: curated-only (every entry is a hand-written vocabulary/policy decision, never
+prompt-generated — D18/D38), ontology-neutral (values resolve through CONCEPT_MAP, not beside it),
+deterministic at every step, and additive-with-zero-silence (each new channel only ever raises a
+match; 0.0 still means no signal).
+
+Full suite: **2456 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
+doc-truth check clean (floor 2435 → 2456); broad-except audit clean (no drift).

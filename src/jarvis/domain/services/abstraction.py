@@ -212,6 +212,51 @@ CONCEPT_MAP: dict[str, str] = {
     "decidir": "DECIDE", "decisión": "DECIDE", "decision": "DECIDE",
     "prevenir": "PREVENT",
     "retraso": "TIME", "retrasar": "TIME",
+    # ------------------------------------------------------------------
+    # Increment 187: vocabulary depth. Entries are stored *folded* (accents
+    # removed) so one entry covers an accented and an unaccented spelling
+    # ("decidió" and "decidio" resolve to the same token). Adding a lemma is
+    # a deliberate vocabulary/policy decision (D18, D38), never an LLM
+    # shortcut, and every derivation still resolves through CONCEPT_MAP, so
+    # the layer stays ontology-neutral.
+    # AGREE — consenting / conceding
+    "coincidir": "AGREE", "aceptar": "AGREE",
+    # REQUEST — asking / soliciting
+    "pedir": "REQUEST", "solicitar": "REQUEST",
+    # DELIVER — providing / sending
+    "entregar": "DELIVER", "enviar": "DELIVER",
+    # SUCCEED — achieving
+    "lograr": "SUCCEED", "conseguir": "SUCCEED",
+    "exito": "SUCCEED", "exitos": "SUCCEED",
+    # FAIL — failing
+    "fracasar": "FAIL", "fallar": "FAIL",
+    # INCREASE / DECREASE — directional quantity change
+    "subir": "INCREASE", "aumentar": "INCREASE", "mejorar": "INCREASE",
+    "bajar": "DECREASE", "disminuir": "DECREASE",
+    # COST — spending
+    "costar": "COST", "precio": "COST", "precios": "COST",
+    # SAFE — reliable / safe (gender/number spellings are exact)
+    "seguro": "SAFE", "segura": "SAFE", "seguros": "SAFE",
+    "seguras": "SAFE",
+    # REMEMBER — recalling
+    "memoria": "REMEMBER", "memorias": "REMEMBER",
+    # DECIDE — choosing / deciding
+    "eleccion": "DECIDE", "elecciones": "DECIDE", "elegir": "DECIDE",
+    # PREVENT — blocking / avoiding
+    "evitar": "PREVENT", "bloquear": "PREVENT", "impedir": "PREVENT",
+    # PURPOSE — endeavor / goal
+    "meta": "PURPOSE", "metas": "PURPOSE", "finalidad": "PURPOSE",
+    # CHALLENGE — dissenting
+    "desafio": "CHALLENGE", "desafiar": "CHALLENGE",
+    # HISTORY — the shared past
+    "pasado": "HISTORY",
+    # TIME — scheduling
+    "plazo": "TIME", "plazos": "TIME", "horario": "TIME",
+    "horarios": "TIME",
+    # WRONG — error / being mistaken
+    "mal": "WRONG",
+    # LEARN — studying
+    "estudiar": "LEARN",
 }
 
 # Role nouns → ROLE (entity-independent)
@@ -234,6 +279,163 @@ _E_DROP_LEMMAS: dict[str, str] = {
     "requir": "require",  # requiring -> REQUEST
     "pric": "price",  # pricing -> COST
     "deliveri": "delivery",  # deliveries -> DELIVER
+}
+
+# Spanish accent folding: every daily lemma and inflected form is stored
+# unaccented, so a single entry covers both spellings ("decisión" and
+# "decision", "decidió" and "decidio"). The fold is applied *only on the
+# Spanish path* (after the English exact/cascade step), so English words are
+# never disturbed (c.f. "decision", "decisiones" stays English-exact).
+_ES_ACCENT_FOLD = str.maketrans("áéíóúüÁÉÍÓÚÜ", "aeiouuaeiouu")
+
+
+def _es_fold(word: str) -> str:
+    """Accent-fold a token (Spanish spelling variant -> canonical folded form)."""
+    return word.translate(_ES_ACCENT_FOLD)
+
+
+# Spanish morphological lemma lexicon (everyday companion set). Each key is a
+# folded inflected surface (a specific conjugation: 1sg/2sg/3sg, plural,
+# gerund, participle or preterite) and each value is a *lemma that CONCEPT_MAP
+# already carries*; the concept assignment therefore still comes from
+# CONCEPT_MAP alone (D38: ontology-neutral, like the English lemma table).
+# Lists both above explicitly -- a Spanish stemmer is deliberately avoided:
+# its ar/er/ir ambiguity and stem-vowel yield would widen the matter-
+# preservation surface (create/estimate/receive never map) for a small recall
+# gain. Stem-changing roots (pido/pide, consigo/consigue, elijo/elige,
+# cuesta/cuestan) are written out, not generated.
+_ES_INFLECTED: dict[str, str] = {
+    # construir -> BUILD (construye/construyo/construí/construyendo are exact)
+    "construyes": "construir", "construyen": "construir",
+    "construimos": "construir", "construyeron": "construir",
+    "construido": "construir",
+    # crear -> BUILD ("creo" is deliberately absent: "creo que ..." = "I believe",
+    # not "I build" -- a demonstrable false positive for everyday recall)
+    "creas": "crear", "crea": "crear", "crean": "crear",
+    "creamos": "crear", "crearon": "crear", "creado": "crear",
+    # aprender -> LEARN (aprendiendo/aprendí/aprendi are exact)
+    "aprendo": "aprender", "aprendes": "aprender", "aprende": "aprender",
+    "aprenden": "aprender", "aprendimos": "aprender",
+    "aprendieron": "aprender", "aprendido": "aprender",
+    # estudiar -> LEARN
+    "estudio": "estudiar", "estudias": "estudiar", "estudia": "estudiar",
+    "estudian": "estudiar", "estudiamos": "estudiar",
+    "estudiaron": "estudiar", "estudiando": "estudiar",
+    "estudiado": "estudiar",
+    # viajar -> TRAVEL (viaje/viajes/viajando are exact)
+    "viajo": "viajar", "viajas": "viajar", "viajan": "viajar",
+    "viajamos": "viajar", "viajaron": "viajar", "viajado": "viajar",
+    # recordar -> REMEMBER (recuerdo/recuerda/recuerde/recuerdas are exact)
+    "recuerdan": "recordar",
+    "recordamos": "recordar", "recordando": "recordar",
+    "recordado": "recordar", "recordaron": "recordar",
+    # coincidir -> AGREE
+    "coincido": "coincidir", "coincides": "coincidir",
+    "coincide": "coincidir", "coinciden": "coincidir",
+    "coincidimos": "coincidir", "coincidio": "coincidir",
+    "coincidiendo": "coincidir", "coincidido": "coincidir",
+    # aceptar -> AGREE
+    "acepto": "aceptar", "aceptas": "aceptar", "acepta": "aceptar",
+    "aceptan": "aceptar", "aceptamos": "aceptar",
+    "aceptaron": "aceptar", "aceptando": "aceptar", "aceptado": "aceptar",
+    # pedir -> REQUEST (stem change e->i: pid-)
+    "pido": "pedir", "pides": "pedir", "pide": "pedir", "piden": "pedir",
+    "pedimos": "pedir", "pidio": "pedir", "pidiendo": "pedir",
+    "pedido": "pedir", "pedi": "pedir",
+    # solicitar -> REQUEST
+    "solicito": "solicitar", "solicitas": "solicitar",
+    "solicita": "solicitar", "solicitan": "solicitar",
+    "solicitamos": "solicitar", "solicitaron": "solicitar",
+    "solicitando": "solicitar", "solicitado": "solicitar",
+    # entregar -> DELIVER
+    "entrego": "entregar", "entregas": "entregar", "entrega": "entregar",
+    "entregan": "entregar", "entregamos": "entregar",
+    "entregaron": "entregar", "entregando": "entregar",
+    "entregado": "entregar",
+    # enviar -> DELIVER
+    "envio": "enviar", "envias": "enviar", "envia": "enviar",
+    "envian": "enviar", "enviamos": "enviar", "enviaron": "enviar",
+    "enviando": "enviar", "enviado": "enviar",
+    # lograr -> SUCCEED
+    "logro": "lograr", "logras": "lograr", "logra": "lograr",
+    "logran": "lograr", "logramos": "lograr", "lograron": "lograr",
+    "logrando": "lograr", "logrado": "lograr",
+    # conseguir -> SUCCEED (stem change e->i: consigu-)
+    "consigo": "conseguir", "consigues": "conseguir",
+    "consigue": "conseguir", "consiguen": "conseguir",
+    "conseguimos": "conseguir", "consiguio": "conseguir",
+    "consiguiendo": "conseguir", "conseguido": "conseguir",
+    # fracasar -> FAIL
+    "fracaso": "fracasar", "fracasas": "fracasar", "fracasa": "fracasar",
+    "fracasan": "fracasar", "fracasamos": "fracasar",
+    "fracasaron": "fracasar", "fracasando": "fracasar",
+    "fracasado": "fracasar",
+    # fallar -> FAIL
+    "fallo": "fallar", "fallas": "fallar", "fallan": "fallar",
+    "fallamos": "fallar", "fallaron": "fallar", "fallando": "fallar",
+    "fallado": "fallar",
+    # subir -> INCREASE
+    "subo": "subir", "subes": "subir", "sube": "subir", "suben": "subir",
+    "subimos": "subir", "subio": "subir", "subiendo": "subir",
+    "subido": "subir",
+    # aumentar -> INCREASE
+    "aumento": "aumentar", "aumentas": "aumentar", "aumenta": "aumentar",
+    "aumentan": "aumentar", "aumentamos": "aumentar",
+    "aumentaron": "aumentar", "aumentando": "aumentar",
+    "aumentado": "aumentar",
+    # mejorar -> INCREASE
+    "mejoro": "mejorar", "mejoras": "mejorar", "mejora": "mejorar",
+    "mejoran": "mejorar", "mejoramos": "mejorar",
+    "mejoraron": "mejorar", "mejorando": "mejorar", "mejorado": "mejorar",
+    # bajar -> DECREASE
+    "bajo": "bajar", "bajas": "bajar", "baja": "bajar", "bajan": "bajar",
+    "bajamos": "bajar", "bajaron": "bajar", "bajando": "bajar",
+    "bajado": "bajar",
+    # disminuir -> DECREASE
+    "disminuyo": "disminuir", "disminuyes": "disminuir",
+    "disminuye": "disminuir", "disminuyen": "disminuir",
+    "disminuimos": "disminuir",
+    "disminuyendo": "disminuir", "disminuido": "disminuir",
+    # costar -> COST (stem change o->ue: cuest-)
+    "cuesta": "costar", "cuestas": "costar", "cuestan": "costar",
+    "cueste": "costar", "costaron": "costar", "costando": "costar",
+    "costado": "costar",
+    # pagar -> COST
+    "pago": "pagar", "pagas": "pagar", "paga": "pagar", "pagan": "pagar",
+    "pagamos": "pagar", "pagaron": "pagar", "pagado": "pagar",
+    # crecer -> INCREASE
+    "crece": "crecer", "creces": "crecer", "crecen": "crecer",
+    "crecio": "crecer", "crecido": "crecer",
+    # reducir -> DECREASE
+    "reduce": "reducir", "reducen": "reducir", "redujo": "reducir",
+    "reduciendo": "reducir",
+    # decidir -> DECIDE
+    "decido": "decidir", "decides": "decidir", "decide": "decidir",
+    "deciden": "decidir", "decidimos": "decidir", "decidio": "decidir",
+    "decidiendo": "decidir", "decidido": "decidir", "decidi": "decidir",
+    # elegir -> DECIDE (stem change e->i: elig-)
+    "elijo": "elegir", "eliges": "elegir", "elige": "elegir",
+    "eligen": "elegir", "elegimos": "elegir", "eligio": "elegir",
+    "eligiendo": "elegir", "elegido": "elegir",
+    # evitar / bloquear / impedir -> PREVENT
+    "evito": "evitar", "evitas": "evitar", "evita": "evitar",
+    "evitan": "evitar", "evitamos": "evitar", "evitaron": "evitar",
+    "evitando": "evitar", "evitado": "evitar",
+    "bloqueo": "bloquear", "bloqueas": "bloquear", "bloquea": "bloquear",
+    "bloquean": "bloquear", "bloquearon": "bloquear",
+    "bloqueando": "bloquear", "bloqueado": "bloquear",
+    "impedido": "impedir", "impidiendo": "impedir", "impido": "impedir",
+    "impides": "impedir", "impide": "impedir", "impiden": "impedir",
+    "impidio": "impedir",
+    # desafiar -> CHALLENGE (desafio is exact in CONCEPT_MAP)
+    "desafias": "desafiar", "desafia": "desafiar",
+    "desafian": "desafiar", "desafiaron": "desafiar",
+    "desafiando": "desafiar", "desafiado": "desafiar",
+    # prevenir -> PREVENT
+    "previene": "prevenir", "previenen": "prevenir", "previno": "prevenir",
+    "prevenido": "prevenir",
+    # retrasar -> TIME
+    "retrasa": "retrasar", "retrasan": "retrasar", "retrasado": "retrasar",
 }
 
 # Negation markers: the single authoritative contract shared with the keyword
@@ -292,6 +494,20 @@ def _normalise_token(word: str) -> str | None:
     # Concept mapping (exact form first)
     if low in CONCEPT_MAP:
         return CONCEPT_MAP[low]
+    # Spanish morphological fold: accent folding plus an explicit inflection
+    # lexicon. Every entry resolves to a lemma CONCEPT_MAP already carries, so
+    # the concept assignment still comes from CONCEPT_MAP alone (D38). The
+    # English exact/cascade paths above are never touched -- only Spanish
+    # spellings differ from their folded form or reach the lexicon.
+    folded = _es_fold(low)
+    folded_concept = CONCEPT_MAP.get(folded)
+    if folded_concept is not None:
+        return folded_concept
+    es_lemma = _ES_INFLECTED.get(folded)
+    if es_lemma is not None:
+        es_concept = CONCEPT_MAP.get(es_lemma)
+        if es_concept is not None:
+            return es_concept
     # Stemmed candidates: try each suffix strip; the first stem that resolves wins
     # (e.g. "promises" -> "promise", "misses" -> "miss", not "promis"/"misse").
     for suffix in _STEM_SUFFIXES:
@@ -363,7 +579,10 @@ def concept_relevance(query: str, text: str) -> float:
 
     The meaning channel. The CONCEPT_MAP is bilingual, so a Spanish text and an
     English query that share no surface words still meet on the canonical token
-    (e.g. "build" and "construyendo" both resolve to BUILD).
+    (e.g. "build" and "construyendo" both resolve to BUILD). Since Increment 187
+    the Spanish side is also *morphological*: an inflected form resolves to its
+    lemma through the same map (e.g. "entregaron" and "delivered" both meet on
+    DELIVER).
     """
     query_concepts = conceptual_tokens(query)
     if not query_concepts:
@@ -374,16 +593,72 @@ def concept_relevance(query: str, text: str) -> float:
     return len(query_concepts & kept_concepts) / len(query_concepts)
 
 
+# Every-day synonym clusters for the *surface* channel (Increment 187). Each
+# group is same-language and deliberately small, so a paraphrase with no shared
+# word and no shared concept still grounds a match ("glad" meets "happy").
+# Cross-language matching happens only at the concept level -- never here --
+# and clusters are curated by hand (D18): nobody prompt-generates vocabulary.
+_SYNONYM_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset({"happy", "glad", "delighted", "cheerful"}),
+    frozenset({"sad", "upset", "gloomy", "heartbroken"}),
+    frozenset({"tired", "exhausted", "worn", "drained"}),
+    frozenset({"busy", "swamped", "overloaded"}),
+    frozenset({"smart", "clever", "bright"}),
+    frozenset({"great", "superb", "excellent", "fantastic"}),
+    frozenset({"help", "assist"}),
+    frozenset({"calm", "peaceful", "relaxed"}),
+    frozenset({"hurt", "aching", "sore"}),
+    frozenset({"contento", "contenta", "feliz", "alegre"}),
+    frozenset({"triste", "apenado", "apenada"}),
+    frozenset({"cansado", "cansada", "agotado", "agotada"}),
+    frozenset({"ocupado", "ocupada", "atareado", "atareada"}),
+)
+
+
+def synonym_overlap(query: str, text: str) -> float:
+    """Fraction of the query's scoreable tokens whose synonym group the text shares --
+    0.0 when the query carries no cluster word or the text shares none.
+
+    The paraphrase channel, and the only one that never touches the canonical
+    concept vocabulary: it measures *surface* nearness between same-language
+    everyday words. Two unrelated texts stay 0.0 -- honest silence, never a
+    forced guess.
+    """
+    query_tokens = {
+        word for word in re.findall(r"\w+", query.lower()) if len(word) >= _MIN_CONCEPT_LEN
+    }
+    if not query_tokens:
+        return 0.0
+    text_tokens = {
+        word for word in re.findall(r"\w+", text.lower()) if len(word) >= _MIN_CONCEPT_LEN
+    }
+    if not text_tokens:
+        return 0.0
+    matched = 0
+    for word in query_tokens:
+        for group in _SYNONYM_GROUPS:
+            if word in group and (group & text_tokens):
+                matched += 1
+                break
+    return matched / len(query_tokens)
+
+
 def relatedness(query: str, text: str) -> float:
-    """How strongly ``text`` bears on ``query``, by words or by concept -- whichever
-    is stronger.
+    """How strongly ``text`` bears on ``query`` -- by words, by concept, or by
+    same-language synonym, whichever is strongest.
 
     The offline bridge across paraphrase and language used by the memory
     retrievers and the companion-trait bridge: one channel can be zero while
-    the other still grounds a match. 0.0 means no signal at all -- honest
-    silence (Vision §37), never a forced guess.
+    another still grounds a match. 0.0 means no signal at all -- honest
+    silence (Vision §37), never a forced guess. The three channels are
+    additive-in-the-max sense only: each stays in [0, 1], no channel leaks
+    rounding or weights into the others.
     """
-    return max(surface_overlap(query, text), concept_relevance(query, text))
+    return max(
+        surface_overlap(query, text),
+        concept_relevance(query, text),
+        synonym_overlap(query, text),
+    )
 
 
 def valence(trigger: str) -> str:

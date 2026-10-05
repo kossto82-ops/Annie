@@ -24,7 +24,9 @@ execution — `tasks fire` sweeps due tasks through the earned-agency executor, 
 **2393 passed, 3 skipped**; the other Track C/D leftover closes too (Increment 185: count/recency in
 `TemporalStability` behind an opt-in profile, D36), suite at **2413 passed, 3 skipped**; then the
 delegation seam deepens (Increment 186: per-task **delegation scopes** — a toolset ceiling behind the
-`TaskAgent` seam, D37), suite at **2435 passed, 3 skipped**.
+`TaskAgent` seam, D37), suite at **2435 passed, 3 skipped**; then the memory vocabulary deepens
+(Increment 187: the D18 recall layer gains Spanish morphology + a same-language synonym channel under
+D38), suite at **2456 passed, 3 skipped**.
 
 ## How this is written
 
