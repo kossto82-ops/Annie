@@ -100,6 +100,7 @@ def reconcile_topic(beliefs: Sequence[Belief]) -> Belief | None:
         id=leader.id,
         formed_at=leader.formed_at,
         weighting_policy=leader.weighting_policy,
+        stability_profile=leader.stability_profile,
         _evidence=pool,
         precedents=list(leader.precedents),
     )

@@ -69,6 +69,9 @@ from jarvis.domain.value_objects.retrieval_strategy import (
     StrategyOutcome,
 )
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
+from jarvis.domain.value_objects.temporal_stability_profile import (
+    TemporalStabilityProfile,
+)
 from jarvis.nervous_system.nervous_system import NervousSystem
 
 # The grounded threshold (D17) now lives in ``CognitiveKnobs`` (default 0.5), the
@@ -248,6 +251,7 @@ class ExecutiveController:
         memory_retriever: MemoryRetriever | None = None,
         reasoner: Reasoner | None = None,
         weighting_policy: EvidenceWeightingPolicy | None = None,
+        stability_profile: TemporalStabilityProfile | None = None,
         knowledge_source: KnowledgeSource | None = None,
         knowledge_graph: KnowledgeGraphRepository | None = None,
         semantic_memory_store: SemanticMemoryRepository | None = None,
@@ -267,6 +271,9 @@ class ExecutiveController:
         # Optional: how working beliefs weigh their evidence. Absent -> the default
         # (no decay). A decaying policy makes stale evidence fade (Vision §10, §22).
         self._weighting_policy = weighting_policy
+        # Optional: how working beliefs derive temporal stability (count/recency
+        # beyond span, Increment 185). Absent -> the classic span-only estimator.
+        self._stability_profile = stability_profile
         # Optional: surfaces relevant memories to *answer from*, distinct from the
         # evidence that grounds a belief (Vision §3, §22). Absent -> behaviour is
         # exactly as before recall existed.
@@ -782,7 +789,9 @@ class ExecutiveController:
         if remembered is not None:
             episode.adopt_working_belief(remembered)
             return remembered
-        return episode.form_working_belief(statement, self._weighting_policy)
+        return episode.form_working_belief(
+            statement, self._weighting_policy, self._stability_profile
+        )
 
     def _seed_from_companion(self, episode: CognitiveEpisode) -> None:
         """If Jarvis already believes something relevant about the companion, feed

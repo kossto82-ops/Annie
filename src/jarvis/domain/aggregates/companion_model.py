@@ -18,8 +18,14 @@ from __future__ import annotations
 from jarvis.domain.entities.belief import Belief
 from jarvis.domain.events.domain_event import CognitiveEvent
 from jarvis.domain.repositories.belief_repository import BeliefRepository
-from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
+from jarvis.domain.services.evidence_weighting import (
+    DEFAULT_WEIGHTING,
+    EvidenceWeightingPolicy,
+)
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.temporal_stability_profile import (
+    TemporalStabilityProfile,
+)
 
 # A companion-belief only informs new cognition once it is at least this confident
 # -- weak suspicion about the companion should not colour every answer (Vision §5).
@@ -38,23 +44,31 @@ class CompanionModel:
         self,
         beliefs: BeliefRepository,
         default_policy: EvidenceWeightingPolicy | None = None,
+        stability_profile: TemporalStabilityProfile | None = None,
     ) -> None:
         self._beliefs = beliefs
         self._default_policy = default_policy
+        self._default_stability_profile = stability_profile
         self._pending_events: list[CognitiveEvent] = []
 
     def set_default_policy(self, policy: EvidenceWeightingPolicy | None) -> None:
         """Swap the default policy for companion traits created from now on."""
         self._default_policy = policy
 
+    def set_default_stability_profile(
+        self, profile: TemporalStabilityProfile | None
+    ) -> None:
+        """Swap the temporal-stability profile for companion traits created from now on."""
+        self._default_stability_profile = profile
+
     def observe(self, trait: str, evidence: Evidence) -> Belief:
         """Record an observation about the companion, evolving the matching belief."""
         belief = self._beliefs.get_by_statement(trait)
         if belief is None:
-            belief = (
-                Belief(statement=trait, weighting_policy=self._default_policy)
-                if self._default_policy is not None
-                else Belief(statement=trait)
+            belief = Belief(
+                statement=trait,
+                weighting_policy=self._default_policy or DEFAULT_WEIGHTING,
+                stability_profile=self._default_stability_profile,
             )
         belief.add_evidence(evidence)
         self._beliefs.save(belief)

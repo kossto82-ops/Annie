@@ -20,8 +20,13 @@ from jarvis.domain.events.belief_events import (
 from jarvis.domain.events.evidence_events import EvidenceAdded
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
+from jarvis.domain.value_objects.temporal_stability_profile import (
+    DEFAULT_STABILITY_PROFILE,
+    TemporalStabilityProfile,
+)
 
 _EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
+_NOW = datetime(2026, 6, 1, tzinfo=UTC)
 
 
 def _ev(
@@ -238,3 +243,129 @@ class TestNarration:
         narration = belief.explain().narrate()
         assert "contradicts" in narration
         assert "may be wrong" in narration
+
+
+class TestStabilityProfile:
+    """Count/recency weighting on the temporal-stability axis (Increment 185, D36).
+
+    The profile is opt-in and the default reproduces the classic span-only answer
+    exactly; ``count_sensitivity`` lifts repeated support asymptotically and a
+    ``recency_half_life`` fades a stale latest observation through an injectable
+    clock.
+    """
+
+    def test_default_profile_reproduces_span_only_stability(self) -> None:
+        plain = Belief(statement="x")
+        plain.add_evidence(_ev(0.5, at=_EPOCH))
+        plain.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=90)))
+
+        explicit = Belief(statement="y", stability_profile=DEFAULT_STABILITY_PROFILE)
+        explicit.add_evidence(_ev(0.5, at=_EPOCH))
+        explicit.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=90)))
+
+        assert explicit.stability == plain.stability
+        assert plain.stability.value == pytest.approx(0.75)
+
+    def test_explicit_none_is_identical_to_the_default(self) -> None:
+        plain = Belief(statement="x")
+        plain.add_evidence(_ev(0.5, at=_EPOCH))
+        plain.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=90)))
+
+        explicit = Belief(statement="y", stability_profile=None)
+        explicit.add_evidence(_ev(0.5, at=_EPOCH))
+        explicit.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=90)))
+
+        assert explicit.stability == plain.stability
+
+    def test_count_sensitivity_lifts_repeated_support(self) -> None:
+        profile = TemporalStabilityProfile(count_sensitivity=0.5)
+        pair = Belief(statement="x", stability_profile=profile)
+        pair.add_evidence(_ev(0.5, at=_EPOCH))
+        pair.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=1)))
+
+        repeated = Belief(statement="y", stability_profile=profile)
+        for day in range(5):
+            repeated.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=day)))
+
+        # Same span (four days), but the habit of repetition reads steadier.
+        assert pair.stability.value == pytest.approx(1 / 31)
+        assert repeated.stability.is_more_stable_than(pair.stability)
+        assert repeated.stability.value < 1.0  # asymptotic, never certain
+
+    def test_count_lift_stays_asymptotic(self) -> None:
+        profile = TemporalStabilityProfile(count_sensitivity=0.5)
+        belief = Belief(statement="x", stability_profile=profile)
+        for day in range(1, 8):  # same day 0 absent: earliest is day 1
+            belief.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=day)))
+        assert belief.stability.value < 1.0  # never certain, regardless of habit
+
+    def test_recency_half_life_fades_a_stale_latest_observation(self) -> None:
+        profile = TemporalStabilityProfile(
+            recency_half_life=timedelta(days=30), now=lambda: _NOW
+        )
+        fresh = Belief(statement="x", stability_profile=profile)
+        fresh.add_evidence(_ev(0.5, at=_NOW - timedelta(days=1)))
+        fresh.add_evidence(_ev(0.5, at=_NOW))
+
+        stale = Belief(statement="y", stability_profile=profile)
+        stale.add_evidence(_ev(0.5, at=_NOW - timedelta(days=32)))
+        stale.add_evidence(_ev(0.5, at=_NOW - timedelta(days=31)))
+
+        # Identical one-day spans; only the latest observation's age differs, so
+        # the stale one is the fresh one faded by exactly one half-life ratio.
+        assert fresh.stability.is_more_stable_than(stale.stability)
+        assert stale.stability.value == pytest.approx(
+            fresh.stability.value * (0.5 ** (31 / 30))
+        )
+
+    def test_a_future_dated_latest_observation_does_not_fade(self) -> None:
+        profile = TemporalStabilityProfile(
+            recency_half_life=timedelta(days=30), now=lambda: _NOW
+        )
+        belief = Belief(statement="x", stability_profile=profile)
+        belief.add_evidence(_ev(0.5, at=_NOW + timedelta(days=1)))  # clock skew
+        belief.add_evidence(_ev(0.5, at=_NOW + timedelta(days=2)))
+        assert belief.stability.value == pytest.approx(1 / 31)  # no fade
+
+    def test_count_and_recency_compose(self) -> None:
+        profile = TemporalStabilityProfile(
+            count_sensitivity=0.5, recency_half_life=timedelta(days=30), now=lambda: _NOW
+        )
+        # Two beliefs whose *latest* supporting observation is equally stale.
+        faded_pair = Belief(statement="x", stability_profile=profile)
+        faded_pair.add_evidence(_ev(0.5, at=_NOW - timedelta(days=32)))
+        faded_pair.add_evidence(_ev(0.5, at=_NOW - timedelta(days=31)))
+
+        faded_habit = Belief(statement="y", stability_profile=profile)
+        for day in range(5):
+            faded_habit.add_evidence(_ev(0.5, at=_NOW - timedelta(days=35 - day)))
+
+        # The habit still reads steadier than the pair once both are faded by the
+        # same stale latest observation (count lift who survives the fade)...
+        assert faded_habit.stability.is_more_stable_than(faded_pair.stability)
+        # ...but the fade did pull it below the count-only (never-faded) value.
+        count_only = 0.1176 + 0.875 * (1.0 - 0.1176)
+        assert faded_habit.stability.value < count_only
+
+
+class TestStabilityProfileValidation:
+    @pytest.mark.parametrize(
+        "one",
+        [
+            dict(reference=timedelta(0)),
+            dict(low_threshold=-0.1),
+            dict(low_threshold=1.1),
+            dict(count_sensitivity=-0.01),
+            dict(count_sensitivity=1.01),
+            dict(recency_half_life=timedelta(0)),
+        ],
+    )
+    def test_invalid_profiles_are_rejected(self, one: dict[str, object]) -> None:
+        with pytest.raises(ValueError):
+            TemporalStabilityProfile(**one)  # type: ignore[arg-type]
+
+    def test_zero_count_sensitivity_is_valid_and_off(self) -> None:
+        belief = Belief(statement="x", stability_profile=TemporalStabilityProfile())
+        belief.add_evidence(_ev(0.5, at=_EPOCH))
+        belief.add_evidence(_ev(0.5, at=_EPOCH + timedelta(days=90)))
+        assert belief.stability.value == pytest.approx(0.75)

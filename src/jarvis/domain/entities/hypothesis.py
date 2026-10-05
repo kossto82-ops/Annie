@@ -26,6 +26,9 @@ from jarvis.domain.services.evidence_identity import same_observation
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
+from jarvis.domain.value_objects.temporal_stability_profile import (
+    TemporalStabilityProfile,
+)
 
 
 def _new_id() -> str:
@@ -53,6 +56,7 @@ class Hypothesis:
     _dedup_policy: Callable[[Evidence, Evidence], bool] | None = field(
         default=same_observation, repr=False
     )
+    stability_profile: TemporalStabilityProfile | None = None
 
     def __post_init__(self) -> None:
         if not self.statement or not self.statement.strip():
@@ -70,9 +74,11 @@ class Hypothesis:
         spread of the supporting evidence, zero when there is only one supporting
         observation or a single moment. Independence from confidence holds here too
         -- a burst of recent support can read confident but utterly unstable, and
-        the challenge narration flags exactly that (anti-overfit, Vision §11).
+        the challenge narration flags exactly that (anti-overfit, Vision §11). A
+        configured ``stability_profile`` enriches the span term with count/recency
+        weighting (Increment 185, D36); ``None`` keeps the classic span-only answer.
         """
-        return derive_stability(tuple(self._evidence))
+        return derive_stability(tuple(self._evidence), self.stability_profile)
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:

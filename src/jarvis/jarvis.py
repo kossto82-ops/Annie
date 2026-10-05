@@ -253,6 +253,9 @@ from jarvis.domain.value_objects.retrieved_document import RetrievedDocument
 from jarvis.domain.value_objects.scheduled_task import ScheduledTask
 from jarvis.domain.value_objects.state_summary import StateSummary
 from jarvis.domain.value_objects.task_result import TaskResult
+from jarvis.domain.value_objects.temporal_stability_profile import (
+    TemporalStabilityProfile,
+)
 from jarvis.domain.value_objects.tool_call import ToolCall
 from jarvis.domain.value_objects.tool_call_result import ToolCallResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
@@ -445,6 +448,7 @@ class Jarvis:
         unresolved_store: UnresolvedRepository | None = None,
         strategy_stats_store: StrategyStatsRepository | None = None,
         forgetting: ForgettingCandidates | None = None,
+        stability_profile: TemporalStabilityProfile | None = None,
     ) -> None:
         self.nervous_system = nervous_system or NervousSystem()
         # Live-provider instrumentation (Phase 4): a shared collector that recorded
@@ -458,10 +462,17 @@ class Jarvis:
         # (goals, actions, needs, companion traits, self-observed habits). None ->
         # the historical default; ``set_belief_policy`` swaps it at runtime.
         self._default_belief_policy = default_belief_policy or DEFAULT_WEIGHTING
+        # The per-belief default temporal-stability profile (count/recency beyond the
+        # pure span term, Increment 185). None -> the classic span-only estimator;
+        # ``set_stability_profile`` swaps it at runtime. It is a read/analyse-time
+        # tuning knob -- it carries an injectable clock, so it is never persisted.
+        self._default_stability_profile: TemporalStabilityProfile | None = stability_profile
         self.beliefs: BeliefRepository = beliefs or InMemoryBeliefStore()
         self.episodes: EpisodeRepository = episodes or InMemoryEpisodeStore()
         self.companion = CompanionModel(
-            companion_store or InMemoryBeliefStore(), self._default_belief_policy
+            companion_store or InMemoryBeliefStore(),
+            self._default_belief_policy,
+            self._default_stability_profile,
         )
         self.actions: BeliefRepository = actions_store or InMemoryBeliefStore()
         self._reversibility: BeliefRepository = (
@@ -729,6 +740,7 @@ class Jarvis:
             memory_retriever,
             reasoner,
             weighting_policy,
+            stability_profile,
             knowledge_source=knowledge_source,
 knowledge_graph=knowledge_graph_store,
             knobs=initial_knobs,
@@ -2189,6 +2201,7 @@ knowledge_graph=knowledge_graph_store,
         directory: str | Path,
         weighting_policy: EvidenceWeightingPolicy | None = None,
         default_belief_policy: EvidenceWeightingPolicy | None = None,
+        stability_profile: TemporalStabilityProfile | None = None,
     ) -> Jarvis:
         """A Jarvis whose whole memory lives on disk under one directory.
 
@@ -2199,7 +2212,11 @@ knowledge_graph=knowledge_graph_store,
         under ``directory``, so a single call gives full continuity across restarts
         (Vision §3, §21, §26). It composes the JSON stores and the JSONL trace log.
         """
-        return cls(**build_persistent_kwargs(directory, weighting_policy, default_belief_policy))
+        return cls(
+            **build_persistent_kwargs(
+                directory, weighting_policy, default_belief_policy, stability_profile
+            )
+        )
 
     @classmethod
     def database(
@@ -2207,6 +2224,7 @@ knowledge_graph=knowledge_graph_store,
         directory: str | Path,
         weighting_policy: EvidenceWeightingPolicy | None = None,
         default_belief_policy: EvidenceWeightingPolicy | None = None,
+        stability_profile: TemporalStabilityProfile | None = None,
     ) -> Jarvis:
         """A Jarvis whose whole memory lives in one real SQLite database (D10).
 
@@ -2220,7 +2238,11 @@ knowledge_graph=knowledge_graph_store,
         contracts; confidence and stability are still re-derived from stored
         evidence on every read, never persisted as assertions.
         """
-        return cls(**build_database_kwargs(directory, weighting_policy, default_belief_policy))
+        return cls(
+            **build_database_kwargs(
+                directory, weighting_policy, default_belief_policy, stability_profile
+            )
+        )
 
     def think(
         self,
@@ -2530,9 +2552,32 @@ knowledge_graph=knowledge_graph_store,
         self._default_belief_policy = policy
         self.companion.set_default_policy(policy)
 
+    def stability_profile(self) -> TemporalStabilityProfile | None:
+        """The configured temporal-stability profile, or None for span-only.
+
+        When set, new beliefs derive their stability with count/recency enrichment
+        beyond the pure span term (Increment 185). ``None`` keeps the classic
+        span-only estimator.
+        """
+        return self._default_stability_profile
+
+    def set_stability_profile(self, profile: TemporalStabilityProfile | None) -> None:
+        """Swap the temporal-stability profile at runtime.
+
+        Applies to every belief created *after* the swap; beliefs keep the profile
+        they were created with, so nothing already formed is silently re-granded.
+        The profile (which carries an injectable clock) is never persisted.
+        """
+        self._default_stability_profile = profile
+        self.companion.set_default_stability_profile(profile)
+
     def fresh_belief(self, statement: str) -> Belief:
         """A belief born with Jarvis's configured default weighting policy."""
-        return Belief(statement=statement, weighting_policy=self._default_belief_policy)
+        return Belief(
+            statement=statement,
+            weighting_policy=self._default_belief_policy,
+            stability_profile=self._default_stability_profile,
+        )
 
     def perceive(
         self, observation: str, trigger: str | None = None, goal: Goal | None = None

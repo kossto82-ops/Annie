@@ -36,12 +36,18 @@ from jarvis.domain.events.episode_events import (
     EpisodeReflected,
     EpisodeStarted,
 )
-from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
+from jarvis.domain.services.evidence_weighting import (
+    DEFAULT_WEIGHTING,
+    EvidenceWeightingPolicy,
+)
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.evidence_request import EvidenceRequest
 from jarvis.domain.value_objects.goal import Goal
 from jarvis.domain.value_objects.inference import Inference
 from jarvis.domain.value_objects.recalled_memory import RecalledMemory
+from jarvis.domain.value_objects.temporal_stability_profile import (
+    TemporalStabilityProfile,
+)
 
 
 class InvalidStateTransition(RuntimeError):
@@ -119,22 +125,26 @@ class CognitiveEpisode:
     # -- conclusion model (the belief or hypotheses the episode is reasoning toward)
 
     def form_working_belief(
-        self, statement: str, policy: EvidenceWeightingPolicy | None = None
+        self,
+        statement: str,
+        policy: EvidenceWeightingPolicy | None = None,
+        stability_profile: TemporalStabilityProfile | None = None,
     ) -> Belief:
         """Create the belief this episode is reasoning toward (Vision §12).
 
         ``policy`` sets how the belief weighs its evidence; when omitted the belief
         uses the default (no decay). A decaying policy makes stale evidence count for
-        less over time (Vision §10, §22).
+        less over time (Vision §10, §22). ``stability_profile`` (optional, Increment
+        185) enriches the belief's temporal-stability term with count/recency.
         """
         if self.state.is_terminal:
             raise InvalidStateTransition(
                 f"Episode {self.id} is {self.state.value}; cannot form a belief"
             )
-        belief = (
-            Belief(statement=statement, weighting_policy=policy)
-            if policy is not None
-            else Belief(statement=statement)
+        belief = Belief(
+            statement=statement,
+            weighting_policy=policy or DEFAULT_WEIGHTING,
+            stability_profile=stability_profile,
         )
         self._conclusion = belief
         return belief

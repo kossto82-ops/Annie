@@ -410,9 +410,11 @@ repair series merged it into the local line and closed the remediation plan A-E:
   path, and consolidation/abstraction deliberately feeds on COMPANION-origin episodes with neutral
   evidence only.
 - A real SQLite DB now backs the repository contracts (`Jarvis.database()`, Increment 150) and the command
-  center's composition root uses it; the JSON stores / `Jarvis.persistent()` remain as the file-backed twin;
-  `TemporalStability` count/recency weighting beyond the opt-in decay policy. Decay/forgetting services
-  exist and are tested but nothing schedules them in the running system.
+  center's composition root uses it; the JSON stores / `Jarvis.persistent()` remain as the file-backed twin.
+  Decay/forgetting services exist and are tested but nothing schedules them in the running system.
+- `TemporalStability` count/recency weighting beyond the opt-in decay policy: *(DONE — Increment 185:
+  `TemporalStabilityProfile` with `count_sensitivity` + `recency_half_life`, root-injectable, D36; the
+  classic span-only answer is the unchanged default.)*
 - Speech: a live STT backer (Increment 154) is wired and used in the console (Increment 159), and the
   mic is live-streamed + VAD-segmented since Increment 176 (`stream_transcribe` partials /
   AnalyserNode auto-segmentation; see the F5 block above).

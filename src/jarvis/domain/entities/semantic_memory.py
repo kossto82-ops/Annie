@@ -23,6 +23,9 @@ if TYPE_CHECKING:
     from jarvis.domain.value_objects.confidence import Confidence
     from jarvis.domain.value_objects.evidence import Evidence
     from jarvis.domain.value_objects.temporal_stability import TemporalStability
+    from jarvis.domain.value_objects.temporal_stability_profile import (
+        TemporalStabilityProfile,
+    )
 
 
 def _new_id() -> str:
@@ -62,6 +65,7 @@ class SemanticMemory:
         source_episode_ids: list[str] | None = None,
         source_belief_ids: list[str] | None = None,
         weighting_policy: EvidenceWeightingPolicy | None = None,
+        stability_profile: TemporalStabilityProfile | None = None,
         formed_at: datetime | None = None,
         last_reinforced_at: datetime | None = None,
         reinforcement_count: int = 0,
@@ -72,6 +76,7 @@ class SemanticMemory:
         self.source_episode_ids: list[str] = source_episode_ids or []
         self.source_belief_ids: list[str] = source_belief_ids or []
         self._weighting_policy: EvidenceWeightingPolicy = weighting_policy or DEFAULT_WEIGHTING
+        self._stability_profile: TemporalStabilityProfile | None = stability_profile
         self.formed_at: datetime = formed_at or _now()
         self.last_reinforced_at: datetime | None = last_reinforced_at
         self.reinforcement_count: int = reinforcement_count
@@ -91,7 +96,7 @@ class SemanticMemory:
     @property
     def stability(self) -> TemporalStability:
         """Temporal stability derived from the spread of evidence over time."""
-        return derive_stability(tuple(self._evidence))
+        return derive_stability(tuple(self._evidence), self._stability_profile)
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:

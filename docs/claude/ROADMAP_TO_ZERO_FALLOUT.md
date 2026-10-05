@@ -21,7 +21,8 @@ broad-except checks clean; the task seam deepens beyond the roadmap (Increment 1
 execution — `tasks fire` sweeps due tasks through the earned-agency executor, D35), suite then at
 **2378 passed, 3 skipped**; the §15 energy-recovery leftover then closes (Increment 184: an
 `EnergyRecovery` profile + injectable clock refill the budget over quiet time), suite at
-**2393 passed, 3 skipped**.
+**2393 passed, 3 skipped**; the other Track C/D leftover closes too (Increment 185: count/recency in
+`TemporalStability` behind an opt-in profile, D36), suite at **2413 passed, 3 skipped**.
 
 ## How this is written
 

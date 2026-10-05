@@ -30,7 +30,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from jarvis.domain.enums.evidence_source import EvidenceSource
@@ -50,6 +50,10 @@ from jarvis.domain.services.evidence_weighting import (
 from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.evidence import Evidence
 from jarvis.domain.value_objects.temporal_stability import TemporalStability
+from jarvis.domain.value_objects.temporal_stability_profile import (
+    DEFAULT_STABILITY_PROFILE,
+    TemporalStabilityProfile,
+)
 
 if TYPE_CHECKING:
     pass
@@ -57,13 +61,12 @@ if TYPE_CHECKING:
 _PRIOR = 1.0
 
 # A month of sustained support reads as solidly stable; the exact scale is tunable
-# (D32). Stability is span / (span + reference), so span == reference -> 0.5.
-STABILITY_REFERENCE = timedelta(days=30)
-
-# A conclusion (a belief, or a proposed hypothesis) resting on evidence with less
-# temporal spread than this may be overfitting to a recent burst (Vision §11);
-# the narrations flag it, they never alter the derived strength.
-LOW_STABILITY_THRESHOLD = 0.2
+# (D32). Stability is span / (span + reference), so span == reference -> 0.5. The
+# domain's single source of truth for these defaults now lives on
+# ``TemporalStabilityProfile`` (Increment 185, D36); the module aliases read them
+# so the stored constants here, the analyser and any narrations can never drift.
+STABILITY_REFERENCE = DEFAULT_STABILITY_PROFILE.reference
+LOW_STABILITY_THRESHOLD = DEFAULT_STABILITY_PROFILE.low_threshold
 
 
 def derive_confidence(
@@ -87,20 +90,41 @@ def derive_confidence(
     return Confidence(supporting / (supporting + contradicting + _PRIOR))
 
 
-def derive_stability(evidence: tuple[Evidence, ...]) -> TemporalStability:
+def derive_stability(
+    evidence: tuple[Evidence, ...],
+    profile: TemporalStabilityProfile | None = None,
+) -> TemporalStability:
     """Compute how spread out over time a belief's *supporting* evidence is.
 
     A single supporting observation (or several at the same instant) has no
     temporal spread and is not stable. Support accumulated over a long period is
     stable. This is distinct from confidence: it depends on *when* evidence
     arrived, not how much of it there is (Vision §10, §11).
+
+    With a profile, two opt-in enrichments compose on top of the span term
+    (Increment 185, D36): ``count_sensitivity`` lifts stability with repeated
+    support beyond the two observations needed for spread, and a
+    ``recency_half_life`` fades the term when the latest support is stale. The
+    default profile reproduces the classic span-only answer exactly.
     """
+    profile = profile or DEFAULT_STABILITY_PROFILE
     times = sorted(e.observed_at for e in evidence if e.supports and not e.is_neutral)
     if len(times) < 2:
         return TemporalStability.none()
     span = (times[-1] - times[0]).total_seconds()
-    reference = STABILITY_REFERENCE.total_seconds()
-    return TemporalStability(span / (span + reference))
+    reference = profile.reference.total_seconds()
+    stability = span / (span + reference)
+    if profile.count_sensitivity > 0.0 and len(times) > 2:
+        # Extra observations beyond the two needed for spread close a fraction of
+        # the remaining gap to 1, asymptotically -- a habit is steadier than a
+        # pair of moments, but never certain.
+        lift = 1.0 - (1.0 - profile.count_sensitivity) ** (len(times) - 2)
+        stability += lift * (1.0 - stability)
+    if profile.recency_half_life is not None:
+        age = (profile.now() - times[-1]).total_seconds()
+        if age > 0.0:
+            stability *= 0.5 ** (age / profile.recency_half_life.total_seconds())
+    return TemporalStability(stability)
 
 
 def _readable_source(source: EvidenceSource) -> str:
@@ -214,6 +238,7 @@ class Belief:
     id: str = field(default_factory=_new_id)
     formed_at: datetime = field(default_factory=_now)
     weighting_policy: EvidenceWeightingPolicy = DEFAULT_WEIGHTING
+    stability_profile: TemporalStabilityProfile | None = None
     _evidence: list[Evidence] = field(default_factory=_empty_evidence, repr=False)
     _pending_events: list[CognitiveEvent] = field(
         default_factory=_empty_event_buffer, repr=False
@@ -244,9 +269,11 @@ class Belief:
         """How steadily over time the belief has been supported (Vision §10).
 
         A separate axis from ``confidence``: high confidence with low stability
-        signals a recent burst that may be overfitting (Vision §11).
+        signals a recent burst that may be overfitting (Vision §11). A configured
+        ``stability_profile`` enriches the span term with count/recency weighting
+        (Increment 185, D36); ``None`` keeps the classic span-only answer.
         """
-        return derive_stability(tuple(self._evidence))
+        return derive_stability(tuple(self._evidence), self.stability_profile)
 
     @property
     def evidence(self) -> tuple[Evidence, ...]:

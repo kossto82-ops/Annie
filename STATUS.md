@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-10-04 (Increment 184 — energy recovery over time)
+Last updated: 2026-10-05 (Increment 185 — temporal stability weighs count and recency)
 
 ---
 
@@ -2154,7 +2154,7 @@ The architectural audit is complete. Post-audit implementation wired existing sy
 ## Decisions log (ADR-lite — settled, do not revisit)
 
 > **Legacy numbering.** This log uses its own D1–D40 sequence. The current, non-negotiable
-> constraints live in `docs/claude/DECISIONS.md` (D1–D35), which is the **single authority**;
+> constraints live in `docs/claude/DECISIONS.md` (D1–D36), which is the **single authority**;
 > cross-references in live docs and `src/` must resolve there. The mapping from these legacy numbers
 > to `DECISIONS.md` is in the appendix below (roadmap phase F1, Increment 172). Entries below are
 > history.
@@ -2471,6 +2471,12 @@ over time* (the §15 leftover): an `EnergyRecovery` profile + injectable clock r
 linearly over quiet time (`EnergyLedger._reconcile`, capped at the budget, cumulative spent never
 rewinds), conserving turns off on its own, and the `energy recovery <minutes>|off` command, a
 `recovery` field in the snapshot's `energy` block and a "Refills in" console metric surface it.
+**Increment 185** shipped *count/recency weighting in temporal stability* (the other Track C/D
+leftover): a `TemporalStabilityProfile` (reference, low-threshold, count-sensitivity, recency
+half-life, injectable clock) enriches the span term — repeated support lifts it asymptotically and a
+stale latest observation fades it by a half-life — root-injectable via `Jarvis(stability_profile=…)` /
+`set_stability_profile` / `persistent`/`database`, with the default profile reproducing the classic
+span-only answer byte-for-byte (D36).
 
 Discipline unchanged: new command = pure `handle` branch + socket-free test; new tunable = injectable
 via constructor/config, never a module constant; asset tripwire guards new UI wiring; no network in
@@ -2498,8 +2504,10 @@ directions:
   173: `ForgettingCandidates` on the rest cadence + root-wired `DecayingWeightingPolicy`), and the
   evidence-request writes (Increment 170) land in the unresolved store the open-question loop (Increment
   174) returns to.
-- **Track C/D leftovers (opportunistic).** Count/recency weighting in `TemporalStability`
-  beyond the opt-in decay policy (energy recovery over time landed as Increment 184).
+- **Track C/D leftovers (opportunistic).** The two open items have landed: energy recovery over time
+  closed as Increment 184 and count/recency weighting in `TemporalStability` (beyond the opt-in decay
+  policy) closed as Increment 185 under D36. No listed leftover remains until a caching/deepening
+  opportunity reopens one.
 
 *Recommendation: the correct-memory foundation is now deep (Increments 166-170). The highest-value
 remaining goals are the things that turn good memory into better companionship: a scheduled, honest
@@ -3657,3 +3665,46 @@ spend) and tunable at runtime like every other §40 knob.
 Full suite: **2393 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
 doc-truth check clean; broad-except audit clean (55 audited sites — 48 `except Exception`, all
 non-silent, no drift).
+
+## Increment 185 — Temporal stability weighs count and recency (2026-10-05)
+
+The second Track C/D leftover closes (the first was energy recovery over time, Increment 184).
+`TemporalStability` stays a distinct [0,1] axis from `Confidence` (D32), but its span-only classic
+estimator is now enriched -- opt-in and default-preserving -- by a `TemporalStabilityProfile`, under
+new decision **D36** (appended; D32 amended so its "deferred to the opt-in decay policy" clause now
+covers the confidence axis only).
+
+- **The profile** — `domain/value_objects/temporal_stability_profile.py`: a frozen VO
+  (`now` injectable clock defaulting to real UTC, `reference` (default 30d), `low_threshold` 0.2,
+  `count_sensitivity` 0.0, `recency_half_life` None) with validation, plus `DEFAULT_STABILITY_PROFILE`.
+  `derive_stability(evidence, profile=None)` (belief.py) composes on the unchanged span term:
+  a **count lift** `1 − (1 − s)**(n − 2)` applied as `stability += lift × (1 − stability)` and a
+  **recency fade** `× 0.5 ** (age / half_life)` only when the latest supporting observation is in the
+  past (just-observed/future-skewed never fades). The default profile reproduces the classic
+  span-only answer byte-for-byte; `STABILITY_REFERENCE` / `LOW_STABILITY_THRESHOLD` now alias the
+  profile defaults (single source of truth, importers of the constants unchanged).
+- **Threading (mirror of `default_belief_policy`)** — `Belief`, `Hypothesis` and `SemanticMemory` each
+  carry an optional `stability_profile`; `resolve_belief_for` forwards the leader's; the executive
+  takes `stability_profile=` and passes it to `episode.form_working_belief` (new optional param);
+  `CompanionModel` gains `stability_profile=` / `set_default_stability_profile`; and the Jarvis root
+  wires it end-to-end: constructor `stability_profile`, `stability_profile()` /
+  `set_stability_profile()` accessors, `fresh_belief` (goals/actions/needs/capabilities all flow through
+  it), and `Jarvis.persistent` / `Jarvis.database` (persistence kwargs builders thread it).
+- **Boundary** — the profile carries a clock, so it is read-time only and *never persisted*:
+  reconstructed beliefs fall back to span-only unless the profile is re-injected at boot. Stored
+  beliefs keep the profile they were formed with; `set_stability_profile` never silently re-derives.
+  No new command or console surface (a tuning knob, not a UI).
+- **Tests** — 20 new: default reproduces span-only exactly, explicit `None` equals default, count
+  lift on equal-span pairs, asymptotic and never 1, recency half-life fades a stale latest by exactly
+  the half-life ratio, future-dated latest never fades, count+recency compose (habit still beats a
+  pair once both are equally faded), profile validation (6 rejected bounds), plus the root-wiring file
+  mirroring `test_weighting_policy.py`: default unchanged, injected profile governs `fresh_belief`,
+  action/outcome, goal and companion traits, the swap applies to subsequent creations only, clearing
+  restores span-only, `persistent()` boot forwards the profile. 2413 passed/3 skipped at close.
+
+Discipline: opt-in (default `None` — a bare Jarvis computes identical stability numbers to before),
+deterministic (injectable clock), derived-only (stability is still never set imperatively), and
+tunable at runtime like every other §40 knob.
+
+Full suite: **2413 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
+doc-truth check clean (floor 2393 → 2413); broad-except audit clean (no drift).

@@ -218,8 +218,11 @@ env-gated root, `build_*() -> None` when unconfigured, D7/D8) + delegated `Jarvi
 
 `TemporalStability` never collapses into `Confidence` (Vision §10): both are [0,1] magnitudes but
 different axes. Stability is span-based (`span / (span + reference)`, `STABILITY_REFERENCE = 30d`,
-`LOW_STABILITY_THRESHOLD = 0.2`, tunable); count/recency weighting is deferred to the opt-in decay
-policy. (Consolidated from the legacy STATUS log.)
+`LOW_STABILITY_THRESHOLD = 0.2`, tunable); the classical span term is always on. Count/recency
+weighting on the *stability* axis was deferred to the opt-in decay policy at D32 time — that
+deferral now covers only the *confidence* axis (`DecayingWeightingPolicy`, Vision §10, §22) and is
+superseded for stability by **D36** (Increment 185), which adds the same two enrichments behind an
+opt-in `TemporalStabilityProfile`. (Consolidated from the legacy STATUS log.)
 
 ## D33 — The decision registry is the single decision authority
 
@@ -270,3 +273,31 @@ recurrence and the driver never sleeps or loops on its own:
 - **On-demand cadence** — the sweep is invoked (`tasks fire`) whenever a sweep is
   wanted; there is still no background thread or proactive wake loop (D8,
   AI_CONTEXT.md deferral).
+
+## D36 — Temporal stability weighs count and recency behind an opt-in profile
+
+The *stability* axis gains the two enrichments D32 deferred, opt-in and
+default-behaviour-preserving (Increment 185):
+
+- **One tunable knot** — `TemporalStabilityProfile` (`reference`, `low_threshold`,
+  `count_sensitivity`, `recency_half_life`, and an injectable real-UTC clock)
+  drives `derive_stability`. Its defaults (`count_sensitivity = 0.0`,
+  `recency_half_life = None`) reproduce the classic span-only answer
+  byte-for-byte, so a bare Jarvis computes identical stability numbers to before.
+- **Count lift, asymptotic** — repeated support beyond the two observations
+  needed for a span closes `count_sensitivity` of the remaining distance to 1 per
+  extra observation (`1 − (1 − s)**(n − 2)`): a habit reads steadier than two
+  isolated moments, never certain.
+- **Recency fade, half-life** — a stale latest observation fades the whole term by
+  `0.5 ** (age / half_life)`; just-observed or future-dated evidence (clock skew)
+  does not fade. The clock is injected, so the domain stays deterministic and
+  offline-testable.
+- **Root-injectable, like the weighting policy** — `Jarvis(stability_profile=…)`,
+  `set_stability_profile`, and `Jarvis.persistent/database` mirror
+  `default_belief_policy`; the running executive's working beliefs, goal/action
+  beliefs and companion traits all inherit it. Beliefs keep the profile they were
+  formed with; nothing already derived is silently re-derived.
+- **Read-time, never persisted** — the profile carries a clock, so it is not
+  serialised into any store; reconstructed beliefs fall back to the classic
+  span-only estimator unless re-injected at boot. D32's deferral still covers the
+  confidence axis only.

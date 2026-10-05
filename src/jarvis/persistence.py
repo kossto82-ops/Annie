@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from jarvis.domain.services.evidence_weighting import EvidenceWeightingPolicy
+from jarvis.domain.value_objects.temporal_stability_profile import (
+    TemporalStabilityProfile,
+)
 from jarvis.infrastructure.agent_reach_source import (
     build_web_source,
     llm_search_from_model,
@@ -45,6 +48,7 @@ def build_persistent_kwargs(
     directory: str | Path,
     weighting_policy: EvidenceWeightingPolicy | None = None,
     default_belief_policy: EvidenceWeightingPolicy | None = None,
+    stability_profile: TemporalStabilityProfile | None = None,
 ) -> dict[str, Any]:
     """Return kwargs for ``Jarvis(…)`` backed by JSON files under *directory*.
 
@@ -90,6 +94,7 @@ learned_state_store=JsonLearnedStateStore(base / "learned.json"),
         enable_recall=True,
         weighting_policy=weighting_policy,
         default_belief_policy=default_belief_policy,
+        stability_profile=stability_profile,
         external_source=source,
         research_source=research,
         speech_perception=EchoSpeechPerception(),
@@ -102,6 +107,7 @@ def build_database_kwargs(
     directory: str | Path,
     weighting_policy: EvidenceWeightingPolicy | None = None,
     default_belief_policy: EvidenceWeightingPolicy | None = None,
+    stability_profile: TemporalStabilityProfile | None = None,
 ) -> dict[str, Any]:
     """Return kwargs for ``Jarvis(…)`` backed by one SQLite database (D10).
 
@@ -151,6 +157,7 @@ def build_database_kwargs(
         trace=SqliteEpisodeTrace(repositories.connection),
         weighting_policy=weighting_policy,
         default_belief_policy=default_belief_policy,
+        stability_profile=stability_profile,
         external_source=source,
         research_source=research,
         speech_perception=EchoSpeechPerception(),
