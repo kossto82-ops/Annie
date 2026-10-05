@@ -39,11 +39,16 @@ import contextlib
 import importlib.util
 from typing import Any
 
+from jarvis.domain.enums.permission_level import PermissionLevel
 from jarvis.domain.retrieval.task_agent_source import TaskAgent
 from jarvis.domain.tools.tool_registry import ToolRegistry
 from jarvis.domain.value_objects.decided_script import (
     script_arguments,
     split_script_line,
+)
+from jarvis.domain.value_objects.delegation_scope import (
+    DelegationScope,
+    scope_at_most,
 )
 from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.infrastructure.provider_settings import ProviderSettings
@@ -54,9 +59,10 @@ class ToolRegistryTaskAgent:
 
     Each non-empty line is a tool-call ``name key=value ...`` (quote-aware; see
     :class:`~jarvis.domain.value_objects.decided_script.DecidedScript`). Unknown
-    tool names, unparseable lines, or tools the policy refuses even under
-    approval yield a truthful failed :class:`TaskResult` -- never a fabricated
-    success. A task that performs no successful tool call is not a success.
+    tool names, unparseable lines, out-of-scope tool names (see `DelegationScope`),
+    or tools the policy refuses even under approval yield a truthful failed
+    :class:`TaskResult` -- never a fabricated success. A task that performs no
+    successful tool call is not a success.
     """
 
     def __init__(self, registry: ToolRegistry, *, approved: bool = True) -> None:
@@ -67,6 +73,17 @@ class ToolRegistryTaskAgent:
 
     def run_task(self, task: str) -> TaskResult:
         """Execute ``task`` line-by-line and narrate the outcome."""
+        return self.run_scoped(task)
+
+    def run_scoped(
+        self, task: str, scope: DelegationScope | None = None
+    ) -> TaskResult:
+        """Execute ``task`` bounded to ``scope`` (every tool when ``None``).
+
+        Any tool-call whose name is outside the scope is refused before it runs,
+        and the account names it truthfully -- a scoped task that touches an
+        out-of-scope tool is never a success.
+        """
         summary_lines: list[str] = []
         failures: list[str] = []
         for raw_line in task.splitlines():
@@ -78,6 +95,9 @@ class ToolRegistryTaskAgent:
                 failures.append(error)
                 continue
             tool_name = tokens[0]
+            if scope is not None and not scope.allows(tool_name):
+                failures.append(f"{tool_name}: outside the delegation scope")
+                continue
             if self._registry.spec(tool_name) is None:
                 failures.append(f"unknown tool: {tool_name}")
                 continue
@@ -151,6 +171,27 @@ def build_default_task_agent() -> ToolRegistryTaskAgent | None:
     if registry is None:
         return None
     return ToolRegistryTaskAgent(registry)
+
+
+def registered_scope_at_most(
+    registry: ToolRegistry, level: PermissionLevel
+) -> DelegationScope:
+    """A delegation scope of every registered tool at or below ``level``.
+
+    The ground-truth sibling of :func:`scope_at_most` for a live registry: reads
+    each registered ``ToolSpec``'s permission level and yields exactly the tools
+    that may act at or under ``level`` (e.g. ``PermissionLevel.WRITE`` keeps the
+    locally reversible filesystem/echo acts and excludes external MCP tools), so
+    a delegated task is bounded to the sanctioned risk class.
+    """
+    return scope_at_most(
+        {
+            name: spec.permission
+            for name in registry.tool_names()
+            if (spec := registry.spec(name)) is not None
+        },
+        level,
+    )
 
 
 def build_task_agent(

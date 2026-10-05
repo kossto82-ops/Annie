@@ -30,8 +30,9 @@ from __future__ import annotations
 import importlib
 from typing import Any, cast
 
-from jarvis.domain.retrieval.task_agent_source import TaskAgent
+from jarvis.domain.retrieval.task_agent_source import TaskAgent, run_scoped
 from jarvis.domain.tools.tool_registry import ToolRegistry
+from jarvis.domain.value_objects.delegation_scope import DelegationScope
 from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.domain.value_objects.tool_spec import ToolSpec
 from jarvis.infrastructure.provider_settings import ProviderSettings
@@ -84,15 +85,28 @@ class PydanticAiTaskAgent:
 
     def run_task(self, task: str) -> TaskResult:
         """Let the model drive the tool loop and narrate what actually ran (D6)."""
+        return self.run_scoped(task)
+
+    def run_scoped(
+        self, task: str, scope: DelegationScope | None = None
+    ) -> TaskResult:
+        """A model-driven loop whose toolset is bounded to ``scope``.
+
+        The scope decides *which* tool functions exist for the model: an
+        out-of-scope tool is absent from the toolset, so the model physically
+        cannot call it (the decisive, honest enforcement for a live loop). The
+        unscoped agent is built once and reused; a scoped run builds its own
+        agent over exactly the in-scope specs, so no shared state changes.
+        """
         text = task.strip()
         if not text:
             return TaskResult(task=task, summary="no tool calls ran", success=False)
         self._recorded = []
         try:
-            run = self._build_agent().run_sync(text)
+            run = self._run_for(scope).run_sync(text)
         except Exception:  # provider/loop failure -> an honest failed account
             if self._fallback is not None:
-                return self._fallback.run_task(task)
+                return run_scoped(self._fallback, task, scope)
             return TaskResult(
                 task=task,
                 summary="delegated task failed: the agent errored",
@@ -114,10 +128,14 @@ class PydanticAiTaskAgent:
 
     # -- edge plumbing ---------------------------------------------------------
 
-    def _build_agent(self) -> Any:
-        """Build (once) the pydantic-ai `Agent` with one tool per registered `ToolSpec`."""
-        if self._agent is not None:
+    def _run_for(self, scope: DelegationScope | None = None) -> Any:
+        """The pydantic-ai agent for ``scope``: cached unscoped, fresh scoped."""
+        if self._agent is not None and scope is None:
             return self._agent
+        return self._build(scope)
+
+    def _build(self, scope: DelegationScope | None = None) -> Any:
+        """Build a pydantic-ai `Agent` with one tool per in-scope `ToolSpec`."""
         pai = cast(Any, importlib.import_module("pydantic_ai"))
         tools_mod = cast(Any, importlib.import_module("pydantic_ai.tools"))
         models_mod = cast(Any, importlib.import_module("pydantic_ai.models.openai"))
@@ -142,9 +160,9 @@ class PydanticAiTaskAgent:
                 description=spec.description,
                 prepare=self._baking_prepare(spec),
             )
-            for spec in self._specs()
+            for spec in self._specs(scope)
         ]
-        self._agent = pai.Agent(
+        return pai.Agent(
             entry_model,
             system_prompt=self._instructions,
             model_settings=settings_mod.ModelSettings(
@@ -154,13 +172,13 @@ class PydanticAiTaskAgent:
             ),
             tools=tools,
         )
-        return self._agent
 
-    def _specs(self) -> tuple[ToolSpec, ...]:
+    def _specs(self, scope: DelegationScope | None = None) -> tuple[ToolSpec, ...]:
         return tuple(
             spec
             for name in self._registry.tool_names()
             if (spec := self._registry.spec(name)) is not None
+            and (scope is None or scope.allows(name))
         )
 
     def _tool_function(self, spec: ToolSpec) -> Any:

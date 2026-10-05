@@ -8,7 +8,7 @@ toward. STATUS.md tracks *where we are*; JARVIS_VISION.md defines *where we are 
 Every implementation decision must preserve the possibility of reaching that architecture
 (Vision §41). Current code has no contradictions with the vision (verified 2026-09-04).
 
-Last updated: 2026-10-05 (Increment 185 — temporal stability weighs count and recency)
+Last updated: 2026-10-05 (Increments 185-186 — temporal stability weighs count and recency; delegation scopes bound a task's tools)
 
 ---
 
@@ -2154,7 +2154,7 @@ The architectural audit is complete. Post-audit implementation wired existing sy
 ## Decisions log (ADR-lite — settled, do not revisit)
 
 > **Legacy numbering.** This log uses its own D1–D40 sequence. The current, non-negotiable
-> constraints live in `docs/claude/DECISIONS.md` (D1–D36), which is the **single authority**;
+> constraints live in `docs/claude/DECISIONS.md` (D1–D37), which is the **single authority**;
 > cross-references in live docs and `src/` must resolve there. The mapping from these legacy numbers
 > to `DECISIONS.md` is in the appendix below (roadmap phase F1, Increment 172). Entries below are
 > history.
@@ -2496,8 +2496,9 @@ directions:
   adapters; F6 deepened the calendar (CalDAV/ICS pull), mail (per-account folders + unread), the offline
   instruction executor (decided scripts, Inc 179) and speech (a one-call server-side spoken turn riding the
   session `ReasoningSpan`, Inc 180); the task seam now *executes* on schedule (Inc 183: `tasks fire` sweeps
-  due tasks through the earned-agency executor, D35). Each seam can still deepen further (richer delegation
-  scopes). Each must stay behind its domain Protocol (D7), earned (D29), and offline-testable (D8).
+  due tasks through the earned-agency executor, D35) and *scopes its tools* (Inc 186: a per-task toolset
+  ceiling behind the `TaskAgent` seam, D37). Each seam can still deepen further. Each must stay behind its
+  domain Protocol (D7), earned (D29), and offline-testable (D8).
 - **Memory-line depth:** the semantic layer is deliberately bounded (COMPANION-only consolidation with
   neutral evidence, D23; vocabulary-driven meaning recall, D18) — extending it means *vocabulary + policy
   decisions*, never an LLM shortcut. Decay/forgetting are scheduled in the running system now (Increment
@@ -3708,3 +3709,42 @@ tunable at runtime like every other §40 knob.
 
 Full suite: **2413 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
 doc-truth check clean (floor 2393 → 2413); broad-except audit clean (no drift).
+
+## Increment 186 — Delegation scopes bound a task's tools (2026-10-05)
+
+The capability-depth direction named in "After that" (richer delegation scopes) lands, under new
+decision **D37**. Delegation (revised D1) previously handed a decided task the *whole* sandboxed
+registry (filesystem + echo + every MCP tool); a **delegation scope** is a per-task toolset ceiling, so
+a scoped task can never wander into tools the caller did not sanction.
+
+- **The scope** — `domain/value_objects/delegation_scope.py`: a frozen, kw-only VO, just a set of
+  `allowed_tools` (empty = allows nothing), with `none()` / `all(*names)` constructors and `allows()`;
+  plus the pure permission-ceiling factory `scope_at_most(tools_map, level)` and, in
+  `infrastructure/task_agent_source.py`, `registered_scope_at_most(registry, level)` reading a live
+  registry's specs (a "no MCP / no destructive" floor is `PermissionLevel.WRITE`/`EXECUTE`).
+- **One seam, two executors** — the seam helpers in `task_agent_source.py`: `run_scoped(agent, task,
+  scope)` drives the optional per-call `run_scoped` that the registry-backed executors override, the
+  protocol itself untouched (plain agents inherit no change and simply run the task). The decided-script
+  `ToolRegistryTaskAgent.run_scoped` refuses an out-of-scope line truthfully (`name: outside the
+  delegation scope`, never a fabricated success); the model-driven `PydanticAiTaskAgent.run_scoped`
+  builds its agent over exactly the in-scope specs, so an out-of-scope tool is *absent* from the toolset
+  the model may choose, and each scoped run builds its own agent (no shared state across threads).
+  `InstrumentedTaskAgent` forwards the scope, so scoped runs still count as `agent` channel calls.
+- **Jarvis surface** — `delegate(task, *, scope=…)` and `execute(task, *, scope=…)` (earned agency at
+  `approved=False` is untouched; scope is an extra ceiling on top). `None`-defaulted, so plain
+  delegation is byte-identical to before.
+- **Tests** — 22 new (`tests/test_delegation_scope.py`): VO semantics + validation, both permission
+  factories, the seam helper (scoped override used / plain fallback / protocol untouched), the
+  decided-script gate (single line, every-line, `None` parity, approval×scope orthogonality), the
+  pydantic-ai gate (in-scope runs, out-of-scope tool cannot run — `skipif` no pydantic-ai), and the
+  Jarvis wiring (delegate/execute scoped + blocked, offline raises with a scope, scope-graph: a plain
+  agent ignores scope). 2435 passed/3 skipped at close.
+
+Discipline: opt-in and default-preserving (`run_scoped` is `None`-defaulted — plain `delegate(task)` /
+`execute(task)` run byte-identical to before), deterministic (pure name-set, no network), derived-only
+(the registry's permission gate and `approved` keep their authority — a scope is a floor, never a
+bypass), and one-seam (the protocol is untouched; `run_scoped` is the optional per-call argument a
+scope-aware executor honours).
+
+Full suite: **2435 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
+doc-truth check clean (floor 2413 → 2435); broad-except audit clean (no drift).

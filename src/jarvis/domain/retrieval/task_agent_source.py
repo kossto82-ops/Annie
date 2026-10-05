@@ -16,8 +16,10 @@ the edge; the transport is injectable; tests stay deterministic and offline (D8)
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Protocol, cast, runtime_checkable
 
+from jarvis.domain.value_objects.delegation_scope import DelegationScope
 from jarvis.domain.value_objects.task_result import TaskResult
 
 
@@ -33,3 +35,24 @@ class TaskAgent(Protocol):
         work", never a fabricated success.
         """
         ...
+
+
+ScopedRunner = Callable[[str, DelegationScope | None], TaskResult]
+
+
+def run_scoped(
+    agent: TaskAgent, task: str, scope: DelegationScope | None = None
+) -> TaskResult:
+    """Run ``task`` on ``agent`` bounded to ``scope``.
+
+    A delegation scope bounds *which* tools one delegated task may use (see
+    `DelegationScope`); the caller sanctions the boundary, the executor refuses
+    out-of-scope calls truthfully. An agent that understands scopes (the
+    registry-backed executors) overrides ``run_scoped``; any other agent simply
+    runs the task as usual -- scope stays an opt-in deepening of the same seam,
+    never a second delegation path.
+    """
+    runner = cast(ScopedRunner | None, getattr(agent, "run_scoped", None))
+    if runner is not None:
+        return runner(task, scope)
+    return agent.run_task(task)

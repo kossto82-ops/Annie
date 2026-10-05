@@ -21,7 +21,10 @@ from jarvis.domain.retrieval.external_source import (
 from jarvis.domain.retrieval.mail_source import MailBox
 from jarvis.domain.retrieval.notes_store import NotesStore
 from jarvis.domain.retrieval.research_source import ResearchSource
-from jarvis.domain.retrieval.task_agent_source import TaskAgent
+from jarvis.domain.retrieval.task_agent_source import (
+    TaskAgent,
+    run_scoped,
+)
 
 __all__ = [
     "ChannelStatus",
@@ -31,4 +34,5 @@ __all__ = [
     "NotesStore",
     "ResearchSource",
     "TaskAgent",
+    "run_scoped",
 ]

@@ -21,9 +21,9 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
    ├─ statement → _remember_statement: ≥3-word non-question     │
    │   → USER_STATEMENT evidence (weight 1.0) → jarvis.think    │  ← statements are MEMORY (Inc 167)
    ├─ revision cue → companion.revise_companion / Belief.revise │  ← a changed mind is first-class (Inc 169)
-   └─ directive  → ConversationIntent.ACT → charitable compiler │  ← earned agency, sandboxed, approved=False (Inc 160);
-       │            → Jarvis.execute: decided-script when        │    a charitable envelope compiles first (Inc 179)
-       │              compilable, else the offline agent          │
+└─ directive  → ConversationIntent.ACT → charitable compiler │  ← earned agency, sandboxed, approved=False (Inc 160);
+        │            → Jarvis.execute: decided-script when        │    a charitable envelope compiles first (Inc 179);
+        │              compilable, else the offline agent          │    an optional DelegationScope ceils the tools (Inc 186)
                                                                ▼
    ┌──────────────────────────────────────────────────────────────────────────┐
    │ EXECUTIVE (ExecutiveController.run)  — the thin decider                   │

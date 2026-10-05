@@ -301,3 +301,31 @@ default-behaviour-preserving (Increment 185):
   serialised into any store; reconstructed beliefs fall back to the classic
   span-only estimator unless re-injected at boot. D32's deferral still covers the
   confidence axis only.
+
+## D37 — Delegation scopes bound a task's tools at the executor
+
+Delegation (revised D1) runs a decided material task through the `TaskAgent`
+seam. A **delegation scope** (Increment 186) narrows that hand-off to an explicit
+toolset, so one scoped task can never wander into tools the caller did not
+sanction:
+
+- **Name-based, pure value** — `DelegationScope` is a frozen set of tool names
+  (empty = allows nothing). The permission-ceiling factory `scope_at_most`
+  derives a scope from a tool→permission map; `registered_scope_at_most` reads a
+  live `ToolRegistry` for the caller.
+- **Enforced at the executor, in both modes** — the decided-script
+  `ToolRegistryTaskAgent.run_scoped` refuses an out-of-scope line truthfully; the
+  model-driven `PydanticAiTaskAgent.run_scoped` removes out-of-scope tools from
+  the toolset a model may choose (their absence is the honest enforcement). Both
+  results are plain `TaskResult` accounts: an out-of-scope call is never folded
+  into a fabricated success.
+- **One seam, opt-in** — the scope rides `run_scoped`, an optional per-call
+  argument of the existing `TaskAgent` seam, not a second delegation path. The
+  protocol itself is untouched (`run_scoped` is a seam helper the scope-aware
+  executors override); an agent that cannot scope simply runs the task. `scope_at_most`
+  is a *convenience floor*, never a bypass: the registry's permission gate and `approved`
+  keep their authority, and `approved=False` (earned agency) is unchanged.
+- **Per-call, no shared state** — a scoped model-driven run builds its own agent
+  over exactly the in-scope specs, so serving threads never mutate shared agent
+  state; `run_scoped` is `None`-defaulted, so `delegate(task)` and `execute(task)`
+  behave exactly as before.

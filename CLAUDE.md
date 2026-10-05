@@ -81,11 +81,11 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-2413 tests passing (3 skipped), ruff clean, pyright strict 0.
+2435 tests passing (3 skipped), ruff clean, pyright strict 0.
 
 The current project is at Increment 176 (see `STATUS.md`; Increments 171–172 shipped the docs
 reconciliation, the zero-fallout roadmap, and the single decision
-authority — `DECISIONS.md` D1–D36 —
+authority — `DECISIONS.md` D1–D37 —
 guarded by the offline `doc-truth` check `scripts/check_decision_refs.py`, Increment 173 shipped the
 scheduled honest forgetting — `ForgettingCandidates` on the rest cadence, the `forgetting` command, and
 root-wired `DecayingWeightingPolicy` recall bias — Increment 174 shipped the open-question loop
@@ -220,7 +220,13 @@ C/D leftover closes — a `TemporalStabilityProfile` (injectable clock, `count_s
 asymptotically and a stale latest observation fades it by a half-life — root-injectable via
 `Jarvis(stability_profile=…)` / `set_stability_profile` / `persistent`/`database` and the running
 executive's working beliefs (D36), with the default profile reproducing the classic span-only answer
-byte-for-byte.
+byte-for-byte. Delegation scopes landed beyond the roadmap (Increment 186): a per-task **toolset
+ceiling** behind the `TaskAgent` seam — `DelegationScope` (pure name-set, empty = nothing) with the
+permission-ceiling factories `scope_at_most`/`registered_scope_at_most`, `run_scoped` (an optional
+per-call argument the registry-backed executors honour: the decided-script agent refuses an
+out-of-scope line, the model-driven agent simply never sees an out-of-scope tool), threaded through
+`Jarvis.delegate`/`execute` (D37) — opt-in and `None`-defaulted, so plain delegation is byte-identical
+to before and `approved=False` earned agency is untouched.
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner

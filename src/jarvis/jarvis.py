@@ -228,6 +228,7 @@ from jarvis.domain.value_objects.confidence import Confidence
 from jarvis.domain.value_objects.connection import Connection
 from jarvis.domain.value_objects.curiosity_impulse import CuriosityImpulse
 from jarvis.domain.value_objects.decision_account import DecisionAccount
+from jarvis.domain.value_objects.delegation_scope import DelegationScope
 from jarvis.domain.value_objects.deliberation import Deliberation
 from jarvis.domain.value_objects.document_edit import DocumentEdit
 from jarvis.domain.value_objects.document_hit import DocumentHit
@@ -1410,14 +1411,16 @@ knowledge_graph=knowledge_graph_store,
         if callable(reset):
             reset()
 
-    def delegate(self, task: str) -> TaskResult:
+    def delegate(self, task: str, *, scope: DelegationScope | None = None) -> TaskResult:
         """Run one delegated material task through the agent capability.
 
         A material action: the caller (surface) is responsible for having it
-        approved by the controlled-autonomy policy before calling. Raises a clear
+        approved by the controlled-autonomy policy before calling. ``scope``
+        further bounds *which* tools the task may use; an out-of-scope call
+        refuses truthfully (see ``DelegationScope``). Raises a clear
         error when no agent is wired.
         """
-        return self._edges_surface.delegate(task)
+        return self._edges_surface.delegate(task, scope=scope)
 
     @property
     def openbot_agent(self) -> TaskAgent | None:
@@ -1473,15 +1476,17 @@ knowledge_graph=knowledge_graph_store,
         """
         self._instruction_agent = agent
 
-    def execute(self, task: str) -> TaskResult:
+    def execute(self, task: str, *, scope: DelegationScope | None = None) -> TaskResult:
         """Run one *material* instruction through the earned-agency executor.
 
         The companion's own words are the authorization for protocol-level acts
         only: sandboxed reads and writes may run, and external/destructive acts
         refuse honestly through the tool gate (they need deliberate approval via
-        ``delegate``). Raises a clear error when no executor is wired.
+        ``delegate``). ``scope`` further bounds *which* tools the instruction may
+        use (a subset of the executor's registry); an out-of-scope call refuses
+        truthfully. Raises a clear error when no executor is wired.
         """
-        return self._edges_surface.execute(task)
+        return self._edges_surface.execute(task, scope=scope)
 
     @property
     def notes_store(self) -> NotesStore | None:

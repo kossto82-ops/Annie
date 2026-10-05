@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from jarvis.domain.retrieval.external_source import ChannelStatus
+from jarvis.domain.retrieval.task_agent_source import run_scoped
 from jarvis.domain.services.model_compare import ModelRun
 from jarvis.domain.tools.tool import Tool
 from jarvis.domain.value_objects.email_message import EmailMessage
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from jarvis.domain.retrieval.mail_source import MailBox
     from jarvis.domain.retrieval.research_source import ResearchSource
     from jarvis.domain.retrieval.task_agent_source import TaskAgent
+    from jarvis.domain.value_objects.delegation_scope import DelegationScope
     from jarvis.jarvis import Jarvis
 
 
@@ -128,14 +130,18 @@ class EdgesSurface:
 
     # -- Delegation (TaskAgent) -----------------------------------------------
 
-    def delegate(self, task: str) -> TaskResult:
-        return self._agent().run_task(task)
+    def delegate(
+        self, task: str, *, scope: DelegationScope | None = None
+    ) -> TaskResult:
+        return run_scoped(self._agent(), task, scope)
 
     def execute_on_computer(self, task: str) -> TaskResult:
         return self._openbot().run_task(task)
 
-    def execute(self, task: str) -> TaskResult:
-        return self._instruction().run_task(task)
+    def execute(
+        self, task: str, *, scope: DelegationScope | None = None
+    ) -> TaskResult:
+        return run_scoped(self._instruction(), task, scope)
 
     # -- Tools ----------------------------------------------------------------
 

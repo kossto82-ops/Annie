@@ -22,7 +22,9 @@ execution — `tasks fire` sweeps due tasks through the earned-agency executor, 
 **2378 passed, 3 skipped**; the §15 energy-recovery leftover then closes (Increment 184: an
 `EnergyRecovery` profile + injectable clock refill the budget over quiet time), suite at
 **2393 passed, 3 skipped**; the other Track C/D leftover closes too (Increment 185: count/recency in
-`TemporalStability` behind an opt-in profile, D36), suite at **2413 passed, 3 skipped**.
+`TemporalStability` behind an opt-in profile, D36), suite at **2413 passed, 3 skipped**; then the
+delegation seam deepens (Increment 186: per-task **delegation scopes** — a toolset ceiling behind the
+`TaskAgent` seam, D37), suite at **2435 passed, 3 skipped**.
 
 ## How this is written
 

@@ -13,7 +13,8 @@ from collections.abc import Callable
 from time import perf_counter
 from typing import cast
 
-from jarvis.domain.retrieval.task_agent_source import TaskAgent
+from jarvis.domain.retrieval.task_agent_source import TaskAgent, run_scoped
+from jarvis.domain.value_objects.delegation_scope import DelegationScope
 from jarvis.domain.value_objects.task_result import TaskResult
 from jarvis.infrastructure.provider_stats import (
     InMemoryInstrumentation,
@@ -47,8 +48,13 @@ class InstrumentedTaskAgent:
         return self._instrumentation.snapshot()
 
     def run_task(self, task: str) -> TaskResult:
+        return self.run_scoped(task)
+
+    def run_scoped(
+        self, task: str, scope: DelegationScope | None = None
+    ) -> TaskResult:
         started = perf_counter()
-        result = self._inner.run_task(task)
+        result = run_scoped(self._inner, task, scope)
         self._instrumentation.record(
             ProviderCall(
                 channel="agent",

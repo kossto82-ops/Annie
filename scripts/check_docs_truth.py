@@ -43,7 +43,7 @@ import tempfile
 
 import check_decision_refs as decision_refs
 
-LAST_PUBLISHED_SUITE_TOTAL = 2413  # Increment 185 (temporal-stability profile) published total.
+LAST_PUBLISHED_SUITE_TOTAL = 2435  # Increment 186 (delegation scopes) published total.
 
 COUNTS_FILES = (
     pathlib.Path("README.md"),

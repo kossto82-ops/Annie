@@ -174,7 +174,8 @@ local + Google, plus a one-way CalDAV/ICS pull since Inc 177), tasks (`TaskSched
 (`TaskAgent`), speech perception (`SpeechPerceptionSource`: opt-in live STT backer — F5/Increment 176
 streaming partials + VAD, and a one-call server-side spoken turn, Increment 180), and files/documents
 (`DocumentStore` over bytes + `LocalDocumentStore`, flat name-keyed; `JARVIS_PROJECT_ROOTS` feeds the
-`FileSystemTool` `project:` roots as a tool edge). Material actions can be
+`FileSystemTool` `project:` roots as a tool edge). Agent delegation is scope-aware since Increment 186
+(`DelegationScope` + `run_scoped`: a per-task toolset ceiling both executors honour, D37). Material actions can be
 delegated to an edge agent behind these seams, never cognition (revised D1); since Increment 179 the
 offline instruction agent also runs named *decided-scripts* (`DecidedScript` +
 `compile_charitable_instruction`: `tool key="value"` lines, only local reversible acts compiled, zero
@@ -423,7 +424,9 @@ repair series merged it into the local line and closed the remediation plan A-E:
   sandboxed ToolRegistry without approval — sandbox reads/writes run, external/destructive acts
   refuse at the gate; without an executor (no `JARVIS_AGENT_ROOT`), Jarvis declines honestly. A live
   `pydantic` provider turns free text into the multi-step loop; offline, only the decided-script
-  format can run, so free text fails *truthfully*.
+  format can run, so free text fails *truthfully*. Both executors accept an optional per-call
+  `DelegationScope` (Increment 186/D37): an out-of-scope decided-script line refuses, and the
+  model-driven loop never even sees an out-of-scope tool.
 - Streaming replies: the live path is still non-streaming at the reasoner level (surface streams).
 
 Do not turn every future direction into immediate work. Follow the current user request.
