@@ -81,7 +81,7 @@ The post-audit implementation is complete (Phases 0-11, 2026-09-13):
 - Phase 10: Proactive Cognition (detect_pattern wired into feel_curious, 2 tests)
 - Phase 11: Memory Decay and Consolidation (forget on BeliefRepository, identify_forgetting_candidates, 7 tests)
 
-2456 tests passing (3 skipped), ruff clean, pyright strict 0.
+2476 tests passing (3 skipped), ruff clean, pyright strict 0.
 
 The current project is at Increment 176 (see `STATUS.md`; Increments 171–172 shipped the docs
 reconciliation, the zero-fallout roadmap, and the single decision
@@ -234,6 +234,15 @@ concept, and a **same-language synonym channel** (curated clusters — "glad" me
 language meeting stays at the concept level only) so `relatedness` is now
 `max(surface, concept, synonym)` — all curated by hand per **D38** (never LLM-generated), with the
 matter-preservation exclusions and the `creo` ("I believe") false-positive guard pinned by tests.
+The forgetting cadence landed beyond the roadmap (Increment 188, **D39**): the task-scheduler seam
+carries one **reserved read-only command** — a scheduled task whose command is exactly
+`forgetting sweep` (`is_forgetting_sweep`) runs `ForgettingCandidates.sweep()` through
+`Jarvis.sweep_forgetting` against *live* state on the D35 `tasks fire` cadence, so memory health
+stays fresh with no agent, model or network, and the recorded account states plainly that it deleted
+nothing. Nothing else moved: the sweep has no apply path, `Jarvis.forget()` stays the only track that
+touches the belief store (with both honesty gates re-checked there), a near-miss command like "forget
+the old address" is never hijacked from the executor, the recurrence stays the scheduler's, and
+nothing here adds a loop or a thread.
 
 The pydantic-ai provider thread is complete in its shipped parts: the opt-in implementation behind the
 LLM/agent/reasoner

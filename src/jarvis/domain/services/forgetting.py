@@ -18,6 +18,9 @@ Both gates are checked at :meth:`identify` and re-checked at :meth:`apply`
 
 The service stays read-only until :meth:`apply`; a health report can be shown
 endlessly without deleting a single belief (read-only surfaces stay honest).
+:meth:`sweep` is that same read-only dry-run phrased as the account a scheduled
+task records, so memory health can stay fresh on a cron (D39) without any
+cadence ever deleting anything.
 """
 
 from __future__ import annotations
@@ -33,6 +36,8 @@ from jarvis.domain.services.memory_consolidation import (
     ForgettingCandidate,
     identify_forgetting_candidates,
 )
+from jarvis.domain.services.scheduled_execution import FORGETTING_SWEEP
+from jarvis.domain.value_objects.task_result import TaskResult
 
 # A reaffirmed trait stays protected for this long after its last reinforcement:
 # it was just agreed on, so even a faded memory is a live one (anti-nagging).
@@ -141,6 +146,30 @@ class ForgettingCandidates:
             grounded_protected=tuple(protected),
             reaffirmed_excluded=tuple(reaffirmed),
             swept_at=swept_at,
+        )
+
+    def sweep(self) -> TaskResult:
+        """The read-only cadence sweep, described for a scheduled run (D39).
+
+        Re-derives the profile from live state and reports what a *sweep*
+        honestly is: what may fade, what the gates protect, and that nothing
+        was deleted. It is the account a scheduled task records, so the task
+        history can never read as "forgotten N" when nothing was forgotten --
+        the report is a dry-run, and :meth:`apply` remains the only track that
+        touches the store.
+        """
+        profile = self.identify()
+        count = len(profile.candidates)
+        parts = [
+            f"swept {count} may-fade memor{'y' if count == 1 else 'ies'}",
+            f"held back {len(profile.grounded_protected)} grounded",
+            f"held back {len(profile.reaffirmed_excluded)} recently renewed",
+            "deleted nothing (forgetting stays a decision, not a habit)",
+        ]
+        return TaskResult(
+            task=FORGETTING_SWEEP,
+            summary="; ".join(parts),
+            success=True,
         )
 
     def apply(self, statements: Sequence[str]) -> ForgettingResult:

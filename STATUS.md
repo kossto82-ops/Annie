@@ -2501,8 +2501,10 @@ directions:
   domain Protocol (D7), earned (D29), and offline-testable (D8).
 - **Memory-line depth:** the semantic layer is deliberately bounded (COMPANION-only consolidation with
   neutral evidence, D23; vocabulary-driven meaning recall, D18) — extending it means *vocabulary + policy
-  decisions*, never an LLM shortcut. Decay/forgetting are scheduled in the running system now (Increment
-  173: `ForgettingCandidates` on the rest cadence + root-wired `DecayingWeightingPolicy`), and the
+  decisions*, never an LLM shortcut. Decay/forgetting are scheduled in the running system now
+  (Increment 173: `ForgettingCandidates` on the rest cadence + root-wired `DecayingWeightingPolicy`,
+  and Increment 188: the same read-only sweep as one reserved `forgetting sweep` command the task
+  scheduler fires on its own cron, D39 — still deleted only by an explicit apply), and the
   evidence-request writes (Increment 170) land in the unresolved store the open-question loop (Increment
   174) returns to.
 - **Track C/D leftovers (opportunistic).** The two open items have landed: energy recovery over time
@@ -3787,3 +3789,50 @@ match; 0.0 still means no signal).
 
 Full suite: **2456 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
 doc-truth check clean (floor 2435 → 2456); broad-except audit clean (no drift).
+
+## Increment 188 — The forgetting cadence rides the task scheduler (2026-10-06)
+
+The scheduled, honest forgetting/consolidation cycle named in "After that" lands, under new decision
+**D39**. Honest forgetting already ran on the *rest* cadence (Increment 173) and behind the
+`forgetting` command; what was missing was a cadence that needs no rest, no agent and no model — one
+the scheduler can fire on its own cron, exactly like any other decided task (D35).
+
+- **One reserved command, matched whole** — `domain/services/scheduled_execution.py` gains
+  `FORGETTING_SWEEP = "forgetting sweep"` and `is_forgetting_sweep(command)`: case/whitespace
+  insensitive, but matched as the *whole* command, so an instruction that merely mentions forgetting
+  ("forget the old address") is never hijacked from the earned-agency executor. Every other command
+  runs through `TaskAgent.run_task` byte-identically to before.
+- **The sweep is the core's own read-only work** — `ForgettingCandidates.sweep()` re-derives the same
+  profile the dry-run shows and returns it as the `TaskResult` a scheduled task records: how many
+  may fade, how many grounded traits and recently-renewed memories the gates held back, and the plain
+  words "deleted nothing (forgetting stays a decision, not a habit)". No apply path, no store write,
+  no `all: true`; `Jarvis.forget()` remains the only track that touches the belief store, with both
+  honesty gates still re-checked there.
+- **Live state, not a second brain** — `TaskSchedulerSurface` gained `_executor()`: the callable a
+  due task's command runs through, which routes the reserved verb to `Jarvis.sweep_forgetting()` on
+  *this* Jarvis (same belief store, weighting policy and companion model the surface reads) and
+  everything else to the executor. A `_require_agent` pre-flight keeps the pre-D39 honesty intact: a
+  task that needs an executor and has none still raises before running, recording nothing — while a
+  `forgetting sweep` task runs with **no instruction executor wired at all**. The sweep is dispatched
+  by `run_scheduled_task` and `fire_due_tasks` alike, and `tasks create` says so out loud when a task
+  carries the reserved verb.
+- **The recurrence stays the scheduler's** — occurrence tracking, recording, cron/one-shot semantics,
+  failure isolation and the honest refusal are untouched: a sweep that raises is recorded as a failed
+  run and the sweep keeps going, a not-yet-due task never sweeps, and an occurrence never fires twice.
+  A caller still invokes the cadence (`tasks fire`); nothing adds a loop or a thread (D8).
+- **Tests** — 20 new (`tests/test_scheduled_forgetting.py`): the reserved verb (exact match, five
+  near misses), the sweep's honest account (counts, gates held back, "deleted nothing", stable across
+  repeats), the live cadence end to end (runs and records without an agent, never reaches an executor,
+  a near-miss command still delegated, `run_scheduled_task` by id, disabled task refused, one
+  occurrence fires once and the cron advances, not-due never sweeps, a crash recorded honestly while
+  the sweep continues) and the two command-surface paths (create says it never deletes, fire narrates
+  the honest sweep). 2476 passed/3 skipped at close.
+
+Discipline: opt-in by construction (a task must be created for the cadence to exist), read-only
+(the sweep has no apply path, so "never forgets without an explicit apply" holds structurally rather
+than by convention), live-state (no private copy of memory), deterministic (pure scheduling, injected
+clocks, no network), and one-seam (the reserved verb rides the existing `TaskScheduler` /
+`run_due_tasks` contract — no second scheduler, no second executor path).
+
+Full suite: **2476 passed, 3 skipped**; ruff clean; **pyright strict 0**; decision-ref check clean;
+doc-truth check clean (floor 2456 → 2476); broad-except audit clean (no drift).

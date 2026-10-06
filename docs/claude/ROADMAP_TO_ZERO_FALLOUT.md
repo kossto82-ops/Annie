@@ -26,7 +26,9 @@ execution — `tasks fire` sweeps due tasks through the earned-agency executor, 
 delegation seam deepens (Increment 186: per-task **delegation scopes** — a toolset ceiling behind the
 `TaskAgent` seam, D37), suite at **2435 passed, 3 skipped**; then the memory vocabulary deepens
 (Increment 187: the D18 recall layer gains Spanish morphology + a same-language synonym channel under
-D38), suite at **2456 passed, 3 skipped**.
+D38), suite at **2456 passed, 3 skipped**; then the forgetting cadence rides the task scheduler
+(Increment 188: one reserved read-only `forgetting sweep` command, D39), suite at
+**2476 passed, 3 skipped**.
 
 ## How this is written
 

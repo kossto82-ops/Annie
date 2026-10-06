@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 
 from jarvis.domain.enums.capability_status import CapabilityStatus
 from jarvis.domain.enums.document_owner import DocumentOwner
+from jarvis.domain.services.scheduled_execution import is_forgetting_sweep
 from jarvis.domain.value_objects.capability import Capability
 from jarvis.infrastructure import google_calendar, llm_config_store
 from jarvis.interface._shared import capability_not_ready
@@ -354,6 +355,11 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
     ``fire`` sweeps every currently-due enabled task exactly once through the
     same executor (each outcome recorded, the recurrence advanced), declaring
     honestly when nothing is due or no executor is wired.
+
+    One command is reserved by the core instead of delegated: a task whose
+    command is ``forgetting sweep`` runs the read-only memory sweep against
+    live state (D39), so memory health can stay fresh on a cron with no
+    executor at all -- and, still, deletes nothing.
     """
     action = str(payload.get("action", "")).strip().lower()
     if not action:
@@ -406,8 +412,13 @@ def _tasks(jarvis: Jarvis, payload: Reply) -> Reply:
                 name=name, command=command, cron=cron,
                 description=description, enabled=enabled,
             )
+            created = f"Created task: {task.name} (ID: {task.id})"
+            if is_forgetting_sweep(task.command):
+                created += (
+                    " — it runs the read-only memory sweep; it never deletes."
+                )
             return {
-                "reply": f"Created task: {task.name} (ID: {task.id})",
+                "reply": created,
                 "speak": False,
             }
         if action == "update":

@@ -2343,6 +2343,17 @@ knowledge_graph=knowledge_graph_store,
         """The current forgetting dry-run: may-fade candidates + what the gates hold."""
         return self._forgetting.identify()
 
+    def sweep_forgetting(self) -> TaskResult:
+        """The read-only forgetting cadence a scheduled task runs (D39).
+
+        Re-derives the live profile and describes the sweep as a task account,
+        so ``tasks fire`` can keep memory health fresh on a cron without an
+        agent, a model or a network. It deletes nothing: the account says so
+        explicitly, and :meth:`forget` stays the only track that touches the
+        belief store.
+        """
+        return self._forgetting.sweep()
+
     def memory_health(self) -> dict[str, object]:
         """An honest JSON-ready memory-health report for the surface (F2).
 

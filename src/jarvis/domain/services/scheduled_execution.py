@@ -10,6 +10,14 @@ sleeps or loops on its own — a caller (the ``tasks fire`` command, or a
 shutdown-safe cadence) invokes it whenever a sweep is wanted, so the
 execution stays deterministic, offline-testable, and free of background
 threads (D8).
+
+One command is *reserved* by the core instead of delegated to an agent:
+:data:`FORGETTING_SWEEP`, the honest forgetting cadence (D39). It names the
+core's own read-only memory sweep, so a scheduled task can keep memory health
+fresh on a cron without a model, a tool, or a network. It deletes nothing —
+:func:`is_forgetting_sweep` recognises the verb, and the caller runs the
+sweep against its live state (D39); every other command still goes to the
+earned-agency executor untouched.
 """
 
 from __future__ import annotations
@@ -19,6 +27,20 @@ from dataclasses import dataclass
 
 from jarvis.domain.retrieval.task_scheduler import TaskScheduler
 from jarvis.domain.value_objects.task_result import TaskResult
+
+#: The one scheduled command the core reserves: a read-only forgetting sweep.
+FORGETTING_SWEEP = "forgetting sweep"
+
+
+def is_forgetting_sweep(command: str) -> bool:
+    """Whether ``command`` is the reserved read-only forgetting sweep.
+
+    Case- and whitespace-insensitive, and matched as the *whole* command: a
+    longer instruction that merely mentions forgetting ("forget the old
+    address") is not the reserved verb and is never hijacked from the
+    executor (D39).
+    """
+    return " ".join(command.split()).lower() == FORGETTING_SWEEP
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

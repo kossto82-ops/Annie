@@ -8,11 +8,16 @@ class.  The Jarvis class retains thin delegator methods that forward here.
 from __future__ import annotations
 
 import difflib
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from jarvis.domain.enums.document_owner import DocumentOwner
-from jarvis.domain.services.scheduled_execution import ScheduledRun, run_due_tasks
+from jarvis.domain.services.scheduled_execution import (
+    ScheduledRun,
+    is_forgetting_sweep,
+    run_due_tasks,
+)
 from jarvis.domain.value_objects.calendar_event import CalendarEvent
 from jarvis.domain.value_objects.document_edit import DocumentEdit
 from jarvis.domain.value_objects.document_hit import DocumentHit
@@ -273,6 +278,36 @@ class TaskSchedulerSurface:
             )
         return agent
 
+    def _executor(self) -> Callable[[str], TaskResult]:
+        """The callable a due task's ``command`` runs through (D35, D39).
+
+        One reserved command -- the forgetting sweep -- runs against this
+        Jarvis's live state instead of the edge: it is the core's own
+        read-only memory sweep, so it needs no model, tool or network, and it
+        deletes nothing. Every other command is handed to the earned-agency
+        executor exactly as before, including its honest error when none is
+        wired.
+        """
+        jarvis = self._jarvis
+
+        def run(command: str) -> TaskResult:
+            if is_forgetting_sweep(command):
+                return jarvis.sweep_forgetting()
+            return self._agent().run_task(command)
+
+        return run
+
+    def _require_agent(self, commands: Iterable[str]) -> None:
+        """Pre-flight: a run that needs an executor and has none runs nothing.
+
+        The reserved forgetting sweep is the core's own read-only work, so it
+        needs no executor; any *other* command keeps the honest refusal that
+        predates D39 -- raised before the run, so nothing is recorded as a
+        failure that never actually started.
+        """
+        if any(not is_forgetting_sweep(command) for command in commands):
+            self._agent()
+
     def list_scheduled_tasks(
         self, *, limit: int = 100
     ) -> tuple[ScheduledTask, ...]:
@@ -334,9 +369,10 @@ class TaskSchedulerSurface:
         task = store.get_task(task_id)
         if not task.enabled:
             raise RuntimeError(f"task {task_id!r} is disabled; enable it first")
-        agent = self._agent()
+        self._require_agent([task.command])
+        run = self._executor()
         try:
-            outcome = agent.run_task(task.command)
+            outcome = run(task.command)
         except Exception as error:  # noqa: BLE001 - record the honest failure
             store.record_run(task_id, ok=False, output=str(error))
             raise
@@ -348,11 +384,13 @@ class TaskSchedulerSurface:
 
         A sweep over ``due_tasks()``: each command runs through the same
         ``approved=False`` executor ``tasks run`` uses and the outcome is
-        recorded on the task (the store advances the recurrence, D35). A
-        failing task never aborts the sweep; the returned report carries every
-        honest outcome. Raises a clear error when no executor is wired --
-        then nothing runs and nothing is recorded.
+        recorded on the task (the store advances the recurrence, D35). The
+        reserved forgetting sweep instead runs the live read-only memory sweep
+        (D39), so an honest cadence costs no agent. A failing task never aborts
+        the sweep; the returned report carries every honest outcome. Raises a
+        clear error when a due task needs an executor and none is wired -- then
+        nothing runs and nothing is recorded.
         """
         store = self._store()
-        agent = self._agent()
-        return run_due_tasks(store, agent.run_task)
+        self._require_agent(task.command for task in store.due_tasks())
+        return run_due_tasks(store, self._executor())

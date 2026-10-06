@@ -104,6 +104,12 @@ CONVERSATION (interface/_conversation.py, _say → _say_core)
   `refresh_forgetting`) and behind the `forgetting` command (`health` / `dry-run` / `apply`); the UI
   shows memory health and **never deletes without an explicit apply**. Gates: never a grounded
   ≥threshold companion trait, never a belief reaffirmed in the last 30 days (anti-nagging).
+- **The forgetting cadence also rides the task scheduler** (Inc 188, D39): a scheduled task whose
+  command is exactly `forgetting sweep` (`is_forgetting_sweep`) runs `ForgettingCandidates.sweep()`
+  through `Jarvis.sweep_forgetting` on live state — no agent, model or network, and it deletes
+  nothing. `tasks fire` sweeps due tasks exactly once (D35), so `tasks create name="nightly sweep"
+  command="forgetting sweep" cron="0 3 * * *"` then `tasks fire` keeps memory health fresh on a cron
+  while `forgetting apply` stays the only track that deletes.
 - **Decay weighting is wired** (Inc 173): the server root instantiates `DecayingWeightingPolicy`, so
   recall ranks old, rarely-touched topics lower (`relatedness * recency(t)`).
 - **Open-question loop completion** (Inc 174, roadmap F3): an open question is an *attention* candidate,

@@ -364,3 +364,35 @@ preservation repairs (Increment 169) closed:
   resolves to BUILD even though `crear` does. A future vocabulary addition is
   the evidence that D38 is still being followed: every entry has a test proving
   it, and every exclusion has a test proving it stays out.
+
+## D39 — The scheduler seam carries one reserved, read-only forgetting sweep
+
+The scheduler (D35) decides *when* work is due; it never decides *what is true*.
+Honest forgetting (F2) is suggested and applied explicitly, never automatic. The
+cadence that keeps it fresh (Increment 188) must honour both, so it lives on the
+seam rather than in an agent:
+
+- **One reserved command, matched whole** — a scheduled task whose command is
+  `forgetting sweep` (`FORGETTING_SWEEP`, recognised by `is_forgetting_sweep`) is
+  run by the core against *live* state, not delegated. Matching is
+  case/whitespace-insensitive but exact: an instruction that merely mentions
+  forgetting ("forget the old address") is never hijacked from the executor.
+- **Read-only, structurally** — the sweep is `ForgettingCandidates.sweep()`: a
+  re-derivation of the same profile the dry-run shows, phrased as the
+  `TaskResult` a scheduled task records. It has no apply path, no store write and
+  no `all: true`; the recorded account states plainly that it deleted nothing.
+  `Jarvis.forget()` remains the only track that touches the belief store, with
+  the grounded and anti-nagging gates still re-checked there.
+- **Live state, no second brain** — the sweep runs on the same Jarvis (and the
+  same belief store, weighting policy and companion model) that the surface
+  reads. A cadence can therefore never report on a private copy, and it needs no
+  agent, model, tool or network: `tasks fire` on a `forgetting sweep` task works
+  with no instruction executor wired at all.
+- **The recurrence stays the scheduler's** — occurrence tracking, recording,
+  one-shot/cron semantics and the honest refusal of a task that needs an
+  executor and has none are untouched (D35). A cadence is still invoked by a
+  caller on demand; nothing here adds a loop, a thread or a background timer
+  (D8). A sweep that fails is recorded as a failed run and the sweep keeps going.
+- **Honest about what a sweep is** — a stale read-only sweep changes nothing,
+  so its report is a count and an explicit "deleted nothing"; the user still
+  decides with `forgetting apply`. Forgetting remains a decision, not a habit.
